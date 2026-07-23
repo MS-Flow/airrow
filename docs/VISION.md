@@ -49,4 +49,4 @@ The strategic moat is the methodology plus the living connection to the repo —
 
 ## North-Star Metric
 
-Projects generated that reach an active repository (cloned + commits within 14 days).
+Projects generated that reach an active repository (cloned + commits within 14 

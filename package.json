@@ -1,0 +1,16 @@
+{
+  "name": "arrow",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "start": "pnpm --filter web start",
+    "typecheck": "pnpm -r typecheck",
+    "engine:smoke": "node --experimental-strip-types scripts/engine-smoke.mjs"
+  }
+}

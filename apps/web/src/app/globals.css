@@ -1,0 +1,143 @@
+@import "tailwindcss";
+
+/* Arrow design tokens — dark mode first (F-201). Single source of truth. */
+@theme {
+  --color-bg: #0a0a0b;
+  --color-bg-subtle: #101013;
+  --color-surface: #141417;
+  --color-surface-raised: #1a1a1f;
+  --color-border: #232329;
+  --color-border-strong: #33333b;
+  --color-fg: #ececef;
+  --color-fg-muted: #8f8f98;
+  --color-fg-faint: #5c5c66;
+  --color-accent: #ff6b3d;
+  --color-accent-muted: #ff6b3d26;
+  --color-success: #4ade80;
+  --color-danger: #f0564a;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", monospace;
+
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-accent-muted);
+}
+
+/* Quiet scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+/* Rendered markdown (preview pane) */
+.prose-arrow {
+  font-size: 0.9375rem;
+  line-height: 1.75;
+  color: var(--color-fg);
+}
+.prose-arrow h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.prose-arrow h2 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 2rem 0 0.75rem;
+}
+.prose-arrow h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.5rem;
+}
+.prose-arrow p {
+  margin: 0.75rem 0;
+}
+.prose-arrow ul,
+.prose-arrow ol {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+}
+.prose-arrow ul {
+  list-style: disc;
+}
+.prose-arrow ol {
+  list-style: decimal;
+}
+.prose-arrow li {
+  margin: 0.375rem 0;
+}
+.prose-arrow code {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: 0.375rem;
+  padding: 0.125rem 0.375rem;
+}
+.prose-arrow pre {
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+.prose-arrow pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+.prose-arrow blockquote {
+  border-left: 2px solid var(--color-accent);
+  padding-left: 1rem;
+  color: var(--color-fg-muted);
+  margin: 1rem 0;
+}
+.prose-arrow table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.875rem;
+}
+.prose-arrow th,
+.prose-arrow td {
+  border: 1px solid var(--color-border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+.prose-arrow th {
+  background: var(--color-surface);
+  font-weight: 600;
+}
+.prose-arrow a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+.prose-arrow a:hover {
+  text-decoration: underline;
+}
+.prose-arrow hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 2rem 0;
+}
