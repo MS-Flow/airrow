@@ -1,6 +1,8 @@
 # Architecture Decision Records
 
-Append-only log of significant technical decisions. New ADRs from `templates/ADR_TEMPLATE.md`, numbered sequentially. A decision is "significant" if reversing it later would cost more than a day. Summaries mirrored in `context/DECISIONS.md`.
+Append-only log of significant technical decisions, numbered sequentially. A decision is "significant" if reversing it later would cost more than a day (constitution §IV).
+
+New ADRs follow the shape: **Context** (forces at play) → **Options** (real alternatives) → **Decision** → **Consequences** (trade-offs accepted). Status is one of Proposed / Accepted / Superseded (link the successor).
 
 | # | Decision | Status |
 |---|----------|--------|

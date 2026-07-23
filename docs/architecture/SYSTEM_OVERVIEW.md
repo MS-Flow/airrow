@@ -55,4 +55,4 @@ signup; all resources hang off `organization_id`, and RLS enforces tenancy on ev
 | Vercel | Hosting, background jobs | Platform dependency |
 
 See [`SYSTEM_ARCHITECTURE.md`](SYSTEM_ARCHITECTURE.md) for the deeper diagram and the ADRs in
-[`../../adr/`](../../adr/) for the decisions behind this shape.
+[`../adr/`](../adr/) for the decisions behind this shape.

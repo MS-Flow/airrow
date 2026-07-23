@@ -32,13 +32,12 @@ Airrow is a Next.js application on Vercel with Supabase as the backend platform,
 ## Monorepo layout
 
 ```
-apps/web            Next.js application
+apps/web            Next.js application (design system in src/components/ui, shadcn/ui based)
 packages/engine     Generation engine (pure, headless)
 packages/schemas    Shared Zod schemas & types (project model, interview)
-packages/ui         Design system components (shadcn/ui based)
 ```
 
-pnpm workspaces + Turborepo. The engine and schemas packages must never import from apps.
+pnpm workspaces. The engine and schemas packages must never import from apps.
 
 ## The generation engine (core asset)
 
