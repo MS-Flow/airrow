@@ -9,8 +9,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@arrow/engine": "workspace:*",
-    "@arrow/schemas": "workspace:*",
+    "@airrow/engine": "workspace:*",
+    "@airrow/schemas": "workspace:*",
     "clsx": "2.1.1",
     "dompurify": "3.2.3",
     "jszip": "3.10.1",

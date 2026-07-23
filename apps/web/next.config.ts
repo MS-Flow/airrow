@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@arrow/engine", "@arrow/schemas"]
+  transpilePackages: ["@airrow/engine", "@airrow/schemas"]
 };
 
 export default nextConfig;

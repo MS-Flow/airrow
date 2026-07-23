@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
-import type { JobStage } from "@arrow/schemas";
+import type { JobStage } from "@airrow/schemas";
 import { Button, Card, Spinner } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { retryGenerationAction } from "./actions";

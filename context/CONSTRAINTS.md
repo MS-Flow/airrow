@@ -24,6 +24,6 @@
 
 ## Product
 
-14. Arrow never generates application implementation code — foundations only.
+14. Airrow never generates application implementation code — foundations only.
 15. ZIP delivery must always work without any integration connected.
 16. Generated output must be project-specific; generic template-feeling output is a release blocker.

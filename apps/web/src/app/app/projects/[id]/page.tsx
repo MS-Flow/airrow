@@ -67,7 +67,7 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
           {project.status === "interviewing"
             ? "Finish the CTO interview to generate your foundation."
             : project.status === "generating"
-              ? "Arrow is authoring your repository right now."
+              ? "Airrow is authoring your repository right now."
               : project.status === "failed"
                 ? "Generation hit a problem — review the error and retry."
                 : `Your foundation is ready: ${artifact ? artifact.manifest.fileCount : "—"} files, generated ${job?.finishedAt ? timeAgo(job.finishedAt) : ""}.`}

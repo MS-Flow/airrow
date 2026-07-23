@@ -3,8 +3,8 @@
 // Project mutations (F-205). All org-scoped via session; Zod at the boundary.
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { projectCreateSchema } from "@arrow/schemas";
-import { slugify } from "@arrow/engine";
+import { projectCreateSchema } from "@airrow/schemas";
+import { slugify } from "@airrow/engine";
 import { requireSession } from "@/lib/auth";
 import { createProject, deleteProject, getProject } from "@/lib/data/store";
 

@@ -1,10 +1,10 @@
-# ADR-0001: Next.js App Router for Arrow's application
+# ADR-0001: Next.js App Router for Airrow's application
 
 > Status: Accepted · Date: 2026-07-23
 
 ## Context
 
-Arrow needs marketing pages, an authenticated app, server-side generation orchestration, and API surface — and dogfoods the golden path it recommends to customers. Candidates: Next.js (App Router) vs Vite + React SPA.
+Airrow needs marketing pages, an authenticated app, server-side generation orchestration, and API surface — and dogfoods the golden path it recommends to customers. Candidates: Next.js (App Router) vs Vite + React SPA.
 
 ## Options Considered
 
@@ -13,7 +13,7 @@ Arrow needs marketing pages, an authenticated app, server-side generation orches
 
 ## Decision
 
-Next.js App Router. It serves all three surfaces in one deployable, is Vercel-native, and is the stack we recommend hardest to customers — Arrow must run on it to keep its opinions honest. (Founder decision, 2026-07-23.)
+Next.js App Router. It serves all three surfaces in one deployable, is Vercel-native, and is the stack we recommend hardest to customers — Airrow must run on it to keep its opinions honest. (Founder decision, 2026-07-23.)
 
 ## Consequences
 

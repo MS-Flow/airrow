@@ -1,11 +1,11 @@
 # Information Architecture
 
-Two information spaces: **Arrow the product** (what users navigate) and **the generated repository** (what Arrow outputs). Both defined here.
+Two information spaces: **Airrow the product** (what users navigate) and **the generated repository** (what Airrow outputs). Both defined here.
 
 ## 1. Product IA
 
 ```
-Arrow
+Airrow
 ├── Landing (public)
 ├── Auth
 └── App
@@ -29,7 +29,7 @@ Object model: **Organization → Project → Interview → Project Model → Gen
 
 ## 2. Generated repository IA (the product's output)
 
-Canonical structure every Arrow project receives (feature-dependent files vary):
+Canonical structure every Airrow project receives (feature-dependent files vary):
 
 ```
 <project>/
@@ -60,6 +60,6 @@ Canonical structure every Arrow project receives (feature-dependent files vary):
 
 Rules for generated IA: every folder has a README or an obvious entry file; every document links to its sources of truth; nothing exists twice (single-source, cross-linked); AI context files are short and pointer-rich rather than duplicating docs.
 
-## 3. Arrow's own repo
+## 3. Airrow's own repo
 
-Arrow itself follows the same IA (see repo root) — deviations between what we generate and what we use are treated as bugs of the methodology.
+Airrow itself follows the same IA (see repo root) — deviations between what we generate and what we use are treated as bugs of the methodology.

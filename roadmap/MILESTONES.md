@@ -6,7 +6,7 @@ Working order: top to bottom. A milestone is done when all its features are spec
 
 ## M0 — Engineering Foundation ✦ current
 
-**Goal:** Arrow's complete pre-implementation foundation, built with Arrow's own methodology.
+**Goal:** Airrow's complete pre-implementation foundation, built with Airrow's own methodology.
 
 | # | Deliverable | Status |
 |---|-------------|--------|
@@ -29,7 +29,7 @@ Working order: top to bottom. A milestone is done when all its features are spec
 **Goal:** interview answers in → complete repository foundation out. No UI.
 
 **Epics**
-- **E1.1 Project Model** — typed schema of everything Arrow knows about a project (answers, stack, features, derived decisions).
+- **E1.1 Project Model** — typed schema of everything Airrow knows about a project (answers, stack, features, derived decisions).
 - **E1.2 Interview Schema** — declarative question graph with conditions; adaptive by construction. Single source for engine and future UI.
 - **E1.3 Template System** — repository blueprint (folder tree, static standards, templates) with per-project variable resolution.
 - **E1.4 Content Generation** — Claude API authoring of project-specific documents (vision, architecture, specs, roadmap, context files) from the project model; structured prompts per document type.

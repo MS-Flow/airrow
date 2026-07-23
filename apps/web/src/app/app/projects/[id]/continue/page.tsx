@@ -34,7 +34,7 @@ export default async function ContinuePage({ params }: { params: Promise<{ id: s
     {
       title: "Initialize git",
       body: "Turn the folder into a repository with an initial commit:",
-      block: `cd ${slug}\ngit init\ngit add -A\ngit commit -m "chore: engineering foundation from Arrow"`
+      block: `cd ${slug}\ngit init\ngit add -A\ngit commit -m "chore: engineering foundation from Airrow"`
     },
     {
       title: isGh ? "Create the GitHub repository" : "Create the Azure DevOps repository",

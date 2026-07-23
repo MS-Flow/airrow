@@ -1,7 +1,7 @@
 // Generation job runner (F-401 FR-2). Local mode: in-process async with staged
 // progress written to the store; the UI polls. Supabase mode swaps polling for Realtime.
-import { generate } from "@arrow/engine";
-import type { JobStage, ProjectModel } from "@arrow/schemas";
+import { generate } from "@airrow/engine";
+import type { JobStage, ProjectModel } from "@airrow/schemas";
 import { saveArtifact, setProjectStatus, updateJob, getJob } from "@/lib/data/store";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

@@ -1,21 +1,27 @@
-# Specification System
+# Specs
 
-Specifications are the source of truth. Code implements specs; docs explain specs; reviews review against specs.
+This folder contains feature specifications for Airrow. Each spec is written before implementation.
 
-## Rules
+One file per issue: `specs/NNN-kort.md`, combining the *what*, the *how* (exact `file:line` changes),
+acceptance criteria, verification and edge cases in a single document.
 
-1. No feature is implemented before its spec exists and is complete.
-2. One spec per feature, at `specs/<milestone>/F-<id>-<slug>.md`, from `templates/SPEC_TEMPLATE.md`.
-3. If reality diverges during implementation, **update the spec first**, then the code. Divergence notes go in Implementation Notes.
-4. A spec is done when its Completion Status is ✅ and Definition of Done is fully checked.
-5. Specs are never deleted; superseded specs are marked and linked to their successor.
+## Automated workflow
+The spec lifecycle is driven by slash commands (in [`.claude/commands/`](../.claude/commands/)),
+governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec-kit/):
 
-## Lifecycle
+| Command | Phase |
+|---------|-------|
+| `/createspec <issue# \| "desc">` | Scaffold the spec + set up the `NNN-kort` branch off its feature |
+| `/clarify` | Resolve `[NEEDS CLARIFICATION]` markers via targeted questions |
+| `/implement` | Plan exact `file:line` changes, implement, add tests, run typecheck/lint/tests, check off criteria |
+| `/analyze` | Cross-check spec ↔ code ↔ constitution; if all passes, close the spec out |
+| `/push` | Commit pending changes + push the current branch (never main/develop, never force) |
+| `/pr-check` | Pre-PR merge-safety check against the target branch |
 
-`Draft → Ready → In Progress → In Review → Done` — tracked in the spec's Completion Status section and mirrored in `roadmap/BACKLOG.md` and `context/PROGRESS.md`.
+## File naming
+`specs/NNN-kort.md` — the GitHub issue number plus a short kebab-case name, matching the branch.
 
-## Required sections
-
-Problem · Business Goal · User Story · Functional Requirements · Non-Functional Requirements · Acceptance Criteria · Architecture Notes · UX Notes · Dependencies · Risks · Edge Cases · Security · Testing · Definition of Done · Implementation Notes · Review Notes · Completion Status.
-
-Every section must be filled or explicitly marked "N/A — <reason>". An empty section is an incomplete spec.
+## Status overview
+| Feature | Status |
+|---------|--------|
+| _(none yet)_ | |

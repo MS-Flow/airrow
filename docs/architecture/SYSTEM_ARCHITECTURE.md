@@ -2,7 +2,7 @@
 
 ## Overview
 
-Arrow is a Next.js application on Vercel with Supabase as the backend platform, plus one deliberately isolated core: the **generation engine**, a pure TypeScript package with no app dependencies.
+Airrow is a Next.js application on Vercel with Supabase as the backend platform, plus one deliberately isolated core: the **generation engine**, a pure TypeScript package with no app dependencies.
 
 ```
 ┌─────────────────────────────────────────────────────────┐

@@ -1,14 +1,14 @@
 # START HERE
 
-Welcome to Arrow. This is your guided first hour, whether you're a human engineer or an AI assistant.
+Welcome to Airrow. This is your guided first hour, whether you're a human engineer or an AI assistant.
 
 ## 1. Understand the product (15 min)
 
-1. `docs/VISION.md` — what Arrow is, for whom, and why now
+1. `docs/VISION.md` — what Airrow is, for whom, and why now
 2. `docs/PRODUCT_CONSTITUTION.md` — the ten principles every feature is judged against
 3. `context/PROJECT.md` — the condensed business context
 
-Key mental model: Arrow is where founders **prepare to build**, not where they build. The generated repository is the product.
+Key mental model: Airrow is where founders **prepare to build**, not where they build. The generated repository is the product.
 
 ## 2. Understand how we work (15 min)
 

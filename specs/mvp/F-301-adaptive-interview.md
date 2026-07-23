@@ -4,7 +4,7 @@
 
 ## Problem
 
-Arrow's input is CTO judgment captured from the founder. A static form can't adapt and overwhelms.
+Airrow's input is CTO judgment captured from the founder. A static form can't adapt and overwhelms.
 
 ## Business Goal
 
@@ -12,7 +12,7 @@ The interview IS the product experience pre-generation; answer quality determine
 
 ## User Story
 
-As a founder, I want to answer only relevant questions, one at a time, so that Arrow captures my project without overwhelming me.
+As a founder, I want to answer only relevant questions, one at a time, so that Airrow captures my project without overwhelming me.
 
 ## Functional Requirements
 
@@ -37,7 +37,7 @@ As a founder, I want to answer only relevant questions, one at a time, so that A
 
 ## Architecture Notes
 
-Client interview runtime (`features/interview`) reading schema from `@arrow/schemas`; persistence via `saveInterview` action; schema is the single source shared with engine resolution. `schema_version` stored with answers.
+Client interview runtime (`features/interview`) reading schema from `@airrow/schemas`; persistence via `saveInterview` action; schema is the single source shared with engine resolution. `schema_version` stored with answers.
 
 ## UX Notes
 

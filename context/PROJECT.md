@@ -1,12 +1,12 @@
 # Project Context — Business
 
-**Product:** Arrow — generates the complete engineering foundation for new software startups: architecture, specs, docs, roadmap, standards, prompt library, and AI context system. Users finish in Arrow, then build locally with VS Code + Claude Code.
+**Product:** Airrow — generates the complete engineering foundation for new software startups: architecture, specs, docs, roadmap, standards, prompt library, and AI context system. Users finish in Airrow, then build locally with VS Code + Claude Code.
 
 **Not:** an app builder, code generator, project management tool, or boilerplate pack.
 
 **Users:** solo technical founders · non-technical founders · small teams and agencies starting AI-native projects.
 
-**Value:** AI coding assistants perform dramatically better with proper foundation. Arrow encodes CTO judgment into the repo before the first prompt. Positioning: "Idea → Arrow → Claude Code → Company."
+**Value:** AI coding assistants perform dramatically better with proper foundation. Airrow encodes CTO judgment into the repo before the first prompt. Positioning: "Idea → Airrow → Claude Code → Company."
 
 **Business model (planned, M7):** subscription SaaS; free tier limited projects, paid tiers per organization.
 

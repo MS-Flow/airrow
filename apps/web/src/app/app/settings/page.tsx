@@ -1,7 +1,7 @@
 // Settings (F-406): profile, workspace, connections (GitHub stubbed per ADR-0005).
 import { redirect } from "next/navigation";
 import { Github } from "lucide-react";
-import { profileUpdateSchema } from "@arrow/schemas";
+import { profileUpdateSchema } from "@airrow/schemas";
 import { Badge, Button, Card, Input, Label, Separator } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { updateUserName } from "@/lib/data/store";
@@ -94,7 +94,7 @@ export default async function SettingsPage({
           Local mode
         </h2>
         <p className="mt-2 text-[13px] leading-relaxed text-fg-muted">
-          Arrow is running fully on this machine (ADR-0005): data lives in{" "}
+          Airrow is running fully on this machine (ADR-0005): data lives in{" "}
           <code className="font-mono text-xs">.data/</code> at the repository root, and document
           authoring uses the deterministic local agent. Adding Supabase keys and an{" "}
           <code className="font-mono text-xs">ANTHROPIC_API_KEY</code> to{" "}

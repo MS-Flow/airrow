@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { loginSchema } from "@arrow/schemas";
-import { ArrowMark, Button, Card, Input, Label } from "@/components/ui";
+import { loginSchema } from "@airrow/schemas";
+import { AirrowMark, Button, Card, Input, Label } from "@/components/ui";
 import { signIn } from "@/lib/auth";
 
 async function loginAction(formData: FormData) {
@@ -27,8 +27,8 @@ export default async function LoginPage({
     <div className="flex min-h-screen items-center justify-center bg-bg px-6">
       <div className="w-full max-w-sm">
         <Link href="/" className="mb-8 flex items-center justify-center gap-2.5 text-fg">
-          <ArrowMark className="text-accent" />
-          <span className="text-[15px] font-semibold tracking-tight">Arrow</span>
+          <AirrowMark className="text-accent" />
+          <span className="text-[15px] font-semibold tracking-tight">Airrow</span>
         </Link>
         <Card className="p-8">
           <h1 className="text-lg font-semibold tracking-tight text-fg">Sign in</h1>

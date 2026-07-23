@@ -1,4 +1,4 @@
-// Arrow generation engine. Pure: no I/O, no env, no external dependencies.
+// Airrow generation engine. Pure: no I/O, no env, no external dependencies.
 // Stages: resolve → author → assemble → validate → manifest (SYSTEM_ARCHITECTURE).
 
 import type {

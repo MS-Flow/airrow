@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LayoutGrid, Settings } from "lucide-react";
-import { ArrowMark } from "@/components/ui";
+import { AirrowMark } from "@/components/ui";
 import { requireSession, signOut } from "@/lib/auth";
 
 async function signOutAction() {
@@ -16,8 +16,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-screen bg-bg">
       <aside className="fixed inset-y-0 left-0 flex w-56 flex-col border-r border-border bg-bg-subtle">
         <Link href="/app" className="flex items-center gap-2.5 px-5 py-5 text-fg">
-          <ArrowMark className="text-accent" />
-          <span className="text-[15px] font-semibold tracking-tight">Arrow</span>
+          <AirrowMark className="text-accent" />
+          <span className="text-[15px] font-semibold tracking-tight">Airrow</span>
         </Link>
         <nav className="flex-1 space-y-0.5 px-3">
           <Link

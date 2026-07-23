@@ -4,7 +4,7 @@
 
 ## Problem
 
-Arrow's job isn't done at download (Constitution §8) — founders need the bridge into local AI-assisted development.
+Airrow's job isn't done at download (Constitution §8) — founders need the bridge into local AI-assisted development.
 
 ## Business Goal
 

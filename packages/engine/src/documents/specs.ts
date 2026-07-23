@@ -29,7 +29,7 @@ Specifications are the source of truth in ${m.name}. Code implements specs; docs
 
 ## Included starter specs
 
-Arrow generated a starter spec for each capability you selected (\`specs/mvp/\`). They are drafts with real requirements — review, adjust to your product, and mark Ready before implementing. They encode best-practice FRs, security notes, and edge cases so you and your AI assistant start from substance, not a blank page.
+Airrow generated a starter spec for each capability you selected (\`specs/mvp/\`). They are drafts with real requirements — review, adjust to your product, and mark Ready before implementing. They encode best-practice FRs, security notes, and edge cases so you and your AI assistant start from substance, not a blank page.
 `
   );
 }

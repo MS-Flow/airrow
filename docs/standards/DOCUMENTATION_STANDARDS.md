@@ -19,7 +19,7 @@ Four documentation layers, each with one job:
 
 ## Style
 
-Markdown. Sentence-case headings. Prose first; tables for genuinely tabular data; diagrams as fenced ASCII or Mermaid. Absolute clarity over marketing tone — except user-facing generated docs, which may carry Arrow's voice.
+Markdown. Sentence-case headings. Prose first; tables for genuinely tabular data; diagrams as fenced ASCII or Mermaid. Absolute clarity over marketing tone — except user-facing generated docs, which may carry Airrow's voice.
 
 ## Ownership & review
 

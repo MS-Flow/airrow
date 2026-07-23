@@ -4,7 +4,7 @@
 
 ## Problem
 
-Arrow's core capability — turning interview answers into a complete repository foundation — does not exist.
+Airrow's core capability — turning interview answers into a complete repository foundation — does not exist.
 
 ## Business Goal
 
@@ -22,7 +22,7 @@ As a founder, I want my interview answers turned into a complete, personalized e
 - FR-4: Every document is personalized from the model (name, product type, audience, features, stack, team, security level, MVP focus). No unresolved placeholders.
 - FR-5: Authoring goes through an `AuthoringProvider` interface; v1 ships `localAuthoringProvider` (deterministic). Claude provider slots in later (ADR-0002, ADR-0005).
 - FR-6: Manifest records per file: path, source, templateId, templateVersion, bytes. Engine version + model hash recorded.
-- FR-7: Engine is pure: no I/O, no env access, no external dependencies; type-only imports from `@arrow/schemas`.
+- FR-7: Engine is pure: no I/O, no env access, no external dependencies; type-only imports from `@airrow/schemas`.
 
 ## Non-Functional Requirements
 

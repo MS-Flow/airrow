@@ -1,4 +1,4 @@
-// Pure types shared across Arrow. No runtime dependencies.
+// Pure types shared across Airrow. No runtime dependencies.
 
 export type ProductType =
   | "saas"

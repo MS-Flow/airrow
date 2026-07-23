@@ -3,7 +3,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 export function middleware(request: NextRequest) {
-  const hasSession = request.cookies.has("arrow_session");
+  const hasSession = request.cookies.has("airrow_session");
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/app") && !hasSession) {

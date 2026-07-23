@@ -4,7 +4,7 @@
 
 ## Problem
 
-Generation must feel like Arrow working for you — visible, staged, reliable — not a spinner.
+Generation must feel like Airrow working for you — visible, staged, reliable — not a spinner.
 
 ## Business Goal
 

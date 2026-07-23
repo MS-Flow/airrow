@@ -1,8 +1,8 @@
-# Arrow — Product Vision
+# Airrow — Product Vision
 
 ## One-liner
 
-Arrow generates the perfect engineering foundation for new software startups, so AI coding assistants can build them correctly.
+Airrow generates the perfect engineering foundation for new software startups, so AI coding assistants can build them correctly.
 
 ## The Problem
 
@@ -10,13 +10,13 @@ AI coding assistants are extraordinary at implementation and terrible at judgmen
 
 ## The Insight
 
-The quality of AI-generated code is a function of the quality of the context it's given. A repo with clear specs, an explicit architecture, coding standards, and an AI context system turns Claude Code from a gambling machine into a senior engineer. Nobody sells that foundation today. Arrow does.
+The quality of AI-generated code is a function of the quality of the context it's given. A repo with clear specs, an explicit architecture, coding standards, and an AI context system turns Claude Code from a gambling machine into a senior engineer. Nobody sells that foundation today. Airrow does.
 
-## What Arrow Is
+## What Airrow Is
 
-Arrow is where founders **prepare to build** — not where they build. An adaptive CTO interview captures the product, business, and technical decisions. Arrow then generates a complete, production-grade repository foundation: specs, docs, architecture, roadmap, standards, prompt library, templates, and an AI context system. The founder downloads it (or pushes it to GitHub) and continues locally with VS Code and Claude Code.
+Airrow is where founders **prepare to build** — not where they build. An adaptive CTO interview captures the product, business, and technical decisions. Airrow then generates a complete, production-grade repository foundation: specs, docs, architecture, roadmap, standards, prompt library, templates, and an AI context system. The founder downloads it (or pushes it to GitHub) and continues locally with VS Code and Claude Code.
 
-## What Arrow Is Not
+## What Airrow Is Not
 
 - Not a code generator or app builder (no v0/Lovable/Bolt competition)
 - Not a project management tool
@@ -31,21 +31,21 @@ Arrow is where founders **prepare to build** — not where they build. An adapti
 
 ## Why Now
 
-AI-native development is becoming the default way software startups are built. Every one of them faces the same cold-start problem. The tools ecosystem (Claude Code, Cursor, Copilot) is mature; the _foundation_ layer is empty. Arrow becomes the default first step: **Idea → Arrow → Claude Code → Company.**
+AI-native development is becoming the default way software startups are built. Every one of them faces the same cold-start problem. The tools ecosystem (Claude Code, Cursor, Copilot) is mature; the _foundation_ layer is empty. Airrow becomes the default first step: **Idea → Airrow → Claude Code → Company.**
 
 ## Five-Year Direction
 
 - **Year 1:** The best project foundation generator in the world. Interview → generation → GitHub.
-- **Year 2:** Repository synchronization — Arrow stays connected to the repo, keeping specs, docs, and context up to date as the codebase evolves.
+- **Year 2:** Repository synchronization — Airrow stays connected to the repo, keeping specs, docs, and context up to date as the codebase evolves.
 - **Year 3+:** The AI engineering operating system: repository-aware chat, AI architecture and code review, sprint planning, knowledge graph, marketplace, enterprise.
 
-The strategic moat is the methodology plus the living connection to the repo — Arrow starts as a generator and becomes infrastructure.
+The strategic moat is the methodology plus the living connection to the repo — Airrow starts as a generator and becomes infrastructure.
 
 ## Success Criteria
 
 - A founder goes from idea to a cloned, AI-ready repo in under 30 minutes.
-- Claude Code sessions in Arrow-generated repos measurably outperform sessions in bare repos (fewer corrections, less rework, consistent output).
-- "Run it through Arrow first" becomes standard advice for starting an AI-native project.
+- Claude Code sessions in Airrow-generated repos measurably outperform sessions in bare repos (fewer corrections, less rework, consistent output).
+- "Run it through Airrow first" becomes standard advice for starting an AI-native project.
 
 ## North-Star Metric
 

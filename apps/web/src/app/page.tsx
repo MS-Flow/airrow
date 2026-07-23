@@ -1,6 +1,6 @@
 // Landing (F-501 scope pulled forward: functional, minimal, premium).
 import Link from "next/link";
-import { ArrowMark, Badge, Button, Card } from "@/components/ui";
+import { AirrowMark, Badge, Button, Card } from "@/components/ui";
 import { getSession } from "@/lib/auth";
 
 const steps = [
@@ -11,7 +11,7 @@ const steps = [
   },
   {
     n: "02",
-    title: "Arrow generates your foundation",
+    title: "Airrow generates your foundation",
     body: "Architecture, specifications, standards, roadmap, prompt library, and an AI context system — personalized to your product, not boilerplate."
   },
   {
@@ -36,8 +36,8 @@ export default async function Landing() {
     <div className="min-h-screen bg-bg">
       <header className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
         <div className="flex items-center gap-2.5 text-fg">
-          <ArrowMark className="text-accent" />
-          <span className="text-[15px] font-semibold tracking-tight">Arrow</span>
+          <AirrowMark className="text-accent" />
+          <span className="text-[15px] font-semibold tracking-tight">Airrow</span>
         </div>
         <Link href={session ? "/app" : "/login"}>
           <Button variant="secondary" size="sm">
@@ -56,7 +56,7 @@ export default async function Landing() {
             Your startup deserves a real engineering foundation.
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-balance text-base leading-relaxed text-fg-muted md:text-lg">
-            Arrow generates the architecture, specifications, standards, and AI context your project
+            Airrow generates the architecture, specifications, standards, and AI context your project
             needs — so Claude Code builds it like a senior team, not a gamble.
           </p>
           <div className="mt-10 flex items-center justify-center gap-3">
@@ -65,7 +65,7 @@ export default async function Landing() {
             </Link>
           </div>
           <p className="mt-6 font-mono text-xs text-fg-faint">
-            Idea → Arrow → Claude Code → Company
+            Idea → Airrow → Claude Code → Company
           </p>
         </section>
 
@@ -86,7 +86,7 @@ export default async function Landing() {
             Everything before the first line of code
           </h2>
           <p className="mx-auto mt-3 max-w-lg text-center text-sm text-fg-muted">
-            Arrow doesn&apos;t build your app. It builds the foundation that makes AI-assisted
+            Airrow doesn&apos;t build your app. It builds the foundation that makes AI-assisted
             development consistent, correct, and fast.
           </p>
           <div className="mt-10 grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-3">
@@ -117,7 +117,7 @@ export default async function Landing() {
 
       <footer className="border-t border-border py-8">
         <p className="text-center font-mono text-xs text-fg-faint">
-          Arrow — built with Arrow&apos;s own methodology.
+          Airrow — built with Airrow&apos;s own methodology.
         </p>
       </footer>
     </div>

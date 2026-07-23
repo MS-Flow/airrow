@@ -52,7 +52,7 @@ export default async function Dashboard() {
           </div>
           <h2 className="mt-5 text-[15px] font-semibold text-fg">Create your first project</h2>
           <p className="mt-2 max-w-sm text-sm leading-relaxed text-fg-muted">
-            Describe your product, answer the CTO interview, and Arrow generates your complete
+            Describe your product, answer the CTO interview, and Airrow generates your complete
             engineering foundation — ready for Claude Code.
           </p>
           <Link href="/app/projects/new" className="mt-6">

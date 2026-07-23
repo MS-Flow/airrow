@@ -1,6 +1,6 @@
-# Arrow — Engineering Constitution
+# Airrow — Engineering Constitution
 
-Non-negotiable engineering rules for building Arrow. Amendments require an ADR.
+Non-negotiable engineering rules for building Airrow. Amendments require an ADR.
 
 ## Methodology
 

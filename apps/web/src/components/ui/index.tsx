@@ -1,4 +1,4 @@
-// Arrow UI kit — shadcn-style primitives on design tokens (F-201 FR-3).
+// Airrow UI kit — shadcn-style primitives on design tokens (F-201 FR-3).
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
@@ -130,8 +130,8 @@ export function Spinner({ className }: { className?: string }) {
   );
 }
 
-/** Arrow product mark. */
-export function ArrowMark({ className }: { className?: string }) {
+/** Airrow product mark. */
+export function AirrowMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={cn("size-5", className)} aria-hidden>
       <path

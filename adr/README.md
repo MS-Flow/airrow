@@ -4,7 +4,7 @@ Append-only log of significant technical decisions. New ADRs from `templates/ADR
 
 | # | Decision | Status |
 |---|----------|--------|
-| 0001 | Next.js App Router for Arrow's application | Accepted |
+| 0001 | Next.js App Router for Airrow's application | Accepted |
 | 0002 | Hybrid generation engine (templates + Claude authoring) | Accepted |
 | 0003 | Supabase as backend platform; monorepo with headless engine | Accepted |
 | 0004 | MVP delivery: ZIP + GitHub App push; provider interface | Accepted |

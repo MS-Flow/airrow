@@ -11,7 +11,7 @@ import {
   visibleQuestions,
   type InterviewAnswers,
   type Question
-} from "@arrow/schemas";
+} from "@airrow/schemas";
 import { Button, Card, Spinner, Textarea } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { saveAnswersAction, submitInterviewAction } from "./actions";

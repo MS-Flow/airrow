@@ -9,7 +9,7 @@ import {
   type SessionContext
 } from "@/lib/data/store";
 
-export const SESSION_COOKIE = "arrow_session";
+export const SESSION_COOKIE = "airrow_session";
 
 export async function getSession(): Promise<SessionContext | null> {
   const jar = await cookies();

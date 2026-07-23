@@ -7,8 +7,8 @@ import {
   pruneHiddenAnswers,
   validateCompleteAnswers,
   type InterviewAnswers
-} from "@arrow/schemas";
-import { resolveProjectModel } from "@arrow/engine";
+} from "@airrow/schemas";
+import { resolveProjectModel } from "@airrow/engine";
 import { requireSession } from "@/lib/auth";
 import {
   completeInterview,

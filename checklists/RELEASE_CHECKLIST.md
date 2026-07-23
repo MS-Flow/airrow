@@ -20,5 +20,5 @@ Run at the end of every milestone, before starting the next.
 
 ## Improve
 
-- [ ] At least one methodology improvement identified and applied to both Arrow and its generated output
+- [ ] At least one methodology improvement identified and applied to both Airrow and its generated output
 - [ ] Roadmap and milestone plan adjusted with what was learned

@@ -18,7 +18,7 @@ export default async function NewProject({
       </h1>
       <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">
         A name and one honest paragraph. The CTO interview comes next — it takes about ten
-        minutes and shapes everything Arrow generates.
+        minutes and shapes everything Airrow generates.
       </p>
       {error ? (
         <p className="mt-4 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-[13px] text-danger">

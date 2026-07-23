@@ -10,7 +10,7 @@ import type {
   JobStatus,
   GenerationResult,
   ProjectModel
-} from "@arrow/schemas";
+} from "@airrow/schemas";
 
 export type ProjectStatus = "interviewing" | "generating" | "ready" | "failed";
 
@@ -127,7 +127,7 @@ function findRepoRoot(): string {
   return process.cwd();
 }
 
-const DATA_DIR = process.env.ARROW_DATA_DIR ?? path.join(findRepoRoot(), ".data");
+const DATA_DIR = process.env.AIRROW_DATA_DIR ?? path.join(findRepoRoot(), ".data");
 const DB_PATH = path.join(DATA_DIR, "db.json");
 const ARTIFACTS_DIR = path.join(DATA_DIR, "artifacts");
 

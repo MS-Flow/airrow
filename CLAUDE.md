@@ -1,35 +1,67 @@
-# CLAUDE.md — AI Assistant Context for Arrow
+# CLAUDE.md
 
-You are working on **Arrow**: a SaaS that generates the complete engineering foundation (specs, docs, architecture, standards, AI context) for new software startups. Arrow prepares projects for AI-assisted development; it never builds the apps themselves. Arrow is built using its own methodology — this repo is the reference implementation.
+This file provides guidance to Claude Code when working with code in the airrow repository.
 
-## Read before any work
+## Communication style
+Be concise but clear. Short responses save tokens — avoid restating what was asked, keep summaries
+at the bare minimum, and omit filler. One clear sentence beats a paragraph.
 
-1. `context/PROGRESS.md` — current state and what to work on next
-2. `context/CONSTRAINTS.md` — hard rules you must never break
-3. The spec for the feature you're implementing (`specs/`)
+## Clean code
+Always write clean code. Avoid duplication — if the same expression appears twice, restructure to
+eliminate it. Prefer clarity over cleverness: a reader should understand intent from the code itself.
 
-## Deeper context (read as needed)
+## Before implementing anything
+1. Read the relevant spec file in `/specs` before writing code.
+2. If no spec exists for the task, say so and ask before proceeding — or run `/createspec`.
+3. Follow the patterns in `docs/architecture/SYSTEM_OVERVIEW.md` and `docs/guides/DEVELOPER_GUIDE.md`.
 
-- `context/PROJECT.md` — business, vision, users
-- `context/ARCHITECTURE.md` — condensed architecture; full docs in `docs/architecture/`
-- `context/DECISIONS.md` — decision summaries; full ADRs in `adr/`
-- `docs/standards/` — coding, testing, security, git, documentation standards
+The spec lifecycle is automated via slash commands (`/createspec → /clarify → /implement → /analyze`,
+plus `/pr-check` before a PR) governed by `.claude/spec-kit/constitution.md`. See `specs/README.md`.
 
-## Non-negotiable workflow
+## After implementing anything
+Update the corresponding spec in `/specs` to reflect what was actually built — check off acceptance
+criteria, note any deviations.
 
-1. **No spec, no code.** Every feature starts from a complete spec (`templates/SPEC_TEMPLATE.md`, rules in `specs/README.md`).
-2. If implementation must diverge from the spec, **update the spec first**.
-3. Follow `checklists/FEATURE_CHECKLIST.md` for every feature, top to bottom.
-4. Update `context/PROGRESS.md` (and docs) in the same change as the work itself.
-5. Significant technical decisions → new ADR in `adr/`.
+## Branching & workflow
+We work via GitHub: a **feature** is a GitHub Project, **issues** are linked to it. Branch hierarchy:
+`main` ← `develop` ← `feature/<name>` ← `<nr>-kort` (issue branch, no `issue/` prefix). PR direction
+is strict and never skipped: `<nr>-kort` → its `feature/<name>` → `develop` → `main`. **Never** PR an
+issue branch to `main`/`develop`. Full detail in `docs/architecture/BRANCHING.md`.
 
-## Stack
+## Commands
+pnpm workspaces monorepo (pnpm 9, Node ≥20). Run from the repo root:
+- `pnpm dev`              # start the Next.js dev server (apps/web on http://localhost:3000)
+- `pnpm build`           # production build
+- `pnpm -r typecheck`    # TypeScript strict check across all packages (tsc --noEmit)
+- `pnpm -r lint`         # ESLint across all packages
+- `pnpm -r test`         # run all tests (Vitest)
+- `pnpm --filter web test <file>`   # run a single test file
+- `pnpm engine:smoke`    # headless generation-engine smoke test (no install needed)
 
-pnpm/Turborepo monorepo · Next.js App Router + TypeScript strict + Tailwind + shadcn/ui (`apps/web`) · pure headless generation engine (`packages/engine`) · shared Zod schemas (`packages/schemas`) · Supabase (Postgres+RLS, Auth, Storage, Realtime) · Vercel · GitHub.
+## Architecture
+Layered, and data flows in one direction:
 
-## Key rules (full list in context/CONSTRAINTS.md)
+`app/**` routes (RSC by default) → client components → **Server Actions / Route Handlers** →
+feature `queries.ts` / `actions.ts` → `apps/web/src/lib/data/store.ts` (the DataStore) → Supabase
+(or the local file-backed store). The **generation engine** (`packages/engine`) is a pure, headless
+`generate(projectModel) → RepoTree + Manifest` — no app imports, no env access.
 
-- No `any`; Zod at every boundary; Server Components by default.
-- `packages/engine` never imports app code or reads env directly.
-- Every table has RLS + denial tests. Secrets never in code or output.
-- Engine LLM output is always validated against document contracts before acceptance.
+- External calls happen **only server-side**: Claude API via the engine's authoring provider;
+  Supabase / GitHub App via the DataStore and server actions. Never from client components; never
+  from `packages/engine` or `packages/schemas` directly.
+- Pure logic lives in `packages/engine` and `packages/schemas`; they must never import from `apps/*`
+  and never read `process.env`.
+- **Autogenerated — do not hand-edit:** `pnpm-lock.yaml`, `.next/`, generated repo artifacts under
+  `.data/`, and any Supabase-generated types.
+
+## Key conventions
+- **TypeScript strict; `any` is forbidden.** Zod validates every boundary — forms, actions, engine
+  I/O, and **all LLM output** (validated against document contracts before acceptance).
+- **Server Components by default;** data access only through feature `queries.ts` / `actions.ts`.
+- **Multi-tenancy:** every resource hangs off `organization_id`. Every table has RLS **with denial
+  tests** — no exceptions, including "internal" tables.
+- **Security:** secrets never in code, client bundles, logs, or generated output. Generated/authored
+  files are untrusted text — rendered sanitized, never executed. Repo access via GitHub App
+  installations only, never user PATs.
+- **Product:** Airrow generates engineering *foundations* only — never application implementation
+  code. ZIP delivery must always work with no integration connected.

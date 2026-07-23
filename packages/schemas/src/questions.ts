@@ -32,7 +32,7 @@ export const interviewQuestions: Question[] = [
   {
     id: "productType",
     title: "What are you building?",
-    help: "This shapes the architecture, roadmap, and specs Arrow generates.",
+    help: "This shapes the architecture, roadmap, and specs Airrow generates.",
     type: "single",
     required: true,
     options: [
@@ -61,7 +61,7 @@ export const interviewQuestions: Question[] = [
   {
     id: "features",
     title: "Which capabilities will your product need?",
-    help: "Select everything you expect in the first year. Arrow specs the MVP subset and roadmaps the rest.",
+    help: "Select everything you expect in the first year. Airrow specs the MVP subset and roadmaps the rest.",
     type: "multi",
     required: true,
     options: [
@@ -82,7 +82,7 @@ export const interviewQuestions: Question[] = [
   {
     id: "roles",
     title: "How sophisticated should roles & permissions be?",
-    help: "You selected organizations — Arrow will spec the permission model.",
+    help: "You selected organizations — Airrow will spec the permission model.",
     type: "single",
     required: true,
     showIf: [{ questionId: "features", in: ["organizations"] }],
@@ -94,7 +94,7 @@ export const interviewQuestions: Question[] = [
   {
     id: "framework",
     title: "Which web framework?",
-    help: "Arrow's golden path is Next.js on Vercel. Vite fits pure SPAs.",
+    help: "Airrow's golden path is Next.js on Vercel. Vite fits pure SPAs.",
     type: "single",
     required: true,
     showIf: [{ questionId: "productType", in: ["saas", "marketplace", "ai_agent", "internal_tool"] }],
@@ -116,7 +116,7 @@ export const interviewQuestions: Question[] = [
   {
     id: "team",
     title: "Who's building it?",
-    help: "Shapes workflow, branching, and how much process Arrow prescribes.",
+    help: "Shapes workflow, branching, and how much process Airrow prescribes.",
     type: "single",
     required: true,
     options: [

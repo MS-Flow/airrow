@@ -12,7 +12,7 @@ Design quality is a stated product bar (Constitution §7): Linear/Vercel/Stripe 
 
 ## User Story
 
-As a user, I want a fast, elegant, coherent interface, so that Arrow feels like a premium developer tool.
+As a user, I want a fast, elegant, coherent interface, so that Airrow feels like a premium developer tool.
 
 ## Functional Requirements
 
@@ -20,7 +20,7 @@ As a user, I want a fast, elegant, coherent interface, so that Arrow feels like 
 - FR-2: Tailwind v4 with semantic design tokens (CSS variables): bg, bg-subtle, surface, border, fg, fg-muted, accent, danger. Dark is the default theme.
 - FR-3: Reusable UI kit (shadcn-style, hand-rolled): Button, Card, Input, Textarea, Label, Badge, Progress, Separator — consistent radii/spacing/type scale.
 - FR-4: Typography: Inter (UI) + JetBrains Mono (code) via next/font.
-- FR-5: Root layout with metadata, favicon (arrow mark), global styles.
+- FR-5: Root layout with metadata, favicon (airrow mark), global styles.
 
 ## Non-Functional Requirements
 

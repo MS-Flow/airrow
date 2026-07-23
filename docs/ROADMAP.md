@@ -1,14 +1,14 @@
-# Arrow — Roadmap
+# Airrow — Roadmap
 
 Sequenced by dependency and value. Detail per milestone lives in `roadmap/MILESTONES.md`; feature detail in `roadmap/BACKLOG.md`.
 
 ## Phase 1 — Foundation & Core Engine
 
 **M0 — Engineering Foundation** *(current)*
-Arrow's own vision, constitutions, architecture, specs system, standards, AI context, prompt library. This document set.
+Airrow's own vision, constitutions, architecture, specs system, standards, AI context, prompt library. This document set.
 
 **M1 — Generation Engine (headless)**
-The heart of Arrow, built and tested before any UI: interview schema → project model → hybrid generation (deterministic structure + Claude-authored content) → complete repository foundation as a file tree. CLI-invokable, snapshot-tested.
+The heart of Airrow, built and tested before any UI: interview schema → project model → hybrid generation (deterministic structure + Claude-authored content) → complete repository foundation as a file tree. CLI-invokable, snapshot-tested.
 
 **M2 — App Skeleton & Auth**
 Next.js app, Supabase auth, dark-first design system, dashboard shell, project CRUD.

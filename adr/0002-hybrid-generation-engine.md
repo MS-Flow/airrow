@@ -4,7 +4,7 @@
 
 ## Context
 
-Arrow's core is turning interview answers into a repository foundation. The quality bar: output must feel authored by a senior CTO for *this* project (Product Constitution §2), yet be structurally reliable, testable, and affordable.
+Airrow's core is turning interview answers into a repository foundation. The quality bar: output must feel authored by a senior CTO for *this* project (Product Constitution §2), yet be structurally reliable, testable, and affordable.
 
 ## Options Considered
 

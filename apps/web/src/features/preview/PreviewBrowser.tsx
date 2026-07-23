@@ -161,7 +161,7 @@ export function PreviewBrowser({ files }: { files: PreviewFile[] }) {
         <div className="mx-auto max-w-3xl px-10 py-10">
           <p className="mb-6 font-mono text-xs text-fg-faint">{active}</p>
           {isMarkdown ? (
-            <div className="prose-arrow" dangerouslySetInnerHTML={{ __html: html }} />
+            <div className="prose-airrow" dangerouslySetInnerHTML={{ __html: html }} />
           ) : (
             <pre className="overflow-x-auto rounded-lg border border-border bg-bg-subtle p-4 font-mono text-[13px] leading-relaxed text-fg">
               {content}
