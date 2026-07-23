@@ -1,0 +1,25 @@
+name: Branch policy
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  validate-source-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce merge rules
+        run: |
+          BASE="${{ github.base_ref }}"
+          HEAD="${{ github.head_ref }}"
+          echo "Källgren: $HEAD -> Målgren: $BASE"
+          if [ "$BASE" = "main" ]; then
+            if [ "$HEAD" != "develop" ]; then
+              echo "::error::Endast 'develop' får mergas in i main (fick '$HEAD')."
+              exit 1
+            fi
+          elif [ "$BASE" = "develop" ]; then
+            case "$HEAD" in
+              feature/*) echo "OK: $HEAD -> develop" ;;
+              *) echo "::error::Endast 'feature/*' får mergas in i develop (fick '$HEAD')."; exit 1 ;;
+            esac
+          fi

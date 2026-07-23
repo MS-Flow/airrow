@@ -1,8 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "include": ["src"],
+  "exclude": ["src/**/*.test.ts"],
   "compilerOptions": {
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    // ES2022 + DOM gives the universal Web APIs the engine uses (TextEncoder) without
+    // pulling in Node's process/fs globals — keeps the engine headless and env-free.
+    "lib": ["ES2022", "DOM"]
   }
 }

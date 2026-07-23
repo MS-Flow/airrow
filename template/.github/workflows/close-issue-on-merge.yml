@@ -1,0 +1,32 @@
+name: Close linked issue on feature merge
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - 'feature/**'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  close-linked-issue:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close issue for merged issue branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD: ${{ github.event.pull_request.head.ref }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          NUM=$(echo "$HEAD" | grep -oE '^[0-9]+' || true)
+          if [ -z "$NUM" ]; then
+            echo "Ingen ledande issue-nummer i '$HEAD' — hoppar över."
+            exit 0
+          fi
+          echo "Stänger issue #$NUM (gren '$HEAD' mergad in i '$BASE')."
+          gh issue close "$NUM" --repo "$REPO" \
+            --comment "Automatiskt stängd: gren \`$HEAD\` mergades in i \`$BASE\`." \
+            || echo "Kunde inte stänga issue #$NUM (kan redan vara stängd)."

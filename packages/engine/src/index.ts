@@ -31,6 +31,9 @@ import { featureSpecs, specsReadme } from "./documents/specs.ts";
 export { ENGINE_VERSION, resolveProjectModel, slugify };
 export type { ResolveInput };
 
+export { renderScaffold, deriveScaffoldValues } from "./scaffold.ts";
+export type { TemplateFile, ScaffoldDecision, ScaffoldPlan, RenderedScaffold } from "./scaffold.ts";
+
 /** Ordered list of document authors — the repository blueprint. */
 function author(model: ProjectModel): GeneratedFile[] {
   return [
