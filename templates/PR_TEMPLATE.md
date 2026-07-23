@@ -2,7 +2,7 @@
 
 ## Spec
 
-Implements: `specs/<milestone>/F-XXX-<slug>.md`
+Implements: `specs/NNN-kort.md` (closes #NNN)
 
 ## What changed
 
@@ -14,9 +14,9 @@ Implements: `specs/<milestone>/F-XXX-<slug>.md`
 - [ ] All acceptance criteria demonstrably pass
 - [ ] Tests added/updated and green
 - [ ] Security section of spec addressed
-- [ ] Docs updated
-- [ ] `context/PROGRESS.md` (and other context files if affected) updated
+- [ ] Docs updated in the same PR (constitution IV — AI context stays synchronized)
 - [ ] Conventional Commit messages
+- [ ] PR direction is correct (issue → feature → develop → main; never skip a level)
 
 ## Review focus
 

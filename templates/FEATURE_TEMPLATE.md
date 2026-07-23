@@ -1,6 +1,6 @@
 # Feature Proposal: <Title>
 
-> Proposer: <name> · Date: YYYY-MM-DD · Target milestone: <MX or "unscheduled">
+> Proposer: <name> · Date: YYYY-MM-DD · Feature (GitHub Project): <name or "unscheduled">
 
 ## Problem
 
@@ -20,4 +20,5 @@
 
 ## Decision
 
-Accepted → backlog ID F-XXX | Rejected — <reason> | Deferred — <trigger to revisit>
+Accepted → create a GitHub issue + `specs/NNN-kort.md` (run `/createspec`) | Rejected — <reason> |
+Deferred — <trigger to revisit>

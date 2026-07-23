@@ -12,6 +12,6 @@
 
 **North-star metric:** generated projects that become active repositories (cloned + commits within 14 days).
 
-**Long-term:** from generator to living foundation — repo sync, repo-aware AI chat, AI review agents (Phase 4 in `docs/ROADMAP.md`).
+**Long-term:** from generator to living foundation — repo sync, repo-aware AI chat, AI review agents (see `docs/VISION.md`).
 
-Full detail: `docs/VISION.md`, `docs/PRODUCT_CONSTITUTION.md`.
+Full detail: `docs/VISION.md`; product invariants live in `.claude/spec-kit/constitution.md` (§0).
