@@ -8,34 +8,34 @@ features — but whose **structure is strict and non-negotiable**: a spec-driven
 constitution, the branch/PR model, and CI. Tailoring in the content; strictness in the skeleton.
 
 Airrow prepares projects for AI-assisted development — it **never writes the application code itself**.
-The founder then builds locally with VS Code + Claude Code, following the exact same workflow this
+The founder then builds locally with preferred IDE + agent, following the exact same workflow this
 repo uses.
 
 ## The promise (what's always generated vs. tailored)
 
-| Invariant (always, regardless of answers) | Variable (derived from the interview) |
-|---|---|
-| Spec-kit: constitution + spec template + 6 slash commands | Tech stack → verification commands, CI steps, deploy target |
-| Strict branch/PR model (`main ← develop ← feature ← NNN-kort`) | Architecture / data / design invariants (constitution I–III) |
-| CI structure (ci, branch-policy, close-issue-on-merge, deploy-dev) | Domain, roles, core entities → README + SYSTEM_OVERVIEW |
-| Minimal, navigable layout (`docs/`, `specs/`, `.claude/`) — no slop | Seed specs for the founder's first features |
-| Founder-in-control: nothing runs until previewed and approved | Naming, domain language, design tokens |
+| Invariant (always, regardless of answers)                           | Variable (derived from the interview)                        |
+| ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Spec-kit: constitution + spec template + 6 slash commands           | Tech stack → verification commands, CI steps, deploy target  |
+| Strict branch/PR model (`main ← develop ← feature ← NNN-kort`)      | Architecture / data / design invariants (constitution I–III) |
+| CI structure (ci, branch-policy, close-issue-on-merge, deploy-dev)  | Domain, roles, core entities → README + SYSTEM_OVERVIEW      |
+| Minimal, navigable layout (`docs/`, `specs/`, `.claude/`) — no slop | Seed specs for the founder's first features                  |
+| Founder-in-control: nothing runs until previewed and approved       | Naming, domain language, design tokens                       |
 
 ## This repository
 
 Airrow is built with Airrow's own methodology — it is the reference implementation of what it
 generates. The canonical scaffold the product hands to new projects lives in [`template/`](template/).
 
-| Path | Contents |
-|------|----------|
-| [`apps/web`](apps/web) | The Airrow application (Next.js 15, App Router) |
-| [`packages/engine`](packages/engine) | Generation engine — pure, headless, dependency-free |
-| [`packages/schemas`](packages/schemas) | Shared Zod schemas + interview schema |
-| [`template/`](template/) | The canonical spec-driven scaffold the app generates for customers |
-| [`.claude/`](.claude/) | The spec constitution, spec template, and workflow slash commands |
-| [`docs/`](docs/) | Living overview, architecture, developer guide — see [docs/README.md](docs/README.md) |
-| [`specs/`](specs/) | One spec per issue (`NNN-kort.md`) — see [specs/README.md](specs/README.md) |
-| [`adr/`](adr/) | Architecture decision records |
+| Path                                   | Contents                                                                              |
+| -------------------------------------- | ------------------------------------------------------------------------------------- |
+| [`apps/web`](apps/web)                 | The Airrow application (Next.js 15, App Router)                                       |
+| [`packages/engine`](packages/engine)   | Generation engine — pure, headless, dependency-free                                   |
+| [`packages/schemas`](packages/schemas) | Shared Zod schemas + interview schema                                                 |
+| [`template/`](template/)               | The canonical spec-driven scaffold the app generates for customers                    |
+| [`.claude/`](.claude/)                 | The spec constitution, spec template, and workflow slash commands                     |
+| [`docs/`](docs/)                       | Living overview, architecture, developer guide — see [docs/README.md](docs/README.md) |
+| [`specs/`](specs/)                     | One spec per issue (`NNN-kort.md`) — see [specs/README.md](specs/README.md)           |
+| [`adr/`](adr/)                         | Architecture decision records                                                         |
 
 ## Read first
 
