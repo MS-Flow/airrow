@@ -22,6 +22,6 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 `specs/NNN-kort.md` — the GitHub issue number plus a short kebab-case name, matching the branch.
 
 ## Status overview
-| Feature | Status |
-|---------|--------|
-| _(none yet)_ | |
+| Feature | Spec | Status |
+|---------|------|--------|
+| Interview-driven project generator | [1-interview-generator.md](1-interview-generator.md) | 🔄 In progress |
