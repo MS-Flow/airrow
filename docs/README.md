@@ -30,5 +30,4 @@ elaborate; the constitution decides.
 - [`../.claude/spec-kit/`](../.claude/spec-kit/) — the spec constitution + template.
 - [`../.claude/commands/`](../.claude/commands/) — the spec-workflow slash commands.
 - [`../template/`](../template/) — the canonical scaffold Airrow generates for customers.
-- [`adr/`](adr/) — architecture decision records.
 - [`../CLAUDE.md`](../CLAUDE.md) — instructions for Claude Code.

@@ -30,7 +30,8 @@ Canonical sources: [`CLAUDE.md`](../../CLAUDE.md) ·
   `feature/<name>`. **PR direction is strict and never skipped:** issue branch → its `feature/<name>`
   → `develop` → `main`. An issue branch is **never** PR'd to `main` or `develop`.
 - **Conventional Commits**, atomic and buildable. Small PRs — one coherent slice; squash-merge.
-- **Decisions are recorded** as ADRs in `adr/` (with or before the implementing PR).
+- **Decisions are recorded** in the spec that introduces them, or a short note under `docs/` (with or
+  before the implementing PR).
 - **AI context stays synchronized.** `CLAUDE.md` and docs update in the **same** change as the code.
   Single source of truth: a fact lives in one file, everything else links; duplication is a bug.
 - After implementing: check off acceptance criteria, set the spec **Status**, and update

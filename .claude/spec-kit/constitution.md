@@ -3,7 +3,7 @@
 The single source of truth for how Airrow is built and what every spec and change must respect. When
 any other file disagrees with this one, **this file wins**. It holds the *invariants* (the
 non-negotiables) and links to the canonical deep-dives for detail, so detail can evolve without the
-rules drifting. Amendments require an ADR in [`../../docs/adr/`](../../docs/adr/).
+rules drifting. Amendments are recorded in the spec that changes them (or a short note under `docs/`).
 
 Canonical sources it governs: [`CLAUDE.md`](../../CLAUDE.md) ·
 [`SYSTEM_OVERVIEW.md`](../../docs/architecture/SYSTEM_OVERVIEW.md) ·
@@ -97,8 +97,9 @@ Every feature, screen, and generated file is judged against these.
 - **Conventional Commits**, atomic and buildable: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`,
   `test:` (scope by feature where useful). Small PRs — one coherent slice; squash-merge with a clean
   title.
-- **Decisions are recorded.** Any decision that would cost >1 day to reverse gets an ADR in
-  [`../../docs/adr/`](../../docs/adr/), with or before the implementing PR — never reconstructed after the fact.
+- **Decisions are recorded.** Any decision that would cost >1 day to reverse is written down — in the
+  spec that introduces it or a short note under `docs/` — with or before the implementing PR, never
+  reconstructed after the fact.
 - **AI context stays synchronized.** `CLAUDE.md` and docs update in the **same** change as the code
   they describe. Stale context is a broken build. Single source of truth: a fact lives in exactly one
   file, everything else links; duplicated content is a bug.
