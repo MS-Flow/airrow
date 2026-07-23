@@ -6,7 +6,7 @@ Arrow generates the perfect engineering foundation for new software startups, so
 
 ## The Problem
 
-AI coding assistants are extraordinary at implementation and terrible at judgment. Given a vague prompt and an empty repo, they produce inconsistent architecture, hallucinated context, and technical debt from day one. Founders without a CTO don't know what's missing — and what's missing is everything that comes *before* code: architecture, specifications, standards, documentation, and durable AI context.
+AI coding assistants are extraordinary at implementation and terrible at judgment. Given a vague prompt and an empty repo, they produce inconsistent architecture, hallucinated context, and technical debt from day one. Founders without a CTO don't know what's missing — and what's missing is everything that comes _before_ code: architecture, specifications, standards, documentation, and durable AI context.
 
 ## The Insight
 
@@ -27,11 +27,11 @@ Arrow is where founders **prepare to build** — not where they build. An adapti
 
 1. **Solo technical founders** who want to skip weeks of setup and start with senior-grade structure.
 2. **Non-technical founders** who need a CTO's judgment encoded into their repo before hiring or prompting.
-3. **Small teams and agencies** who want every new project to start from the same opinionated, AI-ready standard.
+3. **Small teams and agency startups** who want every new project to start from the same opinionated, AI-ready standard.
 
 ## Why Now
 
-AI-native development is becoming the default way software startups are built. Every one of them faces the same cold-start problem. The tools ecosystem (Claude Code, Cursor, Copilot) is mature; the *foundation* layer is empty. Arrow becomes the default first step: **Idea → Arrow → Claude Code → Company.**
+AI-native development is becoming the default way software startups are built. Every one of them faces the same cold-start problem. The tools ecosystem (Claude Code, Cursor, Copilot) is mature; the _foundation_ layer is empty. Arrow becomes the default first step: **Idea → Arrow → Claude Code → Company.**
 
 ## Five-Year Direction
 
