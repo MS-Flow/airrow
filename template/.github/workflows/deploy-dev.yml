@@ -1,0 +1,19 @@
+name: Deploy to DEV
+on:
+  push:
+    branches:
+      - develop
+      - 'feature/**'   # each feature deploys continuously to DEV (see BRANCHING.md)
+
+concurrency:
+  group: deploy-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+{{CI_SETUP_STEPS}}
+      # Deploy to {{DEPLOY_TARGET}}. Secrets live in GitHub Secrets — never hardcode keys.
+{{DEPLOY_STEPS}}

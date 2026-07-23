@@ -35,13 +35,12 @@ generates. The canonical scaffold the product hands to new projects lives in [`t
 | [`.claude/`](.claude/)                 | The spec constitution, spec template, and workflow slash commands                     |
 | [`docs/`](docs/)                       | Living overview, architecture, developer guide — see [docs/README.md](docs/README.md) |
 | [`specs/`](specs/)                     | One spec per issue (`NNN-kort.md`) — see [specs/README.md](specs/README.md)           |
-| [`adr/`](adr/)                         | Architecture decision records                                                         |
 
 ## Read first
 
 - **Working here (human or AI):** [CLAUDE.md](CLAUDE.md) → the constitution
   [.claude/spec-kit/constitution.md](.claude/spec-kit/constitution.md) → the spec for your issue.
-- **The product & vision:** [docs/VISION.md](docs/VISION.md), [context/PROJECT.md](context/PROJECT.md).
+- **The product & vision:** [docs/VISION.md](docs/VISION.md).
 - **Architecture:** [docs/architecture/SYSTEM_OVERVIEW.md](docs/architecture/SYSTEM_OVERVIEW.md).
 
 ## Run it
@@ -55,7 +54,7 @@ pnpm -r test        # Vitest
 pnpm engine:smoke   # generation-engine smoke test (no install needed)
 ```
 
-Airrow runs fully in **local mode** out of the box (ADR-0005): dev auth, file-backed store in
+Airrow runs fully in **local mode** out of the box: dev auth, file-backed store in
 `.data/`, deterministic authoring, ZIP delivery. Supabase / Claude authoring / GitHub push activate
 via `.env` — see `.env.example`.
 

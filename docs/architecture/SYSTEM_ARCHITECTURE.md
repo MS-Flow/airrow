@@ -32,13 +32,12 @@ Airrow is a Next.js application on Vercel with Supabase as the backend platform,
 ## Monorepo layout
 
 ```
-apps/web            Next.js application
+apps/web            Next.js application (design system in src/components/ui, shadcn/ui based)
 packages/engine     Generation engine (pure, headless)
 packages/schemas    Shared Zod schemas & types (project model, interview)
-packages/ui         Design system components (shadcn/ui based)
 ```
 
-pnpm workspaces + Turborepo. The engine and schemas packages must never import from apps.
+pnpm workspaces. The engine and schemas packages must never import from apps.
 
 ## The generation engine (core asset)
 
@@ -52,7 +51,7 @@ Pipeline stages:
 4. **Validate** — completeness check against the blueprint; no unresolved variables; internal links resolve.
 5. **Manifest** — record per file: source (static/authored), template id + version, prompt version, model, inputs hash. Stored in Postgres; enables future regeneration, diffing, and repo sync (Phase 4).
 
-Design rules: deterministic where possible, LLM only where personalization adds value (hybrid, per ADR-0002). Every LLM output passes schema validation before acceptance. Engine is fully testable offline via a mock authoring provider and snapshot fixtures.
+Design rules: deterministic where possible, LLM only where personalization adds value (a deliberate hybrid). Every LLM output passes schema validation before acceptance. Engine is fully testable offline via a mock authoring provider and snapshot fixtures.
 
 ## Generation jobs
 
@@ -61,7 +60,7 @@ Generation is async: a Server Action enqueues a `generation_jobs` row; a job run
 ## Delivery
 
 - **ZIP:** artifact tree → zip stream from Storage.
-- **GitHub:** GitHub App (not OAuth user token) creates the repo and pushes the tree via the Git Data API. Provider interface (`RepoProvider`) with a GitHub implementation now; Azure DevOps later (ADR-0004).
+- **GitHub:** GitHub App (not OAuth user token) creates the repo and pushes the tree via the Git Data API. Provider interface (`RepoProvider`) with a GitHub implementation now; Azure DevOps later.
 
 ## Auth & tenancy
 

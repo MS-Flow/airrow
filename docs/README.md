@@ -8,7 +8,6 @@ elaborate; the constitution decides.
 | Doc | What |
 |-----|------|
 | [VISION.md](VISION.md) | Product vision: problem, insight, what Airrow is/isn't, direction |
-| [CHANGELOG.md](CHANGELOG.md) | Dated build history |
 
 ## `architecture/`
 | Doc | What |
@@ -31,5 +30,4 @@ elaborate; the constitution decides.
 - [`../.claude/spec-kit/`](../.claude/spec-kit/) — the spec constitution + template.
 - [`../.claude/commands/`](../.claude/commands/) — the spec-workflow slash commands.
 - [`../template/`](../template/) — the canonical scaffold Airrow generates for customers.
-- [`../adr/`](../adr/) — architecture decision records.
 - [`../CLAUDE.md`](../CLAUDE.md) — instructions for Claude Code.

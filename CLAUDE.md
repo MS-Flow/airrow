@@ -15,7 +15,7 @@ eliminate it. Prefer clarity over cleverness: a reader should understand intent 
    disagrees with it, the constitution wins.
 2. The spec for your issue in `/specs` (`specs/NNN-kort.md`).
 3. `docs/architecture/SYSTEM_OVERVIEW.md` and `docs/guides/DEVELOPER_GUIDE.md` — how the app is built.
-4. Product context as needed: `docs/VISION.md`, `context/PROJECT.md`.
+4. Product context as needed: `docs/VISION.md`.
 
 ## Before implementing anything
 1. Read the relevant spec file in `/specs` before writing code.

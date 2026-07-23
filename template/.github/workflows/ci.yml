@@ -1,0 +1,23 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+{{CI_SETUP_STEPS}}
+      - name: Typecheck
+        run: {{CMD_TYPECHECK}}
+      - name: Lint
+        run: {{CMD_LINT}}
+      - name: Test
+        run: {{CMD_TEST}}
