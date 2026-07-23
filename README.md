@@ -1,45 +1,65 @@
 # Airrow
 
-**Airrow generates the perfect engineering foundation for new software startups.**
+**Airrow turns a founder's interview into a minimal, spec-driven project scaffold — where the founder stays in control.**
 
-An adaptive CTO interview → a complete, production-grade repository foundation: architecture, specifications, documentation, roadmap, standards, prompt library, and AI context system. Founders then build locally with VS Code + Claude Code. Airrow prepares projects for AI-assisted development — it never builds the apps themselves.
+A startup founder answers a short, adaptive interview in the Airrow web app. From the answers, Airrow
+generates a new repository foundation whose **content is tailored** to their product, stack, and first
+features — but whose **structure is strict and non-negotiable**: a spec-driven workflow, a single
+constitution, the branch/PR model, and CI. Tailoring in the content; strictness in the skeleton.
 
-This repository is Airrow itself, built with Airrow's own Specification Driven Development methodology. It is the reference implementation of what Airrow generates.
+Airrow prepares projects for AI-assisted development — it **never writes the application code itself**.
+The founder then builds locally with preferred IDE + agent, following the exact same workflow this
+repo uses.
 
-## Start here
+## The promise (what's always generated vs. tailored)
 
-New to the repo (human or AI): read **[START_HERE.md](START_HERE.md)**. AI assistants: **[CLAUDE.md](CLAUDE.md)**.
+| Invariant (always, regardless of answers)                           | Variable (derived from the interview)                        |
+| ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Spec-kit: constitution + spec template + 6 slash commands           | Tech stack → verification commands, CI steps, deploy target  |
+| Strict branch/PR model (`main ← develop ← feature ← NNN-kort`)      | Architecture / data / design invariants (constitution I–III) |
+| CI structure (ci, branch-policy, close-issue-on-merge, deploy-dev)  | Domain, roles, core entities → README + SYSTEM_OVERVIEW      |
+| Minimal, navigable layout (`docs/`, `specs/`, `.claude/`) — no slop | Seed specs for the founder's first features                  |
+| Founder-in-control: nothing runs until previewed and approved       | Naming, domain language, design tokens                       |
 
-## Repository map
+## This repository
 
-| Path | Contents |
-|------|----------|
-| `apps/web` | The Airrow application (Next.js 15, App Router) |
-| `packages/engine` | Generation engine — pure, headless, dependency-free |
-| `packages/schemas` | Shared Zod schemas + interview schema |
-| `context/` | AI context system — current state, constraints, decisions |
-| `specs/` | Feature specifications (the source of truth) |
-| `docs/` | Vision, constitutions, roadmap, architecture, standards |
-| `roadmap/` | Milestones and prioritized backlog |
-| `adr/` | Architecture decision records |
-| `templates/` | Spec, ADR, PR, bug, feature templates |
-| `prompts/` | Prompt library for AI-assisted development |
-| `checklists/` | Feature and release checklists |
+Airrow is built with Airrow's own methodology — it is the reference implementation of what it
+generates. The canonical scaffold the product hands to new projects lives in [`template/`](template/).
+
+| Path                                   | Contents                                                                              |
+| -------------------------------------- | ------------------------------------------------------------------------------------- |
+| [`apps/web`](apps/web)                 | The Airrow application (Next.js 15, App Router)                                       |
+| [`packages/engine`](packages/engine)   | Generation engine — pure, headless, dependency-free                                   |
+| [`packages/schemas`](packages/schemas) | Shared Zod schemas + interview schema                                                 |
+| [`template/`](template/)               | The canonical spec-driven scaffold the app generates for customers                    |
+| [`.claude/`](.claude/)                 | The spec constitution, spec template, and workflow slash commands                     |
+| [`docs/`](docs/)                       | Living overview, architecture, developer guide — see [docs/README.md](docs/README.md) |
+| [`specs/`](specs/)                     | One spec per issue (`NNN-kort.md`) — see [specs/README.md](specs/README.md)           |
+
+## Read first
+
+- **Working here (human or AI):** [CLAUDE.md](CLAUDE.md) → the constitution
+  [.claude/spec-kit/constitution.md](.claude/spec-kit/constitution.md) → the spec for your issue.
+- **The product & vision:** [docs/VISION.md](docs/VISION.md).
+- **Architecture:** [docs/architecture/SYSTEM_OVERVIEW.md](docs/architecture/SYSTEM_OVERVIEW.md).
 
 ## Run it
 
 ```bash
 pnpm install
-pnpm dev          # app on http://localhost:3000
-pnpm engine:smoke # generation engine smoke test (no install needed)
+pnpm dev            # app on http://localhost:3000
+pnpm -r typecheck   # strict typecheck
+pnpm -r lint        # ESLint
+pnpm -r test        # Vitest
+pnpm engine:smoke   # generation-engine smoke test (no install needed)
 ```
 
-Airrow runs fully in **local mode** out of the box (ADR-0005): dev auth, file-backed store in `.data/`, deterministic document authoring, ZIP delivery. Supabase / Claude authoring / GitHub push activate via `.env` — see `.env.example`.
+Airrow runs fully in **local mode** out of the box: dev auth, file-backed store in
+`.data/`, deterministic authoring, ZIP delivery. Supabase / Claude authoring / GitHub push activate
+via `.env` — see `.env.example`.
 
-## Status
+## Workflow
 
-**M0 foundation complete; first functional build implemented** — full flow works: interview → generation → preview → ZIP → continue-locally. See `context/PROGRESS.md`.
-
-## Stack (decided, see `adr/`)
-
-Next.js 15 App Router · TypeScript strict · Tailwind v4 · Supabase-ready · Vercel · GitHub · Claude Code · pnpm monorepo: `apps/web`, `packages/engine` (pure, headless), `packages/schemas`.
+Spec-driven, via slash commands: `/createspec → /clarify → /implement → /analyze`, with `/push` and
+`/pr-check` around the PR. Governed by the single [constitution](.claude/spec-kit/constitution.md).
+Branch direction is strict — see [docs/architecture/BRANCHING.md](docs/architecture/BRANCHING.md).

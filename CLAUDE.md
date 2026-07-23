@@ -10,6 +10,13 @@ at the bare minimum, and omit filler. One clear sentence beats a paragraph.
 Always write clean code. Avoid duplication — if the same expression appears twice, restructure to
 eliminate it. Prefer clarity over cleverness: a reader should understand intent from the code itself.
 
+## Read first (in order)
+1. **`.claude/spec-kit/constitution.md`** — the single source of truth for all rules. When any file
+   disagrees with it, the constitution wins.
+2. The spec for your issue in `/specs` (`specs/NNN-kort.md`).
+3. `docs/architecture/SYSTEM_OVERVIEW.md` and `docs/guides/DEVELOPER_GUIDE.md` — how the app is built.
+4. Product context as needed: `docs/VISION.md`.
+
 ## Before implementing anything
 1. Read the relevant spec file in `/specs` before writing code.
 2. If no spec exists for the task, say so and ask before proceeding — or run `/createspec`.

@@ -29,37 +29,31 @@ Object model: **Organization → Project → Interview → Project Model → Gen
 
 ## 2. Generated repository IA (the product's output)
 
-Canonical structure every Airrow project receives (feature-dependent files vary):
+Every Airrow project receives the same minimal, strict skeleton — the invariant structure is fixed; only the *content* of the tailored files varies with the interview. Canonical source: [`../../template/`](../../template/) (`.airrow-template.json` catalogs fixed-workflow vs. tailored paths).
 
 ```
 <project>/
-├── README.md                  entry point: what, stack, how to start
-├── START_HERE.md              guided first hour for founder + AI
-├── CLAUDE.md                  AI assistant entry context
-├── context/                   AI context system
-│   ├── PROJECT.md             business, vision, goals, constraints
-│   ├── ARCHITECTURE.md        condensed architecture for AI
-│   ├── PROGRESS.md            current state, open/completed work
-│   ├── DECISIONS.md           decision summaries → /adr
-│   └── CONSTRAINTS.md         hard rules the AI must never break
-├── specs/                     feature specifications (source of truth)
-│   ├── README.md              how the spec system works
-│   └── <milestone>/<feature>.md
+├── README.md                     entry point: what, stack, how to start
+├── CLAUDE.md                     AI assistant entry context
+├── .claude/
+│   ├── spec-kit/
+│   │   ├── constitution.md       THE single source of truth for rules
+│   │   └── spec-template.md      canonical one-file-per-issue spec format
+│   └── commands/                 createspec · clarify · implement · analyze · push · pr-check
+├── specs/
+│   ├── README.md                 how the spec system works
+│   └── NNN-kort.md               one spec per issue (seed specs from the interview)
 ├── docs/
-│   ├── VISION.md · ROADMAP.md · GETTING_STARTED.md
-│   ├── architecture/          ARCHITECTURE, TECH_STACK, DATABASE, SUPABASE, VERCEL
-│   ├── standards/             CODING, TESTING, SECURITY, GIT, DOCUMENTATION
-│   ├── guides/                AI_GUIDE, CLAUDE, CURSOR, COPILOT, DEVELOPMENT_GUIDE
-│   └── workflows/             feature workflow, release workflow
-├── adr/                       architecture decision records
-├── prompts/                   prompt library for this project
-├── templates/                 SPEC, ADR, PR, BUG, FEATURE templates
-├── checklists/                feature, review, release checklists
-└── .github/                   PR template, CI stub (provider-dependent)
+│   ├── README.md                 doc index
+│   ├── architecture/
+│   │   ├── SYSTEM_OVERVIEW.md     purpose, data flow, roles, entities
+│   │   └── BRANCHING.md           branch + PR model
+│   └── guides/DEVELOPER_GUIDE.md  setup, patterns, verification bar
+└── .github/workflows/            ci · branch-policy · close-issue-on-merge · deploy-dev
 ```
 
-Rules for generated IA: every folder has a README or an obvious entry file; every document links to its sources of truth; nothing exists twice (single-source, cross-linked); AI context files are short and pointer-rich rather than duplicating docs.
+Rules for generated IA: root holds only `README.md` + `CLAUDE.md`; rules live once in the constitution and everything links to it; every folder has an entry file; nothing exists twice. Founder-in-control — the full tree is previewed and approved before anything is written.
 
 ## 3. Airrow's own repo
 
-Airrow itself follows the same IA (see repo root) — deviations between what we generate and what we use are treated as bugs of the methodology.
+Airrow itself follows the same IA (see repo root, plus `apps/` and `packages/` for the application) — deviations between what we generate and what we use are treated as bugs of the methodology.

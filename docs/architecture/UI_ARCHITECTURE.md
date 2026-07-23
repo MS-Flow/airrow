@@ -4,7 +4,7 @@
 
 Premium developer-tool aesthetic: Linear's density and speed, Vercel's restraint, Stripe's polish. **Dark mode first** — dark is the default and design target; light mode derived. Minimal chrome, generous whitespace, fast transitions (no decorative animation), keyboard-friendly.
 
-Design tokens (Tailwind CSS variables): near-black neutral background scale, one accent color, semantic tokens (`bg`, `bg-subtle`, `border`, `fg`, `fg-muted`, `accent`, `danger`...). Components exclusively from `packages/ui` (shadcn/ui based, tokenized). No raw hex values in app code.
+Design tokens (Tailwind CSS variables): near-black neutral background scale, one accent color, semantic tokens (`bg`, `bg-subtle`, `border`, `fg`, `fg-muted`, `accent`, `danger`...). Components exclusively from `apps/web/src/components/ui` (shadcn/ui based, tokenized). No raw hex values in app code.
 
 ## Stack
 
