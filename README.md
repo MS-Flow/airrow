@@ -4,11 +4,11 @@
 
 A startup founder answers a short, adaptive interview in the Airrow web app. From the answers, Airrow
 generates a new repository foundation whose **content is tailored** to their product, stack, and first
-features — but whose **structure is strict and non-negotiable**: a spec-driven workflow, a single
-constitution, the branch/PR model, and CI. Tailoring in the content; strictness in the skeleton.
+features — but whose **structure is strict**: a spec-driven workflow, a single
+constitution, the branch/PR model, and CI.
 
 Airrow prepares projects for AI-assisted development — it **never writes the application code itself**.
-The founder then builds locally with preferred IDE + agent, following the exact same workflow this
+The founder then builds locally with preferred IDE + agents, following the exact same workflow this
 repo uses.
 
 ## The promise (what's always generated vs. tailored)
