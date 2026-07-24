@@ -5,7 +5,7 @@
 // before anything is written or committed (constitution §0 — founder-in-control).
 
 import type { GeneratedFile, ProjectModel } from "../../schemas/src/types.ts";
-import { frameworkLabel, repoLabel } from "./model.ts";
+import { databaseLabel, frameworkLabel, hostingLabel, repoLabel } from "./model.ts";
 
 /** One template file as read from disk by the app. */
 export interface TemplateFile {
@@ -101,7 +101,8 @@ export function deriveScaffoldValues(model: ProjectModel): {
   decisions: ScaffoldDecision[];
 } {
   const command = cmds();
-  const summary = `${frameworkLabel(model)} · TypeScript · Tailwind + shadcn/ui · Supabase (Postgres) · Vercel · ${repoLabel(model)}`;
+  const hosting = hostingLabel[model.hosting];
+  const summary = `${frameworkLabel(model)} · TypeScript · Tailwind + shadcn/ui · ${databaseLabel(model)} (Postgres) · ${hosting} · ${repoLabel(model)}`;
   const roles = rolesText(model);
 
   const values: Record<string, string> = {
@@ -109,11 +110,12 @@ export function deriveScaffoldValues(model: ProjectModel): {
     PROJECT_SLUG: model.slug,
     PROJECT_TAGLINE: model.mvpFocus || "",
     PROJECT_DESCRIPTION: model.description,
-    DOMAIN_OVERVIEW: `${model.name} is ${aOrAn(model.productType)} for ${audienceText(model)}. ${model.description}`,
+    DOMAIN_OVERVIEW: `${model.name} is ${aOrAn(model.productType)} for ${audienceText(model)}. ${model.description}${model.vision ? ` The long-term vision: ${model.vision}` : ""}`,
+    CORE_ENTITIES: model.coreEntities,
     ROLES: roles,
     STACK_SUMMARY: summary,
     STACK_DETAIL: summary,
-    DEPLOY_TARGET: "Vercel",
+    DEPLOY_TARGET: hosting,
     CI_SETUP_STEPS: ciSetupSteps(),
     DEPLOY_STEPS: deploySteps(),
     ARCHITECTURE_INVARIANTS: architectureInvariants(model),
@@ -128,14 +130,22 @@ export function deriveScaffoldValues(model: ProjectModel): {
 
   const decisions: ScaffoldDecision[] = [
     dec("PROJECT_NAME", model.name, "interview", "Product name from the interview."),
-    dec("STACK_SUMMARY", summary, "default", "Golden-path stack (Next.js/TS/Tailwind/Supabase/Vercel), narrowed by the interview."),
+    dec("STACK_SUMMARY", summary, "default", "Golden-path stack (Next.js/TS/Tailwind/Supabase), narrowed by the interview."),
     dec("CMD_TEST", command.CMD_TEST, "default", "pnpm-based golden-path commands."),
-    dec("DEPLOY_TARGET", "Vercel", "default", "Golden-path hosting."),
+    dec("DEPLOY_TARGET", hosting, model.hosting === "vercel" ? "default" : "interview",
+      model.hosting === "vercel"
+        ? "Golden-path hosting."
+        : `Chosen in the interview — the generated deploy workflow targets Vercel, so adjust it for ${hosting}.`),
     dec("ROLES", roles, model.roles === "none" ? "default" : "interview", "Derived from selected features/roles.")
   ];
   if (!model.mvpFocus) {
     decisions.push(dec("PROJECT_TAGLINE", "(unset)", "default", "No MVP focus given — left for the founder to fill."));
   }
+  decisions.push(
+    model.coreEntities
+      ? dec("CORE_ENTITIES", model.coreEntities, "interview", "Core objects described in the interview.")
+      : dec("CORE_ENTITIES", "(unset)", "default", "No core entities given — flagged for the founder to fill, never invented.")
+  );
   return { values, decisions };
 }
 
