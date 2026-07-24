@@ -2,7 +2,7 @@
 // The strongest personalization surface: real FRs/ACs per feature, per model.
 
 import type { FeatureId, GeneratedFile, ProjectModel } from "../../../schemas/src/types.ts";
-import { featureLabel } from "../model.ts";
+import { authSummary, featureLabel, isSpaFramework, usesSupabase } from "../model.ts";
 
 const authored = (path: string, templateId: string, content: string): GeneratedFile => ({
   path,
@@ -49,7 +49,7 @@ const specDefs: Partial<Record<FeatureId, SpecDef>> = {
   auth: {
     problem: () => "Users need secure, low-friction identity before any personalized functionality can exist.",
     frs: (m) => [
-      "Sign up / sign in via Supabase Auth (email + at least one OAuth provider).",
+      `Sign up / sign in via Supabase Auth: ${authSummary(m)}.`,
       "Session available server-side; protected routes redirect unauthenticated users.",
       `On first sign-in, create a profile row${m.derived.multiTenant ? " and a personal organization with owner membership" : ""}.`,
       "Sign out everywhere; auth state reflected in UI within one render."
@@ -58,10 +58,10 @@ const specDefs: Partial<Record<FeatureId, SpecDef>> = {
       "Given a new user, when they complete sign-up, then a profile" + (m.derived.multiTenant ? " and personal organization exist" : " exists") + " and they land on the app home.",
       "Given no session, when visiting a protected route, then redirect to sign-in and back after success."
     ],
-    security: () =>
-      "Supabase Auth only — no custom credential handling. RLS from the first migration. Auth callbacks validated server-side.",
+    security: (m) =>
+      `${usesSupabase(m) ? "Supabase Auth" : "A single managed auth provider (Supabase Auth is the golden path)"} — no custom credential handling. RLS from the first migration. Auth callbacks validated server-side.`,
     edges: () => "OAuth email collision with existing email account; expired session mid-action; sign-up abandonment.",
-    arch: (m) => `Supabase Auth${m.stack.framework === "nextjs" ? " with @supabase/ssr session handling in middleware" : " with supabase-js in a typed auth module"}; profile creation via database trigger on auth.users insert.`
+    arch: (m) => `${usesSupabase(m) ? "Supabase Auth" : "Your managed auth provider (Supabase Auth recommended)"}${isSpaFramework(m) ? " with supabase-js in a typed auth module" : " with @supabase/ssr session handling in middleware"}; profile creation via a trigger on user signup.`
   },
   organizations: {
     problem: () => "Teams need shared workspaces with controlled membership — tenancy is the backbone of the data model.",
@@ -102,7 +102,7 @@ const specDefs: Partial<Record<FeatureId, SpecDef>> = {
   ai: {
     problem: (m) => `AI is a core capability of ${m.name} — it needs reliability, cost control, and validated outputs, not ad-hoc calls.`,
     frs: (m) => [
-      `All LLM calls server-side${m.stack.framework === "nextjs" ? " (Server Actions / Route Handlers)" : " (Edge Functions)"} through one typed client module.`,
+      `All LLM calls server-side${isSpaFramework(m) ? " (Edge Functions)" : " (Server Actions / Route Handlers)"} through one typed client module.`,
       "Prompts stored in prompts/ with versions; calls record prompt version + token usage.",
       "Outputs validated (Zod) against expected shape before persistence or display; invalid output retries once with feedback, then fails visibly.",
       "Per-user rate limiting and a monthly cost ceiling with alerting."
@@ -180,7 +180,7 @@ const specDefs: Partial<Record<FeatureId, SpecDef>> = {
     arch: () => "lib/email module; sends triggered from server-side domain events only — never from client code."
   },
   analytics: {
-    problem: (m) => `Without usage insight, ${m.name} can't tell which bets are working — especially pre-launch decisions toward "${m.goal90}".`,
+    problem: (m) => `Without usage insight, ${m.name} can't tell which bets are working — especially the decisions that move it toward "${m.mvpFocus}".`,
     frs: () => [
       "Privacy-respecting product analytics (e.g. PostHog) behind one typed track() helper.",
       "Event catalog in-repo: name, properties, trigger — no ad-hoc event strings.",

@@ -7,16 +7,23 @@ const fixtures = [
     description: "A lightweight CRM that helps small agencies track client relationships and follow-ups.",
     answers: {
       productType: "saas",
-      audience: "b2b",
-      features: ["auth", "organizations", "payments", "email", "search", "ai", "audit_logs"],
-      roles: "simple",
-      framework: "nextjs",
-      repoProvider: "github",
-      team: "small_team",
-      security: "elevated",
-      scale: "validate",
+      vision: "The system of record every independent agency runs its client relationships on.",
       mvpFocus: "Let an agency log clients and never miss a follow-up.",
-      goal90: "15 paying agencies using it daily."
+      audience: "b2b",
+      coreEntities: "Agencies own Clients; a Client has many Deals and Follow-ups.",
+      tenancy: "organizations",
+      authModel: ["email_password", "social"],
+      roles: "simple",
+      capabilities: ["payments", "email", "search", "ai", "audit_logs"],
+      aiUsage: "rag",
+      integrations: "Stripe for billing, Resend for email.",
+      dataSensitivity: "pii",
+      scale: "validate",
+      framework: "nextjs",
+      database: "supabase",
+      hosting: "vercel",
+      repoProvider: "github",
+      team: "small_team"
     }
   },
   {
@@ -24,15 +31,22 @@ const fixtures = [
     description: "A marketplace where plant lovers buy, sell, and trade rare houseplants locally.",
     answers: {
       productType: "marketplace",
-      audience: "b2c",
-      features: ["auth", "payments", "storage", "search", "notifications", "realtime"],
-      framework: "nextjs",
-      repoProvider: "github",
-      team: "solo",
-      security: "standard",
-      scale: "growth",
+      vision: "The go-to marketplace for rare houseplants, trusted for safe local trades.",
       mvpFocus: "A buyer can find a plant nearby and complete a purchase.",
-      goal90: "500 completed transactions."
+      audience: "b2c",
+      coreEntities: "Sellers list Plants; a Buyer places an Order for a Plant.",
+      tenancy: "marketplace",
+      authModel: ["email_password", "magic_link"],
+      roles: "simple",
+      capabilities: ["payments", "storage", "search", "notifications", "realtime"],
+      integrations: "Stripe Connect for seller payouts.",
+      dataSensitivity: "standard",
+      scale: "growth",
+      framework: "nextjs",
+      database: "supabase",
+      hosting: "vercel",
+      repoProvider: "github",
+      team: "solo"
     }
   },
   {
@@ -40,14 +54,19 @@ const fixtures = [
     description: "An internal tool for the operations team to review and approve vendor requests.",
     answers: {
       productType: "internal_tool",
-      features: ["auth", "admin", "audit_logs", "notifications"],
-      framework: "vite",
-      repoProvider: "azure_devops",
-      team: "startup",
-      security: "standard",
-      scale: "validate",
+      vision: "One console where operations runs every vendor decision with a full audit trail.",
       mvpFocus: "Ops can approve or reject a vendor request with an audit trail.",
-      goal90: "All vendor approvals moved out of email."
+      coreEntities: "Vendors submit Requests; an Operator reviews each Request and records a Decision.",
+      tenancy: "internal",
+      authModel: ["sso"],
+      capabilities: ["admin", "audit_logs", "notifications"],
+      dataSensitivity: "standard",
+      scale: "high_scale",
+      framework: "vite",
+      database: "postgres",
+      hosting: "azure",
+      repoProvider: "azure_devops",
+      team: "startup"
     }
   }
 ];

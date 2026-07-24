@@ -49,11 +49,18 @@ const input: ResolveInput = {
   description: "A lightweight CRM for small agencies.",
   answers: {
     productType: "saas",
+    vision: "The system of record every independent agency runs on.",
+    mvpFocus: "Log clients and never miss a follow-up.",
     audience: "b2b",
-    features: ["auth", "organizations", "payments"],
+    tenancy: "organizations",
+    authModel: ["email_password"],
+    roles: "simple",
+    capabilities: ["payments"],
+    dataSensitivity: "pii",
     framework: "nextjs",
-    team: "small_team",
-    mvpFocus: "Log clients and never miss a follow-up."
+    database: "supabase",
+    hosting: "vercel",
+    team: "small_team"
   }
 };
 
@@ -92,8 +99,8 @@ describe("renderScaffold", () => {
     expect(c).toContain("co-located");
   });
 
-  it("surfaces a NEEDS CLARIFICATION marker for values the interview can't supply (never guesses)", () => {
-    // CORE_ENTITIES is not captured by the interview model -> must be flagged, not invented.
+  it("flags CORE_ENTITIES when the founder skips it (never guesses)", () => {
+    // coreEntities is optional; when unanswered the token must be flagged, not invented.
     const overview = byPath.get("docs/architecture/SYSTEM_OVERVIEW.md")?.content ?? "";
     expect(overview).toContain("[NEEDS CLARIFICATION: CORE_ENTITIES]");
     expect(plan.clarifications).toContain("[NEEDS CLARIFICATION: CORE_ENTITIES]");
@@ -116,12 +123,27 @@ describe("renderScaffold", () => {
   });
 });
 
+describe("core entities from the interview", () => {
+  it("fills CORE_ENTITIES from the interview answer, leaving no marker", () => {
+    const model = resolveProjectModel({
+      ...input,
+      answers: { ...input.answers, coreEntities: "Agencies own Clients; a Client has many Deals." }
+    });
+    const { files, plan } = renderScaffold(loadTemplate(), model);
+    const overview = files.find((f) => f.path === "docs/architecture/SYSTEM_OVERVIEW.md")?.content ?? "";
+    expect(overview).toContain("Agencies own Clients; a Client has many Deals.");
+    expect(overview).not.toContain("[NEEDS CLARIFICATION: CORE_ENTITIES]");
+    expect(plan.clarifications).not.toContain("[NEEDS CLARIFICATION: CORE_ENTITIES]");
+    expect(plan.decisions.some((d) => d.token === "CORE_ENTITIES" && d.source === "interview")).toBe(true);
+  });
+});
+
 describe("single-tenant projects", () => {
   it("scopes data to the owning user instead of an organization", () => {
     const model = resolveProjectModel({
       name: "Notes",
       description: "Personal notes app.",
-      answers: { productType: "saas", audience: "b2c", features: ["auth"], framework: "nextjs" }
+      answers: { productType: "saas", audience: "b2c", tenancy: "single_user", authModel: ["email_password"], framework: "nextjs" }
     });
     const { files } = renderScaffold(loadTemplate(), model);
     const c = files.find((f) => f.path === ".claude/spec-kit/constitution.md")?.content ?? "";
