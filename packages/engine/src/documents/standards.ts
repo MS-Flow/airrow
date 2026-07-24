@@ -2,7 +2,7 @@
 // Standards are mostly stable best practice (static-ish) with model-specific inserts.
 
 import type { GeneratedFile, ProjectModel } from "../../../schemas/src/types.ts";
-import { frameworkLabel, repoLabel, teamLabel } from "../model.ts";
+import { databaseLabel, frameworkLabel, hostingLabel, isSpaFramework, repoLabel, teamLabel, usesSupabase } from "../model.ts";
 
 const doc = (
   path: string,
@@ -28,7 +28,7 @@ export function standards(m: ProjectModel): GeneratedFile[] {
 ## Structure
 
 - Feature modules own their UI, data access, and types (see \`docs/architecture/ARCHITECTURE.md\`).
-- ${m.stack.framework === "nextjs" ? "Routes stay thin — composition only. Logic lives in features. Server Components by default; `\"use client\"` requires a reason. No `useEffect` data fetching." : "Components stay thin; business logic in plain typed modules. Data access only through each feature's `api.ts`."}
+- ${isSpaFramework(m) ? "Components stay thin; business logic in plain typed modules. Data access only through each feature's `api.ts`." : "Routes stay thin — composition only. Logic lives in features. Server Components by default; `\"use client\"` requires a reason. No `useEffect` data fetching."}
 - All database access through the feature's typed data layer. No queries in components.
 
 ## Style
@@ -81,8 +81,8 @@ ${m.security === "elevated" ? "**This project handles sensitive data. Security w
 ## Non-negotiables
 
 1. RLS on every table${m.derived.multiTenant ? ", scoped through organization membership" : ", scoped to the owning user"} — with denial tests.
-2. Zod validation at every boundary: forms, ${m.stack.framework === "nextjs" ? "server actions, route handlers" : "Edge Functions"}, webhooks${m.derived.hasAi ? ", LLM outputs" : ""}.
-3. Secrets only in environment variables (Vercel/Supabase). Never in code, bundles, or logs.
+2. Zod validation at every boundary: forms, ${isSpaFramework(m) ? "Edge Functions" : "server actions, route handlers"}, webhooks${m.derived.hasAi ? ", LLM outputs" : ""}.
+3. Secrets only in environment variables (${hostingLabel[m.hosting]}/${databaseLabel(m)}). Never in code, bundles, or logs.
 4. Authorization is server-side; never trust client-supplied IDs without RLS + explicit checks.
 5. Dependencies: lockfile committed; automated advisories enabled; high severity blocks release.
 ${m.derived.hasPayments ? "6. Payment state only via verified Stripe webhook signatures. Client success callbacks are UX, not truth." : ""}
@@ -346,8 +346,8 @@ ${m.name} is a ${m.productType === "saas" ? "SaaS product" : "product"} built by
 ## Decision
 
 - **${frameworkLabel(m)}** + TypeScript strict + Tailwind + shadcn/ui
-- **Supabase** (PostgreSQL + RLS${m.derived.needsAuth ? ", Auth" : ""}${m.features.includes("storage") ? ", Storage" : ""}${m.derived.hasRealtime ? ", Realtime" : ""}) — managed backend, tenancy enforced in the database
-- **Vercel** deployment (preview per PR) · **${repoLabel(m)}** for code
+- **${databaseLabel(m)}** (PostgreSQL + RLS${usesSupabase(m) ? `${m.derived.needsAuth ? ", Auth" : ""}${m.features.includes("storage") ? ", Storage" : ""}${m.derived.hasRealtime ? ", Realtime" : ""}` : ""}) — ${usesSupabase(m) ? "managed backend" : "Postgres; Auth/Storage wired separately"}, tenancy enforced in the database
+- **${hostingLabel[m.hosting]}** deployment${m.hosting === "vercel" ? " (preview per PR)" : " (deploy workflow defaults to Vercel — adjust)"} · **${repoLabel(m)}** for code
 ${m.derived.hasPayments ? "- **Stripe** for payments — webhooks as entitlement source of truth" : ""}
 ${m.derived.hasAi ? "- **Anthropic Claude API** for AI features — server-side, prompts versioned in-repo" : ""}
 
@@ -374,7 +374,7 @@ Proven prompts for Claude Code sessions in this repo. Refine them as you learn; 
 
 ## Kickoff (first session, Milestone 0)
 
-> Read CLAUDE.md, context/, docs/ROADMAP.md and docs/architecture/TECH_STACK.md. Then scaffold the application for Milestone 0: ${frameworkLabel(m)} with TypeScript strict, Tailwind with dark-first design tokens, shadcn/ui setup, Supabase client wiring, and CI to Vercel. Write the Milestone 0 spec first from templates/SPEC_TEMPLATE.md, show it to me for approval, then implement.
+> Read CLAUDE.md, context/, docs/ROADMAP.md and docs/architecture/TECH_STACK.md. Then scaffold the application for Milestone 0: ${frameworkLabel(m)} with TypeScript strict, Tailwind with dark-first design tokens, shadcn/ui setup, ${usesSupabase(m) ? "Supabase" : databaseLabel(m)} client wiring, and CI to ${hostingLabel[m.hosting]}. Write the Milestone 0 spec first from templates/SPEC_TEMPLATE.md, show it to me for approval, then implement.
 
 ## Session start (every session)
 
