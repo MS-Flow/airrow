@@ -1,21 +1,19 @@
-import { Monitor, Moon, Sun } from "lucide-react";
 import { setThemeAction } from "./actions";
+import { THEME_OPTIONS } from "./theme-options";
 import type { Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-
-const OPTIONS: Array<{ value: Theme; label: string; icon: typeof Sun }> = [
-  { value: "dark", label: "Dark", icon: Moon },
-  { value: "light", label: "Light", icon: Sun }
-];
 
 /**
  * A form per option — the theme is a cookie set by a server action, so the next
  * render already has the right theme and there is no client-side flash.
+ *
+ * Two options only. Dark is what you get until you pick light: `readTheme()` falls back
+ * to it for a missing, unrecognised or tampered cookie.
  */
 export function ThemeToggle({ current }: { current: Theme }) {
   return (
     <div className="flex gap-2">
-      {OPTIONS.map(({ value, label, icon: Icon }) => {
+      {THEME_OPTIONS.map(({ value, label, icon: Icon }) => {
         const active = value === current;
         return (
           <form key={value} action={setThemeAction}>
@@ -36,10 +34,6 @@ export function ThemeToggle({ current }: { current: Theme }) {
           </form>
         );
       })}
-      <span className="flex items-center gap-2 rounded-md border border-dashed border-border px-3 py-2 text-sm text-fg-faint">
-        <Monitor className="size-4" />
-        System — coming soon
-      </span>
     </div>
   );
 }

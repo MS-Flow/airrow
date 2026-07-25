@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
+  ArrowRight,
   BookMarked,
   Boxes,
+  Check,
   FileCode2,
   GitBranch,
   Map,
@@ -10,10 +13,14 @@ import {
 } from "lucide-react";
 import { AirrowLogo } from "@/components/brand/logo";
 import { AirrowMark } from "@/components/brand/mark";
+import { ThemeSwitch } from "@/components/shell/theme-switch";
+import { UserMenu } from "@/components/shell/user-menu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
-import { getSession } from "@/lib/auth";
+import { GUEST_INTERVIEW_PATH } from "@/features/interview/guest-route";
+import { getSession, signOut } from "@/lib/auth";
+import { readTheme } from "@/lib/theme";
 
 const steps = [
   {
@@ -48,29 +55,62 @@ const whySdd = [
   "Decisions made once, in writing, survive the context window."
 ];
 
-/* Placeholder until product supplies real tiers (spec 19, Out of scope). */
-const pricing = [
-  { name: "Free", price: "$0", note: "One project. ZIP delivery. Full foundation." },
-  { name: "Founder", price: "TBD", note: "Unlimited projects, GitHub push, regeneration." },
-  { name: "Team", price: "TBD", note: "Shared workspaces, org roles, review flow." }
+/* Everything is free for now. No invented tiers and no "TBD" — if a price isn't decided,
+   the honest thing is to say the product is free, not to imply a paywall that isn't built. */
+const included = [
+  "Unlimited projects",
+  "The full CTO interview",
+  "The complete generated foundation",
+  "ZIP delivery of your repository",
+  "Regenerate whenever your answers change",
+  "Every document type Airrow produces"
 ];
+
+async function landingSignOutAction() {
+  "use server";
+  await signOut();
+  redirect("/");
+}
 
 export default async function Landing() {
   const session = await getSession();
-  const primaryHref = session ? "/app/projects/new" : "/signup";
+  const theme = await readTheme();
+  // Signed out, "get started" is the interview itself — the account comes at generate.
+  const primaryHref = session ? "/app/projects/new" : GUEST_INTERVIEW_PATH;
 
   return (
     <div className="min-h-screen bg-bg">
       <header className="sticky top-0 z-20 border-b border-border bg-bg/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
-          <AirrowLogo priority />
+          <AirrowLogo size="lg" priority />
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/login">{session ? "Open dashboard" : "Sign in"}</Link>
-            </Button>
-            <Button size="sm" asChild>
-              <Link href={primaryHref}>Get started</Link>
-            </Button>
+            <ThemeSwitch current={theme} />
+            {session ? (
+              <>
+                {/* Signed in, this is the landing page's real action — so it gets the
+                    primary treatment rather than reading as a muted afterthought. */}
+                <Button size="sm" asChild>
+                  <Link href="/app">
+                    Open dashboard
+                    <ArrowRight className="size-4" />
+                  </Link>
+                </Button>
+                <UserMenu
+                  name={session.user.name}
+                  email={session.user.email}
+                  signOutAction={landingSignOutAction}
+                />
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/login">Sign in</Link>
+                </Button>
+                <Button size="sm" asChild>
+                  <Link href={primaryHref}>Get started</Link>
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -78,7 +118,7 @@ export default async function Landing() {
       <main className="mx-auto max-w-6xl px-6">
         {/* Hero — the one place, with the logo, where the metal shows. */}
         <section className="flex flex-col items-center py-28 text-center md:py-40">
-          <AirrowMark priority className="h-16 animate-blur-in md:h-20" />
+          <AirrowMark priority className="h-24 animate-blur-in md:h-32" />
           <Badge className="mt-8 animate-fade-in">For AI-native startups</Badge>
           <h1 className="mt-6 max-w-4xl animate-slide-up text-balance text-4xl font-semibold tracking-tight text-fg md:text-6xl">
             Your startup deserves a real engineering foundation.
@@ -174,23 +214,26 @@ export default async function Landing() {
           </Card>
         </section>
 
-        {/* Pricing teaser — placeholder tiers. */}
+        {/* Pricing — free, in full, while Airrow is in early access. */}
         <section className="border-t border-border py-24">
           <h2 className="text-2xl font-semibold tracking-tight text-fg">Pricing</h2>
-          <p className="mt-3 text-base text-fg-muted">
-            Start free. Final pricing is being set — early projects keep their plan.
+          <p className="mt-3 max-w-xl text-base text-fg-muted">
+            Airrow is free while it&apos;s in early access. Every feature, no project limit, no card.
           </p>
-          <div className="mt-10 grid gap-4 md:grid-cols-3">
-            {pricing.map((tier) => (
-              <Card key={tier.name}>
-                <CardBody className="p-6">
-                  <p className="text-sm font-medium text-fg-muted">{tier.name}</p>
-                  <p className="mt-2 text-3xl font-semibold tracking-tight text-fg">{tier.price}</p>
-                  <p className="mt-3 text-sm leading-relaxed text-fg-muted">{tier.note}</p>
-                </CardBody>
-              </Card>
-            ))}
-          </div>
+          <Card className="mt-8">
+            <CardBody className="p-8">
+              <p className="text-5xl font-semibold tracking-tight text-fg">$0</p>
+              <p className="mt-2 text-base text-fg-muted">Everything included.</p>
+              <ul className="mt-7 grid gap-3 sm:grid-cols-2">
+                {included.map((item) => (
+                  <li key={item} className="flex items-start gap-2.5 text-base text-fg-muted">
+                    <Check className="mt-0.5 size-4 shrink-0 text-fg" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </CardBody>
+          </Card>
         </section>
 
         {/* CTA */}
@@ -207,7 +250,7 @@ export default async function Landing() {
 
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-6 py-10 sm:flex-row sm:justify-between">
-          <AirrowLogo />
+          <AirrowLogo size="md" />
           <p className="font-mono text-xs text-fg-faint">
             Built with Airrow&apos;s own methodology.
           </p>

@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { getInterview, getProject } from "@/lib/data/store";
-import { InterviewRuntime } from "@/features/interview/InterviewRuntime";
+import { AuthedInterview } from "@/features/interview/AuthedInterview";
 
 export const metadata = { title: "Interview" };
 
@@ -15,7 +15,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
   // A generated project may come back to change its answers; submitting regenerates from scratch.
   const interview = await getInterview(id);
   return (
-    <InterviewRuntime
+    <AuthedInterview
       projectId={project.id}
       projectName={project.name}
       initialAnswers={interview?.answers ?? {}}

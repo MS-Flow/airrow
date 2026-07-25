@@ -127,7 +127,9 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
             </div>
           </section>
 
-          <section className="mt-8 grid gap-3 sm:grid-cols-2">
+          {/* One way into the output. The docs reader was a second, near-identical view of
+              the same files — the preview browser already renders them. */}
+          <section className="mt-8">
             <Link href={`/app/projects/${id}/preview`}>
               <Card interactive className="h-full">
                 <CardBody className="p-5">
@@ -135,17 +137,6 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
                   <h3 className="mt-3 text-base font-semibold text-fg">Generated files</h3>
                   <p className="mt-1 text-sm text-fg-muted">
                     {artifact?.manifest.fileCount ?? 0} files, browsable and editable.
-                  </p>
-                </CardBody>
-              </Card>
-            </Link>
-            <Link href={`/app/projects/${id}/docs`}>
-              <Card interactive className="h-full">
-                <CardBody className="p-5">
-                  <BookOpen className="size-4 text-fg-faint" />
-                  <h3 className="mt-3 text-base font-semibold text-fg">Documentation</h3>
-                  <p className="mt-1 text-sm text-fg-muted">
-                    Read your generated docs like a handbook.
                   </p>
                 </CardBody>
               </Card>

@@ -1,6 +1,7 @@
 // Session + auth helpers (issue #18). Real Supabase Auth (email + password) replaces the
 // dev-auth bridge. Identity comes from the SSR client; the org is resolved via the
 // DataStore. Server-only.
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { supabaseServer } from "@/lib/data/supabase-server";
 import { getOrgForUser, setDisplayName, type OrgRecord, type UserRecord } from "@/lib/data/store";
@@ -20,7 +21,19 @@ function metaName(meta: unknown, fallback: string): string {
   return fallback;
 }
 
-export async function getSession(): Promise<SessionContext | null> {
+/**
+ * The authenticated user and their org, or null.
+ *
+ * Memoised per request with React `cache()`. Without it a single `/app` navigation paid
+ * for this twice — once in the layout and again in the page — and each call is a network
+ * round-trip to Supabase Auth plus an org lookup. The middleware gate makes a third.
+ * Deduplicating here is the single biggest win on time-to-first-byte in the app shell.
+ *
+ * `getUser()` (not `getSession()`) stays deliberate: it revalidates the token with the
+ * auth server rather than trusting the cookie, and this is the value every RSC and action
+ * scopes its data by.
+ */
+export const getSession = cache(async (): Promise<SessionContext | null> => {
   const supabase = await supabaseServer();
   const {
     data: { user }
@@ -37,7 +50,7 @@ export async function getSession(): Promise<SessionContext | null> {
     createdAt: user.created_at
   };
   return { user: rec, org };
-}
+});
 
 /** For RSC pages/actions that require auth. Redirects when absent. */
 export async function requireSession(): Promise<SessionContext> {

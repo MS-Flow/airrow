@@ -32,6 +32,16 @@ export async function updateSession(
     }
   });
 
-  const { data } = await supabase.auth.getUser();
-  return { response, userId: data.user?.id ?? null };
+  // `getClaims()` rather than `getUser()`: it verifies the JWT's signature locally when
+  // the project uses asymmetric signing keys, turning a network round-trip on every
+  // request into a local check. Where local verification isn't possible it falls back to
+  // asking the auth server, so this is never weaker than what it replaces.
+  //
+  // Safe *because this gate is coarse*. It only decides "app or /login"; the
+  // authoritative check is `getSession()`, which still calls `getUser()` once per request
+  // and is what every RSC and action scopes its data by. A locally-verified token stays
+  // valid until it expires, so revocation lands one short-lived token later here — and
+  // immediately in the layer that actually reads data.
+  const { data } = await supabase.auth.getClaims();
+  return { response, userId: data?.claims.sub ?? null };
 }

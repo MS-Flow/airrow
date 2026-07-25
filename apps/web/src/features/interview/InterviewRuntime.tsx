@@ -19,14 +19,25 @@ import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { InlineError } from "@/components/ui/states";
 import { cn } from "@/lib/utils";
-import { saveAnswersAction, submitInterviewAction } from "./actions";
 
+/**
+ * Persistence and submission are injected rather than imported, so the signed-in and
+ * signed-out interviews run the *same* question logic over different back ends: server
+ * actions for a real project, `localStorage` plus a sign-in wall for a guest.
+ */
 interface Props {
-  projectId: string;
   projectName: string;
   initialAnswers: InterviewAnswers;
   /** The project already has a generated foundation — submitting replaces it. */
   regenerating?: boolean;
+  /** Called (debounced) on every answer change with the pruned answer set. */
+  persist: (answers: InterviewAnswers) => void;
+  /** Final action. Resolve with an error message to show it inline; void means handled. */
+  submit: (answers: InterviewAnswers) => Promise<{ error?: string } | void>;
+  submitLabel: string;
+  pendingLabel: string;
+  /** Where the "back" affordance leads out of the interview. */
+  back: { href: string; label: string };
 }
 
 function answerLabel(q: Question, answers: InterviewAnswers): string {
@@ -39,7 +50,16 @@ function answerLabel(q: Question, answers: InterviewAnswers): string {
   return q.options?.find((o) => o.value === String(v))?.label ?? String(v);
 }
 
-export function InterviewRuntime({ projectId, projectName, initialAnswers, regenerating = false }: Props) {
+export function InterviewRuntime({
+  projectName,
+  initialAnswers,
+  regenerating = false,
+  persist: persistAnswers,
+  submit: submitAnswers,
+  submitLabel,
+  pendingLabel,
+  back
+}: Props) {
   const router = useRouter();
   const [answers, setAnswers] = useState<InterviewAnswers>(initialAnswers);
   const [mode, setMode] = useState<"questions" | "review">(() =>
@@ -63,10 +83,10 @@ export function InterviewRuntime({ projectId, projectName, initialAnswers, regen
     (next: InterviewAnswers) => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
-        void saveAnswersAction(projectId, pruneHiddenAnswers(next));
+        persistAnswers(pruneHiddenAnswers(next));
       }, 350);
     },
-    [projectId]
+    [persistAnswers]
   );
 
   const setAnswer = useCallback(
@@ -93,7 +113,7 @@ export function InterviewRuntime({ projectId, projectName, initialAnswers, regen
   const submit = () => {
     setError(null);
     startSubmit(async () => {
-      const res = await submitInterviewAction(projectId, pruneHiddenAnswers(answers));
+      const res = await submitAnswers(pruneHiddenAnswers(answers));
       if (res?.error) setError(res.error);
     });
   };
@@ -145,25 +165,16 @@ export function InterviewRuntime({ projectId, projectName, initialAnswers, regen
         {error ? <InlineError className="mt-4">{error}</InlineError> : null}
         <div className="mt-6 flex items-center justify-between gap-4">
           {regenerating ? (
-            <Button
-              variant="ghost"
-              size="lg"
-              onClick={() => router.push(`/app/projects/${projectId}/preview`)}
-              disabled={submitting}
-            >
+            <Button variant="ghost" size="lg" onClick={() => router.push(back.href)} disabled={submitting}>
               <ArrowLeft className="size-3.5" />
-              Back to the foundation
+              {back.label}
             </Button>
           ) : (
             <span />
           )}
           <Button size="lg" onClick={submit} disabled={submitting || !complete}>
             {submitting ? <Spinner className="border-t-bg" /> : null}
-            {submitting
-              ? "Starting generation…"
-              : regenerating
-                ? "Regenerate foundation"
-                : "Generate foundation"}
+            {submitting ? pendingLabel : submitLabel}
           </Button>
         </div>
       </div>
@@ -311,12 +322,12 @@ export function InterviewRuntime({ projectId, projectName, initialAnswers, regen
           type="button"
           onClick={() => {
             if (cursor > 0) return setCursor((c) => Math.max(0, c - 1));
-            router.push(regenerating ? `/app/projects/${projectId}/preview` : "/app");
+            router.push(back.href);
           }}
           className="flex cursor-pointer items-center gap-1.5 text-sm text-fg-muted transition-colors hover:text-fg"
         >
           <ArrowLeft className="size-3.5" />
-          {cursor > 0 ? "Previous question" : regenerating ? "Back to the foundation" : "Back to projects"}
+          {cursor > 0 ? "Previous question" : back.label}
         </button>
         {complete ? (
           <button

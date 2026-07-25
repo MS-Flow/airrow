@@ -3,16 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutGrid,
-  LayoutTemplate,
-  Menu,
-  MessageSquareQuote,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Settings,
-  X
-} from "lucide-react";
+import { LayoutGrid, Menu, PanelLeftClose, PanelLeftOpen, Settings, X } from "lucide-react";
 import { AirrowLogo } from "@/components/brand/logo";
 import { AirrowMark } from "@/components/brand/mark";
 import { Progress } from "@/components/ui/progress";
@@ -22,8 +13,6 @@ import { cn } from "@/lib/utils";
 
 const icons = {
   projects: LayoutGrid,
-  templates: LayoutTemplate,
-  prompts: MessageSquareQuote,
   settings: Settings
 } as const;
 
@@ -79,13 +68,7 @@ function NavLink({
  * Left rail. Collapses to icons on demand and at narrow widths; below the
  * mobile breakpoint it becomes a drawer opened from the top bar.
  */
-export function Sidebar({
-  footer,
-  generating
-}: {
-  footer: React.ReactNode;
-  generating: GeneratingProject | null;
-}) {
+export function Sidebar({ generating }: { generating: GeneratingProject | null }) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const closeDrawer = React.useCallback(() => setDrawerOpen(false), []);
@@ -118,9 +101,22 @@ export function Sidebar({
           drawerOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
-        <div className={cn("flex items-center justify-between px-4 py-5", collapsed && "px-0 justify-center")}>
-          <Link href="/app" onClick={closeDrawer} aria-label="Airrow home">
-            {collapsed ? <AirrowMark priority className="h-6" /> : <AirrowLogo priority />}
+        {/* `h-14` matches the top bar's height, so the logo shares its centre line with the
+            breadcrumbs and "New project" across the fold. Horizontally it mirrors the nav's
+            insets — the rail's `px-3` plus each link's `px-2.5` — so it also lines up with
+            "Projects" and "Settings" below it. */}
+        <div className={cn("flex h-14 items-center justify-between px-3", collapsed && "px-0 justify-center")}>
+          {/* Home is the landing page, not /app — the rail already links to Projects. */}
+          <Link
+            href="/"
+            onClick={closeDrawer}
+            aria-label="Airrow home"
+            className={cn("flex items-center px-2.5", collapsed && "px-0")}
+          >
+            {/* Both states render at h-7. The mark spans nearly the full height of the
+                lockup artwork, so matching the CSS height keeps the mark itself the same
+                size — collapsing the rail drops the wordmark without resizing the logo. */}
+            {collapsed ? <AirrowMark priority className="h-7" /> : <AirrowLogo size="md" priority />}
           </Link>
           <button
             type="button"
@@ -155,8 +151,6 @@ export function Sidebar({
             )}
           </Link>
         ) : null}
-
-        <div className={cn("border-t border-border p-3", collapsed && "px-2")}>{footer}</div>
 
         <button
           type="button"
