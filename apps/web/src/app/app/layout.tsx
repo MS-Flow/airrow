@@ -1,13 +1,16 @@
 import { redirect } from "next/navigation";
 import { ChatSlot } from "@/components/shell/chat-slot";
 import { Sidebar, type GeneratingProject } from "@/components/shell/sidebar";
+import { ThemeSwitch } from "@/components/shell/theme-switch";
 import { TopBar } from "@/components/shell/top-bar";
 import { UserMenu } from "@/components/shell/user-menu";
 import { CommandPalette, type CommandItem } from "@/components/ui/command-palette";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toast";
 import { NAV_ITEMS } from "@/components/shell/nav-items";
+import { ClaimGuestDraft } from "@/features/interview/ClaimGuestDraft";
 import { requireSession, signOut } from "@/lib/auth";
+import { readTheme } from "@/lib/theme";
 import { latestJob, listProjects } from "@/lib/data/store";
 import { JOB_STAGE_COUNT } from "@/features/generation/stages";
 
@@ -20,6 +23,7 @@ async function signOutAction() {
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, org } = await requireSession();
   const projects = await listProjects(org.id);
+  const theme = await readTheme();
 
   const projectNames = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
@@ -51,17 +55,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <TooltipProvider delayDuration={200}>
       <Toaster>
         <div className="flex min-h-screen bg-bg">
-          <Sidebar
-            generating={generating}
-            footer={<UserMenu name={user.name} email={user.email} signOutAction={signOutAction} />}
-          />
+          <Sidebar generating={generating} />
           <div className="flex min-w-0 flex-1 flex-col">
-            <TopBar projectNames={projectNames} />
+            <TopBar
+              projectNames={projectNames}
+              themeSwitch={<ThemeSwitch current={theme} />}
+              userMenu={
+                <UserMenu name={user.name} email={user.email} signOutAction={signOutAction} />
+              }
+            />
             <main className="flex-1">{children}</main>
           </div>
           <ChatSlot />
         </div>
         <CommandPalette items={commands} />
+        <ClaimGuestDraft />
       </Toaster>
     </TooltipProvider>
   );
