@@ -33,7 +33,8 @@ Issue branches are named `<nr>-<short>` (issue number + short name), **without**
 The merge direction above is not just a convention — it is enforced by CI:
 
 - `.github/workflows/branch-policy.yml` runs on every pull request and **fails** if the `head → base` branch relationship violates the hierarchy (`issue/*` → `feature/*`, `feature/*` → `develop`, `develop` → `main`). The error message specifies the correct target branch.
-- The `validate-source-branch` check is configured as a **required status check** through a repository ruleset that applies to `main`, `develop`, and `feature/**`. This prevents incorrectly targeted pull requests from being merged. The ruleset is configured (idempotently) by a repository administrator using `scripts/setup-branch-protection.sh`.
+- The `validate-source-branch` check is configured as a **required status check** through a repository ruleset that applies to `main` and `develop`. A wrongly targeted PR into an integration branch therefore cannot be merged. The ruleset is configured (idempotently) by a repository administrator using `scripts/setup-branch-protection.sh`.
+- On `feature/*` the check is a **soft gate**: the workflow still runs on every PR and marks a wrong-direction PR red, but it is not required. That is deliberate — a ruleset evaluates a required check on *every* ref update, not just on merge, and `validate-source-branch` only runs on `pull_request` events. Requiring it on `feature/**` would make every direct push to a feature branch unsatisfiable, including creating the branch in the first place.
 
 ## Push protection
 
@@ -51,8 +52,8 @@ The `branch-push-protection` ruleset (same script) enforces this on `refs/heads/
 `bypass_actors` is empty — the rules apply to repository administrators too, so there is no direct
 hotfix path; a hotfix is a PR like anything else.
 
-`feature/*` and `<nr>-<short>` branches are deliberately **not** push-protected: push, force-push and
-delete them freely. They keep only the `validate-source-branch` required check above.
+`feature/*` and `<nr>-<short>` branches are deliberately **not** push-protected — no ruleset targets
+them at all, so push, force-push and delete work as usual.
 
 > Already committed locally on `develop`? Move the work to a branch instead:
 > `git switch -c feature/<name>` (or `<nr>-<short>`), then `git switch develop && git reset --hard origin/develop`.

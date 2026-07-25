@@ -51,8 +51,16 @@ Concretely, `scripts/setup-branch-protection.sh` manages **two** rulesets:
 
 | Ruleset                          | Targets                             | Rules                                                 |
 | -------------------------------- | ----------------------------------- | ----------------------------------------------------- |
-| `branch-policy-required-check` (existing, unchanged) | `main`, `develop`, `feature/**` | `required_status_checks: validate-source-branch`      |
+| `branch-policy-required-check` (existing, **narrowed**) | `main`, `develop`   | `required_status_checks: validate-source-branch`      |
 | `branch-push-protection` (new)   | `main`, `develop`                   | `pull_request` (1 approval), `non_fast_forward`, `deletion` |
+
+`feature/**` was dropped from the required-check ruleset (it targeted `main`, `develop`,
+`feature/**` before). A ruleset evaluates a required status check on **every ref update**, not only
+on merge, and `validate-source-branch` only runs on `pull_request` events — so a commit pushed
+directly to a feature branch can never carry a passing check, and the rule silently banned all pushes
+to `feature/*`, branch creation included. Direction into a feature branch is now a soft gate (red
+check on the PR); the hard gate stays on `develop`/`main`. Trade-off recorded in
+[`29-branch-policy.md`](29-branch-policy.md), which owns that ruleset.
 
 `bypass_actors` is **empty** on the new ruleset — repo admins are included in the protection, so no
 one can push directly to `develop`/`main`, hotfixes included.
@@ -87,12 +95,15 @@ behavioural criteria below are verified by reading the enforced configuration
 - [x] Force-push to `develop`/`main` is blocked. — `non_fast_forward` rule active on both refs.
 - [x] Deletion of `develop`/`main` is blocked. — `deletion` rule active on both refs.
 - [x] Pushing to a `feature/*` branch and to a `NNN-kort` issue branch still works normally.
-      — effective rules on `feature/ci-cd` are `required_status_checks` only, and on
-      `13-push-protection` there are **no rules at all**.
+      — verified with **real pushes** to a throwaway `feature/verify-probe-13`: create, push a second
+      commit, force-push and delete all returned exit 0 (branch since deleted). No ruleset targets
+      `feature/**` or `NNN-kort` any more. This criterion initially shipped **broken** — see
+      _Implementation notes_.
 - [x] The `validate-source-branch` required check from spec 29 still applies and still blocks
-      wrong-direction merges. — `branch-policy-required-check` active with context
-      `validate-source-branch` on `main`, `develop`, `feature/**`;
-      `.github/workflows/branch-policy.yml` is untouched.
+      wrong-direction merges **into `develop`/`main`**. — `branch-policy-required-check` active with
+      context `validate-source-branch` on `main` + `develop`;
+      `.github/workflows/branch-policy.yml` is untouched, so the check still runs on every PR and
+      still marks a wrong-direction PR into a `feature/*` branch red (soft gate there).
 - [x] Protection is captured as code (an idempotent script under `scripts/`) so it is reproducible on
       a fresh repo, not a one-off UI click.
 - [x] The settings are documented in `docs/architecture/BRANCHING.md`.
@@ -167,10 +178,17 @@ bypass actor.
   both `enforcement: active`, created 2026-07-25 17:33. Spec 29's ruleset had never been activated
   before, so this run also closes that spec's last open criterion (see
   [`29-branch-policy.md`](29-branch-policy.md) — its 4th criterion can be ticked).
-- **Deviation from the plan's verification:** enforcement was confirmed by reading the live ruleset
-  configuration through the GitHub API, not by a physically rejected `git push`. The stronger
-  evidence — `current_user_can_bypass: "never"` for an `admin: true` user — is only obtainable that
-  way; a push attempt from a non-admin account remains a nice-to-have, not a blocker.
+- **Bug found by `/verify`, fixed in this spec.** The first version of this change kept spec 29's
+  ruleset targeting `feature/**`. Driving the real surface showed that a required status check gates
+  *every ref update*, so `git push -u origin feature/<name>` was rejected outright
+  (`GH013: Required status check "validate-source-branch" is expected.`) — BRANCHING.md's workflow
+  step 1 was broken, while the docs in this same change claimed feature branches were freely
+  pushable. Fix: drop `feature/**` from `branch-policy-required-check`. Root cause and trade-off
+  belong to [`29-branch-policy.md`](29-branch-policy.md).
+- **Verified at the surface (not only from config):** a rejected ref update on `develop` and `main`
+  as an `admin: true` user (`422 … Changes must be made through a pull request`), and a full
+  create → push → force-push → delete cycle on a throwaway `feature/verify-probe-13` (all exit 0,
+  branch deleted afterwards; the DEV-deploy runs it triggered were cancelled).
 - **Not part of this change:** `.claude/settings.local.json` picked up two local Claude Code
   allow-entries during implementation; unrelated to the spec.
 

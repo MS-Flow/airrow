@@ -2,15 +2,18 @@
 #
 # Konfigurerar grenpolicyn på repot via två repository rulesets:
 #
-#   branch-policy-required-check  main, develop, feature/**  — kräver att checken
+#   branch-policy-required-check  main, develop  — kräver att checken
 #                                 `validate-source-branch` (från .github/workflows/branch-policy.yml)
 #                                 passerar innan merge tillåts.
-#   branch-push-protection        main, develop              — kräver pull request (1 godkännande),
+#   branch-push-protection        main, develop  — kräver pull request (1 godkännande),
 #                                 blockerar force-push och radering av grenen.
 #
-# Varför rulesets och inte klassiskt branch protection: mönstret `feature/*` är en
-# wildcard, och klassisk branch protection tar bara exakta grennamn. Ett ruleset kan
-# matcha `refs/heads/feature/**`, `refs/heads/develop` och `refs/heads/main` i en regel.
+# Varför INTE `feature/**` i required-check-regeln: ett ruleset utvärderar en required
+# status check vid *varje* ref-uppdatering, inte bara vid merge. `validate-source-branch`
+# körs bara på `pull_request`, så en commit som pushas direkt till en feature-gren saknar
+# checken och kan aldrig få den grön — regeln skulle i praktiken förbjuda all push till
+# feature-grenar (även att skapa dem). Fel riktning in i en feature-gren fångas därför av
+# den röda checken på PR:en, medan develop/main har den som hård spärr.
 #
 # `bypass_actors` är tomt på push-skyddet — även en repo-admin måste gå via PR.
 # feature/*- och NNN-kort-grenar lämnas fritt pushbara med flit.
@@ -53,7 +56,7 @@ apply_ruleset "branch-policy-required-check" "$(cat <<JSON
   "enforcement": "active",
   "conditions": {
     "ref_name": {
-      "include": ["refs/heads/main", "refs/heads/develop", "refs/heads/feature/**"],
+      "include": ["refs/heads/main", "refs/heads/develop"],
       "exclude": []
     }
   },
