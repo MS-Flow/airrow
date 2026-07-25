@@ -27,7 +27,8 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Interview-driven project generator | [1-interview-generator.md](1-interview-generator.md) | 🔄 In progress |
 | Auto-assign issue on `/createspec` | [27-auto-assign-createspec.md](27-auto-assign-createspec.md) | ✅ Done |
 | Auto-delete issue branch on feature merge | [28-delete-issue-branch.md](28-delete-issue-branch.md) | ✅ Done |
-| Enforce PR merge-direction at the PR level | [29-branch-policy.md](29-branch-policy.md) | 🔄 In progress |
+| Enforce PR merge-direction at the PR level | [29-branch-policy.md](29-branch-policy.md) | ✅ Done |
+| Push protection on `develop` and `main` | [13-push-protection.md](13-push-protection.md) | ✅ Done |
 | Vercel + Supabase infrastructure setup | [9-vercel-supabase-setup.md](9-vercel-supabase-setup.md) | 🔄 In progress |
 | Supabase full schema migration + DataStore cutover | [14-supabase-schema-auth.md](14-supabase-schema-auth.md) | 🔄 In progress |
 | Supabase Auth — email + password login | [18-supabase-auth.md](18-supabase-auth.md) | 🔄 In progress |
