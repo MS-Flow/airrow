@@ -2,9 +2,12 @@
 #
 # Konfigurerar grenpolicyn på repot via två repository rulesets:
 #
-#   branch-policy-required-check  main, develop  — kräver att checken
-#                                 `validate-source-branch` (från .github/workflows/branch-policy.yml)
-#                                 passerar innan merge tillåts.
+#   branch-policy-required-check  main, develop  — kräver att två checkar passerar innan
+#                                 merge tillåts:
+#                                   `validate-source-branch` (.github/workflows/branch-policy.yml)
+#                                     — rätt merge-riktning.
+#                                   `verify` (.github/workflows/ci.yml)
+#                                     — typecheck, lint, test och build; trasig kod når aldrig develop.
 #   branch-push-protection        main, develop  — kräver pull request (1 godkännande),
 #                                 blockerar force-push och radering av grenen.
 #
@@ -29,6 +32,10 @@ set -euo pipefail
 
 REPO="${REPO:-$(gh repo view --json nameWithOwner -q .nameWithOwner)}"
 CHECK_CONTEXT="validate-source-branch"
+# Jobb-id:t i .github/workflows/ci.yml — typecheck, lint, test och build i ett jobb,
+# alltså EN kontext att hålla i synk här. Till skillnad från `validate-source-branch`
+# körs det även på `push`, så en required check finns på varje ref-uppdatering.
+CI_CHECK_CONTEXT="verify"
 
 # Idempotent: uppdatera befintligt ruleset med samma namn, annars skapa nytt.
 apply_ruleset() {
@@ -66,7 +73,8 @@ apply_ruleset "branch-policy-required-check" "$(cat <<JSON
       "parameters": {
         "strict_required_status_checks_policy": false,
         "required_status_checks": [
-          { "context": "$CHECK_CONTEXT" }
+          { "context": "$CHECK_CONTEXT" },
+          { "context": "$CI_CHECK_CONTEXT" }
         ]
       }
     }

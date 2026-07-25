@@ -1,6 +1,10 @@
 name: CI
 on:
   push:
+  # Deliberately unfiltered: this covers every PR target, including `develop` and `main`
+  # (the blocking gate) as well as `<nr>-kort` → `feature/**`, where breakage is cheapest
+  # to catch. The `push` trigger matters for the ruleset — a required check must also be
+  # produced by direct ref updates, or merges into develop would wait forever.
   pull_request:
 
 concurrency:
@@ -27,3 +31,8 @@ jobs:
         run: pnpm -r lint
       - name: Test
         run: pnpm -r test
+      # Last, and on purpose: the production build is what catches crashes the unit tests
+      # cannot see — bad server/client boundaries, RSC-only imports, failed prerenders.
+      # No secrets needed; the app runs fully in local mode (apps/web/.env.example).
+      - name: Build
+        run: pnpm build
