@@ -28,6 +28,12 @@ Issue branches are named `<nr>-<short>` (issue number + short name), **without**
 > The direction is strict and never skipped: `<nr>-<short>` → `feature/<name>` → `develop` → `main`.
 > An issue is **never** PR'd directly to `develop` or `main`.
 
+## Merge Direction Enforcement
+
+The merge direction above is not just a convention — it is enforced by CI:
+
+- `.github/workflows/branch-policy.yml` runs on every pull request and **fails** if the `head → base` branch relationship violates the hierarchy (`issue/*` → `feature/*`, `feature/*` → `develop`, `develop` → `main`). The error message specifies the correct target branch.
+- The `validate-source-branch` check is configured as a **required status check** through a repository ruleset that applies to `main`, `develop`, and `feature/**`. This prevents incorrectly targeted pull requests from being merged. The ruleset is configured (idempotently) by a repository administrator using `scripts/setup-branch-protection.sh`.
 ## CI / DEV deploy
 - Every push to `feature/<name>` **and** `develop` runs a DEV deploy (see `.github/workflows/deploy-dev.yml`).
 - `<nr>-<short>` branches do not deploy — they are tested via their feature.
