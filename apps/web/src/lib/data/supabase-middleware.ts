@@ -10,7 +10,14 @@ export async function updateSession(
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return { response, userId: null };
+  // Missing config is a broken deployment, not a signed-out visitor. Returning
+  // `userId: null` here used to make every /app request bounce to /login with no
+  // error anywhere — an unconfigured app looked exactly like a wrong password.
+  if (!url || !key) {
+    throw new Error(
+      "Supabase Auth is not configured — set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in apps/web/.env.local."
+    );
+  }
 
   const supabase = createServerClient(url, key, {
     cookies: {

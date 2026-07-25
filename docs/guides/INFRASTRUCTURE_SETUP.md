@@ -5,7 +5,7 @@ manual dashboard work; this is the exact order that makes the deployed app conne
 Day-to-day local database work lives in [`DEVELOPER_GUIDE.md`](./DEVELOPER_GUIDE.md#local-supabase).
 
 > **Founder-in-control:** nothing here runs automatically. You perform each dashboard step and paste
-> the resulting values where noted. Secrets go into Vercel/`.env.local` only — **never** into git.
+> the resulting values where noted. Secrets go into Vercel/`apps/web/.env.local` only — **never** into git.
 
 ---
 
@@ -85,5 +85,12 @@ Day-to-day local database work lives in [`DEVELOPER_GUIDE.md`](./DEVELOPER_GUIDE
 
 - **Free tier:** the Supabase project pauses after ~1 week of inactivity and has row/storage caps —
   fine for now; revisit before launch.
-- **Secrets:** only ever live in Vercel env vars and your local `.env.local` (gitignored). `.env.example`
-  documents the names with no values.
+- **Secrets:** only ever live in Vercel env vars and your local `apps/web/.env.local` (gitignored).
+  `apps/web/.env.example` documents the names with no values. The location matters: Next.js reads
+  `.env*` only from the directory it runs in, so a file at the repo root is ignored and the app looks
+  permanently signed out.
+- **Email confirmation:** a hosted Supabase project ships with *Confirm email* **on**, so signup
+  creates the account but no session — the UI sends you to "Confirm your email" instead of the
+  dashboard. `supabase/config.toml` (`enable_confirmations = false`) only governs a **local** stack.
+  Turn it off for the dev project under *Authentication → Sign In / Providers → Email* if you want
+  signup to log you straight in.

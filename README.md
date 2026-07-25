@@ -56,7 +56,8 @@ pnpm engine:smoke   # generation-engine smoke test (no install needed)
 
 Airrow runs fully in **local mode** out of the box: dev auth, file-backed store in
 `.data/`, deterministic authoring, ZIP delivery. Supabase / Claude authoring / GitHub push activate
-via `.env` — see `.env.example`.
+via env — see `apps/web/.env.example`, copied to `apps/web/.env.local` (Next reads env only from the
+app directory, never the repo root).
 
 ## Workflow
 
