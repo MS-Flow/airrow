@@ -13,6 +13,26 @@ Airrow runs in **local mode** out of the box: dev auth, file-backed store in `.d
 document authoring, ZIP delivery. Supabase / Claude authoring / GitHub push activate via `.env` — copy
 `.env.example` and fill what you need.
 
+## Local Supabase
+One-time cloud provisioning (Vercel + Supabase projects, env wiring, `airrow.app`) is a separate
+runbook: [`INFRASTRUCTURE_SETUP.md`](./INFRASTRUCTURE_SETUP.md). For day-to-day work against a local
+database you only need **Docker running** and the Supabase CLI (invoked via `pnpm dlx supabase`).
+
+```bash
+pnpm dlx supabase start          # boots Postgres + Studio locally (first run pulls images)
+pnpm dlx supabase status         # prints the local URL, anon key, service_role key, DB URL
+pnpm dlx supabase db reset       # replays every migration in supabase/migrations from zero
+pnpm dlx supabase migration new <name>   # scaffold the next migration
+pnpm dlx supabase stop           # tear the local stack down
+```
+
+- **Migrations are the only way the schema changes** (constitution §II) — never edit tables in Studio.
+  They must replay cleanly from zero (`db reset`).
+- Copy the keys `supabase status` prints into `.env.local` (see `.env.example`). Studio runs at
+  http://127.0.0.1:54323; the DB is `postgresql://postgres:postgres@127.0.0.1:54322/postgres`.
+- **RLS tests** (`*.rls.test.ts`) run against this local DB and are **skipped automatically** when it
+  isn't reachable, so `pnpm -r test` stays green without Docker. Start Supabase to exercise them.
+
 ## Code organization
 ```
 apps/web/src/
