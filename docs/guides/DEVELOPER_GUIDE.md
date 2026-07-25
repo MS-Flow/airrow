@@ -10,8 +10,12 @@ pnpm engine:smoke   # headless generation-engine smoke test (no install needed)
 ```
 
 Airrow runs in **local mode** out of the box: dev auth, file-backed store in `.data/`, deterministic
-document authoring, ZIP delivery. Supabase / Claude authoring / GitHub push activate via `.env` — copy
-`.env.example` and fill what you need.
+document authoring, ZIP delivery. Supabase / Claude authoring / GitHub push activate via env — copy
+`apps/web/.env.example` to `apps/web/.env.local` and fill what you need.
+
+> **Env lives in `apps/web/`, not the repo root.** Next.js only reads `.env*` from the directory it
+> runs in, so a file at the root is silently ignored — the app then behaves as if you are permanently
+> signed out. Everything else (scripts, tests) reads `apps/web/.env.local` too.
 
 ## Local Supabase
 One-time cloud provisioning (Vercel + Supabase projects, env wiring, `airrow.app`) is a separate
@@ -28,7 +32,7 @@ pnpm dlx supabase stop           # tear the local stack down
 
 - **Migrations are the only way the schema changes** (constitution §II) — never edit tables in Studio.
   They must replay cleanly from zero (`db reset`).
-- Copy the keys `supabase status` prints into `.env.local` (see `.env.example`). Studio runs at
+- Copy the keys `supabase status` prints into `apps/web/.env.local` (see `apps/web/.env.example`). Studio runs at
   http://127.0.0.1:54323; the DB is `postgresql://postgres:postgres@127.0.0.1:54322/postgres`.
 - **RLS tests** (`*.rls.test.ts`) run against this local DB and are **skipped automatically** when it
   isn't reachable, so `pnpm -r test` stays green without Docker. Start Supabase to exercise them.

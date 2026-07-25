@@ -46,20 +46,45 @@ export async function requireSession(): Promise<SessionContext> {
   return session;
 }
 
+/**
+ * Signup has three outcomes, not two: the project may require e-mail confirmation,
+ * in which case an account exists but there is no session yet. Collapsing that
+ * into "success" sends the founder to /app, where middleware bounces them
+ * straight back to /login with no explanation.
+ */
+export type SignUpResult =
+  | { status: "signed-in" }
+  | { status: "confirmation-required" }
+  | { status: "error"; message: string };
+
 export async function signUp(
   name: string,
   email: string,
   password: string
-): Promise<{ error?: string }> {
+): Promise<SignUpResult> {
   const supabase = await supabaseServer();
-  const { error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
-  return error ? { error: error.message } : {};
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { name } }
+  });
+  if (error) return { status: "error", message: error.message };
+  return data.session ? { status: "signed-in" } : { status: "confirmation-required" };
 }
 
-export async function signIn(email: string, password: string): Promise<{ error?: string }> {
+export type SignInResult =
+  | { status: "signed-in" }
+  | { status: "unconfirmed" }
+  | { status: "error"; message: string };
+
+export async function signIn(email: string, password: string): Promise<SignInResult> {
   const supabase = await supabaseServer();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
-  return error ? { error: error.message } : {};
+  if (!error) return { status: "signed-in" };
+  // An unconfirmed account is not a wrong password — saying so saves a support round.
+  const unconfirmed =
+    error.code === "email_not_confirmed" || /email not confirmed/i.test(error.message);
+  return unconfirmed ? { status: "unconfirmed" } : { status: "error", message: error.message };
 }
 
 export async function signOut(): Promise<void> {
