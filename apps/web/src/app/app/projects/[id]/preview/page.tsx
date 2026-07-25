@@ -13,12 +13,12 @@ export const metadata = { title: "Preview" };
 export default async function PreviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { org } = await requireSession();
-  const project = getProject(org.id, id);
+  const project = await getProject(org.id, id);
   if (!project) notFound();
   if (project.status !== "ready") redirect(`/app/projects/${id}`);
 
-  const job = latestJob(id);
-  const artifact = job && job.status === "completed" ? loadArtifact(job.id) : null;
+  const job = await latestJob(id);
+  const artifact = job && job.status === "completed" ? await loadArtifact(job.id) : null;
   if (!artifact) redirect(`/app/projects/${id}`);
 
   return (

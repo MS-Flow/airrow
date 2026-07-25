@@ -26,7 +26,7 @@ export async function requireSession(): Promise<SessionContext> {
 }
 
 export async function signIn(name: string, email: string): Promise<void> {
-  const user = upsertUserByEmail(email, name);
+  const user = await upsertUserByEmail(email, name);
   const session = createSession(user.id);
   const jar = await cookies();
   jar.set(SESSION_COOKIE, session.token, {
