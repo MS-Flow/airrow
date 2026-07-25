@@ -34,6 +34,7 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Enforce PR merge-direction at the PR level | [29-branch-policy.md](29-branch-policy.md) | ✅ Done |
 | Push protection on `develop` and `main` | [13-push-protection.md](13-push-protection.md) | ✅ Done |
 | Blocking CI checks on PRs into `develop` | [14-pr-ci-checks.md](14-pr-ci-checks.md) | ✅ Done |
+| Auto-set PR base branch per the hierarchy | [16-pr-base-branch.md](16-pr-base-branch.md) | 🔄 In progress |
 | Redesign interview into architecture-first question set | [6-fix-interview-template.md](6-fix-interview-template.md) | ✅ Done |
 | Fix UI design flaws — shell corrections + anonymous interview | [11-ui-design-flaws.md](11-ui-design-flaws.md) | ✅ Done |
 | Downloaded foundation must fully reflect the interview answers | [10-foundation-reflects-answers.md](10-foundation-reflects-answers.md) | ✅ Done |

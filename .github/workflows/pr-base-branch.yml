@@ -1,0 +1,86 @@
+name: Set PR base branch
+# Sätter rätt base-gren när en PR öppnas från en issue-gren (`<nr>-kort`), så att
+# grenhierarkin blir default i stället för något man måste komma ihåg. GitHub utgår från
+# repots default-gren (`main`), vilket är fel riktning för varje issue-gren.
+#
+# Bara `opened` — med flit. En base som ändras i efterhand rörs aldrig, så automatiken kan
+# inte hamna i en dragkamp med en människa; ett medvetet undantag görs genom att byta base
+# EFTER att PR:en öppnats.
+#
+# `pull_request` (inte `pull_request_target`): skrivtoken får aldrig köra kod från en fork.
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  set-base:
+    runs-on: ubuntu-latest
+    steps:
+      # Head-ref:en, inte merge-ref:en — specen skapas normalt i samma PR och finns
+      # därför bara på head när det här körs.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Derive base from the spec header
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD: ${{ github.head_ref }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          NUM=$(echo "$HEAD" | grep -oE '^[0-9]+' || true)
+          if [ -z "$NUM" ]; then
+            echo "'$HEAD' är ingen issue-gren — rör inte basen."
+            exit 0
+          fi
+
+          # Numret ensamt räcker inte: `specs/14-*.md` matchar två specar från olika
+          # features. Rätt spec är den vars Branch-rad nämner just den här grenen.
+          TICK='`'
+          SPEC=""
+          for f in specs/"$NUM"-*.md; do
+            [ -f "$f" ] || continue
+            if grep -qF "$TICK$HEAD$TICK" "$f"; then
+              SPEC="$f"
+              break
+            fi
+          done
+
+          if [ -z "$SPEC" ]; then
+            MSG="Kunde inte härleda base-gren: ingen spec i \`specs/\` vars Branch-rad nämner \`$HEAD\`. Basen lämnas som \`$BASE\` — sätt rätt \`feature/*\` manuellt (se docs/architecture/BRANCHING.md)."
+            echo "::warning::$MSG"
+            gh pr comment "$PR" --repo "$REPO" --body "$MSG"
+            exit 0
+          fi
+
+          # Branch-raden ser ut som: `<nr>-kort` (from `feature/<name>`)
+          TARGET=$(grep -oE "from ${TICK}feature/[A-Za-z0-9._-]+${TICK}" "$SPEC" \
+            | head -1 | tr -d "$TICK" | sed 's/^from //')
+
+          if [ -z "$TARGET" ]; then
+            MSG="Kunde inte härleda base-gren: \`$SPEC\` saknar \`(from \\\`feature/…\\\`)\` i sin Branch-rad. Basen lämnas som \`$BASE\`."
+            echo "::warning::$MSG"
+            gh pr comment "$PR" --repo "$REPO" --body "$MSG"
+            exit 0
+          fi
+
+          if ! git ls-remote --exit-code --heads origin "$TARGET" > /dev/null 2>&1; then
+            MSG="Kunde inte sätta base-gren: \`$TARGET\` (härledd ur \`$SPEC\`) finns inte längre på origin — troligen redan mergad och raderad. Basen lämnas som \`$BASE\`."
+            echo "::warning::$MSG"
+            gh pr comment "$PR" --repo "$REPO" --body "$MSG"
+            exit 0
+          fi
+
+          if [ "$TARGET" = "$BASE" ]; then
+            echo "Basen är redan '$TARGET' — inget att göra."
+            exit 0
+          fi
+
+          echo "Sätter base '$BASE' -> '$TARGET' (härledd ur $SPEC)."
+          gh pr edit "$PR" --repo "$REPO" --base "$TARGET"
