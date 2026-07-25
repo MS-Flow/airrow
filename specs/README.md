@@ -27,3 +27,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Interview-driven project generator | [1-interview-generator.md](1-interview-generator.md) | 🔄 In progress |
 | Auto-assign issue on `/createspec` | [27-auto-assign-createspec.md](27-auto-assign-createspec.md) | ✅ Done |
 | Auto-delete issue branch on feature merge | [28-delete-issue-branch.md](28-delete-issue-branch.md) | ✅ Done |
+| Enforce PR merge-direction at the PR level | [29-branch-policy.md](29-branch-policy.md) | 🔄 In progress |

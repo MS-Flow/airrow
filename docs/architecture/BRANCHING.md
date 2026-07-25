@@ -28,6 +28,15 @@ Issue-grenar heter `<nr>-<kort>` (issue-nummer + kort namn), **utan** `issue/`-p
 > Riktningen är strikt och hoppas aldrig över: `<nr>-<kort>` → `feature/<namn>` → `develop` → `main`.
 > Ett issue PR:as **aldrig** direkt till `develop` eller `main`.
 
+## Enforcement av merge-riktning
+Riktningen ovan är inte bara en konvention — den tvingas fram i CI:
+- `.github/workflows/branch-policy.yml` kör på varje PR och **failar** om `head → base` bryter mot
+  hierarkin (issue → `feature/*`, `feature/*` → `develop`, `develop` → `main`). Felmeddelandet namnger
+  rätt målgren.
+- Checken `validate-source-branch` är en **required status check** via ett repository ruleset som
+  matchar `main`, `develop` och `feature/**`, så en felriktad PR går inte att merga. Rulesetet sätts
+  upp (idempotent) av en repo-admin med `scripts/setup-branch-protection.sh`.
+
 ## CI / DEV-deploy
 - Varje push till `feature/<namn>` **och** `develop` kör DEV-deploy (se `.github/workflows/deploy-dev.yml`).
 - `<nr>-<kort>`-grenar deployar inte — de testas via sin feature.
