@@ -2,9 +2,10 @@
 
 The single source of truth for how {{PROJECT_NAME}} is built and what every spec and change must
 respect. When any other file disagrees with this one, **this file wins**. It holds the *invariants*
-and links to canonical docs for detail. Amendments require an ADR.
+and links to canonical docs for detail. Amendments are recorded in the spec that changes them.
 
 Canonical sources: [`CLAUDE.md`](../../CLAUDE.md) ·
+[`VISION.md`](../../docs/VISION.md) ·
 [`SYSTEM_OVERVIEW.md`](../../docs/architecture/SYSTEM_OVERVIEW.md) ·
 [`DEVELOPER_GUIDE.md`](../../docs/guides/DEVELOPER_GUIDE.md) ·
 [`BRANCHING.md`](../../docs/architecture/BRANCHING.md).

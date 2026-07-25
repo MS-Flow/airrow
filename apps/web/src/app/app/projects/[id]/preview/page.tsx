@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
-import { ArrowRight, Download } from "lucide-react";
+import { ArrowRight, Download, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { getProject, latestJob, loadArtifact } from "@/lib/data/store";
@@ -33,6 +33,12 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
           </span>
         </div>
         <div className="flex items-center gap-2.5">
+          <Link href={`/app/projects/${id}/interview`}>
+            <Button variant="ghost" size="sm">
+              <Undo2 className="size-3.5" />
+              Change answers
+            </Button>
+          </Link>
           <a href={`/api/projects/${id}/zip`}>
             <Button size="sm">
               <Download className="size-3.5" />
@@ -48,7 +54,10 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
         </div>
       </header>
       <Suspense>
-        <PreviewBrowser files={artifact.files.map((f) => ({ path: f.path, content: f.content }))} />
+        <PreviewBrowser
+          projectId={id}
+          files={artifact.files.map((f) => ({ path: f.path, content: f.content }))}
+        />
       </Suspense>
     </div>
   );

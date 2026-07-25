@@ -4,11 +4,16 @@
 
 {{PROJECT_DESCRIPTION}}
 
+> **New here? Start with [START_HERE.md](START_HERE.md)** — setup, the first spec, and the loop you
+> repeat from then on.
+
 ## What & for whom
 {{DOMAIN_OVERVIEW}}
 
 ## Stack
-{{STACK_SUMMARY}}
+{{STACK_DETAIL}}
+
+Deploys to {{DEPLOY_TARGET}}.
 
 ## Run it
 ```bash

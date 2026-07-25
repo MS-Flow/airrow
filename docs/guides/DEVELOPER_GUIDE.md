@@ -40,7 +40,8 @@ apps/web/src/
   features/<area>/  feature slices — components + actions.ts / queries.ts
   components/ui/     shared shadcn/ui-based design system
   lib/               auth, data/store.ts (the DataStore), middleware helpers
-packages/engine/src/    pure generation engine (documents/, pipeline)
+packages/engine/src/    pure generation engine (scaffold renderer + pipeline)
+template/               the canonical scaffold generated for customers — single source of output
 packages/schemas/src/   Zod schemas & types shared across app + engine
 ```
 

@@ -20,6 +20,8 @@ interface Props {
   projectId: string;
   projectName: string;
   initialAnswers: InterviewAnswers;
+  /** The project already has a generated foundation — submitting replaces it. */
+  regenerating?: boolean;
 }
 
 function answerLabel(q: Question, answers: InterviewAnswers): string {
@@ -32,7 +34,7 @@ function answerLabel(q: Question, answers: InterviewAnswers): string {
   return q.options?.find((o) => o.value === String(v))?.label ?? String(v);
 }
 
-export function InterviewRuntime({ projectId, projectName, initialAnswers }: Props) {
+export function InterviewRuntime({ projectId, projectName, initialAnswers, regenerating = false }: Props) {
   const router = useRouter();
   const [answers, setAnswers] = useState<InterviewAnswers>(initialAnswers);
   const [mode, setMode] = useState<"questions" | "review">(() =>
@@ -95,12 +97,16 @@ export function InterviewRuntime({ projectId, projectName, initialAnswers }: Pro
   if (mode === "review") {
     return (
       <div className="mx-auto max-w-2xl px-8 py-12">
-        <p className="font-mono text-xs text-accent">Review</p>
+        <p className="font-mono text-xs text-accent">{regenerating ? "Change answers" : "Review"}</p>
         <h1 className="mt-2 text-xl font-semibold tracking-tight text-fg">
-          Ready to generate {projectName}&apos;s foundation
+          {regenerating
+            ? `Regenerate ${projectName}'s foundation`
+            : `Ready to generate ${projectName}'s foundation`}
         </h1>
         <p className="mt-1.5 text-sm text-fg-muted">
-          Check your answers — each one shapes the output. Generation takes under a minute.
+          {regenerating
+            ? "Change any answer, then regenerate. This builds a fresh foundation — edits you made to the current files are not carried over."
+            : "Check your answers — each one shapes the output. Generation takes under a minute."}
         </p>
         <Card className="mt-6 divide-y divide-border">
           {visible.map((q) => (
@@ -136,10 +142,27 @@ export function InterviewRuntime({ projectId, projectName, initialAnswers }: Pro
             {error}
           </p>
         ) : null}
-        <div className="mt-6 flex justify-end">
+        <div className="mt-6 flex items-center justify-between gap-4">
+          {regenerating ? (
+            <Button
+              variant="ghost"
+              size="lg"
+              onClick={() => router.push(`/app/projects/${projectId}/preview`)}
+              disabled={submitting}
+            >
+              <ArrowLeft className="size-3.5" />
+              Back to the foundation
+            </Button>
+          ) : (
+            <span />
+          )}
           <Button size="lg" onClick={submit} disabled={submitting || !complete}>
             {submitting ? <Spinner className="border-t-bg" /> : null}
-            {submitting ? "Starting generation…" : "Generate foundation"}
+            {submitting
+              ? "Starting generation…"
+              : regenerating
+                ? "Regenerate foundation"
+                : "Generate foundation"}
           </Button>
         </div>
       </div>
@@ -283,11 +306,14 @@ export function InterviewRuntime({ projectId, projectName, initialAnswers }: Pro
       <div className="mt-10 flex items-center justify-between">
         <button
           type="button"
-          onClick={() => (cursor === 0 ? router.push("/app") : setCursor((c) => Math.max(0, c - 1)))}
+          onClick={() => {
+            if (cursor > 0) return setCursor((c) => Math.max(0, c - 1));
+            router.push(regenerating ? `/app/projects/${projectId}/preview` : "/app");
+          }}
           className="flex cursor-pointer items-center gap-1.5 text-[13px] text-fg-muted transition-colors hover:text-fg"
         >
           <ArrowLeft className="size-3.5" />
-          {cursor === 0 ? "Back to projects" : "Previous question"}
+          {cursor > 0 ? "Previous question" : regenerating ? "Back to the foundation" : "Back to projects"}
         </button>
         {complete ? (
           <button

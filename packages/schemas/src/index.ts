@@ -48,7 +48,7 @@ export const interviewAnswersSchema = z
     authModel: z.array(z.enum(["email_password", "magic_link", "social", "sso", "public"])).min(1).max(5),
     roles: z.enum(["simple", "granular"]),
     capabilities: z.array(featureIdSchema).min(0).max(13),
-    aiUsage: z.enum(["llm_calls", "rag", "agents", "ml_models"]),
+    aiUsage: z.enum(["llm_calls", "rag", "agents", "ml_models", "none"]),
     integrations: textAnswer,
     dataSensitivity: z.enum(["standard", "pii", "regulated"]),
     scale: z.enum(["validate", "growth", "high_scale"]),

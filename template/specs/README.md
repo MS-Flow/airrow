@@ -18,7 +18,8 @@ constitution + template in [`.claude/spec-kit/`](../.claude/spec-kit/):
 | `/push` | Commit pending changes + push (never main/develop, never force) |
 | `/pr-check` | Pre-PR merge-safety check against the target branch |
 
-## Status overview
-| Feature | Status |
-|---------|--------|
-| _(seed specs from your interview appear here)_ | |
+## What to spec first
+These are the capabilities chosen in the interview. Each one is a spec waiting to be written — run
+`/createspec` for the one you need next and the command scaffolds `specs/NNN-kort.md` for you.
+
+{{CAPABILITY_SPECS}}

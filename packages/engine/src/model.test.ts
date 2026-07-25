@@ -1,8 +1,7 @@
-// Tests for the redesigned interview → ProjectModel resolution (issue #6):
-// the architecture-first answers must project correctly and change generated output.
+// Tests for the interview → ProjectModel resolution (issue #6): the architecture-first answers must
+// project correctly. What the resolved model does to generated output is covered in scaffold.test.ts.
 import { describe, it, expect } from "vitest";
 import { resolveProjectModel } from "./model.ts";
-import { generateFromInput } from "./index.ts";
 import type { ResolveInput } from "./model.ts";
 
 const base: ResolveInput = {
@@ -39,10 +38,16 @@ describe("resolveProjectModel — capability & identity projection", () => {
     expect(m.roles).toBe("simple");
   });
 
-  it("maps dataSensitivity to the security level", () => {
-    expect(resolveProjectModel(base).security).toBe("elevated"); // pii → elevated
+  it("keeps the raw dataSensitivity answer alongside the coarse security level", () => {
+    const m = resolveProjectModel(base);
+    expect(m.dataSensitivity).toBe("pii");
+    expect(m.security).toBe("elevated");
     const standard = resolveProjectModel({ ...base, answers: { ...base.answers, dataSensitivity: "standard" } });
+    expect(standard.dataSensitivity).toBe("standard");
     expect(standard.security).toBe("standard");
+    const regulated = resolveProjectModel({ ...base, answers: { ...base.answers, dataSensitivity: "regulated" } });
+    expect(regulated.dataSensitivity).toBe("regulated");
+    expect(regulated.security).toBe("elevated");
   });
 
   it("records aiUsage only when AI is a selected capability", () => {
@@ -50,6 +55,20 @@ describe("resolveProjectModel — capability & identity projection", () => {
     const noAi = resolveProjectModel({ ...base, answers: { ...base.answers, capabilities: ["payments"], aiUsage: undefined } });
     expect(noAi.aiUsage).toBe("none");
     expect(noAi.derived.hasAi).toBe(false);
+  });
+
+  it("drops the AI capability when the founder answers \"no AI after all\"", () => {
+    const m = resolveProjectModel({ ...base, answers: { ...base.answers, aiUsage: "none" } });
+    expect(m.derived.hasAi).toBe(false);
+    expect(m.features).not.toContain("ai");
+    expect(m.features).toContain("payments"); // the other capabilities survive
+    expect(m.aiUsage).toBe("none");
+  });
+
+  it("never guesses the kind of AI when the founder skipped it", () => {
+    const m = resolveProjectModel({ ...base, answers: { ...base.answers, aiUsage: undefined } });
+    expect(m.derived.hasAi).toBe(true);
+    expect(m.aiUsage).toBe("none"); // flagged downstream, not invented
   });
 
   it("defaults a hobby / for-fun project to a consumer audience", () => {
@@ -70,71 +89,5 @@ describe("resolveProjectModel — capability & identity projection", () => {
     expect(m.features).not.toContain("auth");
     expect(m.derived.multiTenant).toBe(false);
     expect(m.roles).toBe("none");
-  });
-});
-
-describe("generated output reflects the new answers", () => {
-  const files = generateFromInput(base).result.files;
-  const byPath = (p: string) => files.find((f) => f.path === p)?.content ?? "";
-
-  it("threads the long-term vision into VISION.md and CLAUDE.md", () => {
-    expect(byPath("docs/VISION.md")).toContain(base.answers.vision);
-    expect(byPath("CLAUDE.md")).toContain(base.answers.vision);
-  });
-
-  it("names the chosen auth methods in the auth spec", () => {
-    expect(byPath("specs/mvp/auth.md")).toContain("email & password");
-    expect(byPath("specs/mvp/auth.md")).toContain("social login");
-  });
-
-  it("generates a spec for every selected capability", () => {
-    expect(byPath("specs/mvp/payments.md")).not.toBe("");
-    expect(byPath("specs/mvp/ai.md")).not.toBe("");
-  });
-});
-
-describe("framework threads consistently", () => {
-  const gen = (framework: "nextjs" | "vite") =>
-    generateFromInput({ ...base, answers: { ...base.answers, framework } }).result.files;
-  const find = (files: ReturnType<typeof gen>, p: string) => files.find((f) => f.path === p)?.content ?? "";
-
-  it("renders Next.js as a server framework", () => {
-    expect(find(gen("nextjs"), "docs/architecture/ARCHITECTURE.md")).toContain("Next.js");
-    expect(find(gen("nextjs"), "docs/architecture/ARCHITECTURE.md")).not.toContain("Vite + React SPA");
-  });
-
-  it("treats Vite as an SPA", () => {
-    expect(find(gen("vite"), "docs/architecture/ARCHITECTURE.md")).toContain("Vite + React SPA");
-  });
-});
-
-describe("database provider threads consistently", () => {
-  const gen = (database: "supabase" | "postgres") =>
-    generateFromInput({ ...base, answers: { ...base.answers, database } }).result.files;
-  const find = (files: ReturnType<typeof gen>, p: string) => files.find((f) => f.path === p)?.content ?? "";
-
-  it("keeps Supabase wording for the golden path", () => {
-    expect(find(gen("supabase"), "README.md")).toContain("Supabase");
-    expect(find(gen("supabase"), "docs/GETTING_STARTED.md")).toContain("Create the database");
-  });
-
-  it("names self-hosted Postgres and drops the Supabase project step", () => {
-    const files = gen("postgres");
-    expect(find(files, "docs/architecture/TECH_STACK.md")).toContain("PostgreSQL (self-hosted)");
-    const gs = find(files, "docs/GETTING_STARTED.md");
-    expect(gs).not.toContain("supabase.com → New project");
-  });
-});
-
-describe("hosting threads consistently (no Vercel contradiction)", () => {
-  const azure = generateFromInput({ ...base, answers: { ...base.answers, hosting: "azure" } }).result.files;
-  const byPath = (p: string) => azure.find((f) => f.path === p)?.content ?? "";
-
-  it("names the chosen host and does not hardcode Vercel in the README stack", () => {
-    expect(byPath("README.md")).toContain("Azure");
-    expect(byPath("README.md")).not.toContain("Vercel");
-    expect(byPath("docs/architecture/TECH_STACK.md")).toContain("Azure");
-    expect(byPath("docs/architecture/ARCHITECTURE.md")).toContain("Azure");
-    expect(byPath("CLAUDE.md")).not.toContain("Vercel");
   });
 });
