@@ -15,7 +15,8 @@ export const productTypeSchema = z.enum([
   "mobile_app",
   "api",
   "internal_tool",
-  "browser_extension"
+  "browser_extension",
+  "hobby"
 ]);
 
 export const featureIdSchema = z.enum([
@@ -34,19 +35,28 @@ export const featureIdSchema = z.enum([
   "audit_logs"
 ]);
 
+const textAnswer = z.string().trim().min(1).max(TEXT_MAX);
+
 export const interviewAnswersSchema = z
   .object({
     productType: productTypeSchema,
+    vision: textAnswer,
+    mvpFocus: textAnswer,
     audience: z.enum(["b2b", "b2c", "both", "internal"]),
-    features: z.array(featureIdSchema).min(0).max(13),
+    coreEntities: textAnswer,
+    tenancy: z.enum(["single_user", "organizations", "marketplace", "internal"]),
+    authModel: z.array(z.enum(["email_password", "magic_link", "social", "sso", "public"])).min(1).max(5),
     roles: z.enum(["simple", "granular"]),
+    capabilities: z.array(featureIdSchema).min(0).max(13),
+    aiUsage: z.enum(["llm_calls", "rag", "agents", "ml_models", "none"]),
+    integrations: textAnswer,
+    dataSensitivity: z.enum(["standard", "pii", "regulated"]),
+    scale: z.enum(["validate", "growth", "high_scale"]),
     framework: z.enum(["nextjs", "vite"]),
+    database: z.enum(["supabase", "postgres"]),
+    hosting: z.enum(["vercel", "azure", "self_host"]),
     repoProvider: z.enum(["github", "azure_devops"]),
-    team: z.enum(["solo", "small_team", "startup", "agency"]),
-    security: z.enum(["standard", "elevated"]),
-    scale: z.enum(["validate", "growth"]),
-    mvpFocus: z.string().trim().min(1).max(TEXT_MAX),
-    goal90: z.string().trim().min(1).max(TEXT_MAX)
+    team: z.enum(["solo", "small_team", "startup", "agency"])
   })
   .partial();
 
@@ -63,8 +73,12 @@ export const profileUpdateSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  name: z.string().trim().min(1).max(80),
-  email: z.string().trim().email().max(200)
+  email: z.string().trim().email().max(200),
+  password: z.string().min(8).max(200)
+});
+
+export const signupSchema = loginSchema.extend({
+  name: z.string().trim().min(1).max(80)
 });
 
 /** Validate a COMPLETE answer set: every visible question answered with a valid value. */

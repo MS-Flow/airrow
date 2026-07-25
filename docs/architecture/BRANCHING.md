@@ -1,46 +1,43 @@
-# Branch- och arbetsflöde
+# Branch and workflow
 
-Vi jobbar via GitHub. En **feature** är ett GitHub Project, och **issues** kopplas till den featuren.
-Varje issue får en spec i [`../../specs/`](../../specs/) och en egen gren.
+We work via GitHub. A **feature** is a GitHub Project, and **issues** are linked to that feature.
+Each issue gets a spec in [`../../specs/`](../../specs/) and its own branch.
 
-## Grenhierarki
+## Branch hierarchy
 ```
-main               -> produktion
-develop            -> integration; testas mot DEV-miljön
-feature/<namn>     -> en feature (= ett GitHub Project); grenas från develop, deployar löpande till DEV
-<nr>-<kort>        -> ett issue; grenas från SIN feature, PR:as tillbaka in i featuren
+main               -> production
+develop            -> integration; tested against the DEV environment
+feature/<name>     -> a feature (= one GitHub Project); branched from develop, deploys continuously to DEV
+<nr>-<short>       -> an issue; branched from ITS feature, PR'd back into the feature
 ```
 
-Issue-grenar heter `<nr>-<kort>` (issue-nummer + kort namn), **utan** `issue/`-prefix.
+Issue branches are named `<nr>-<short>` (issue number + short name), **without** the `issue/` prefix.
 
-## Arbetsflöde
-1. **Starta en feature** (en gång per GitHub Project):
+## Workflow
+1. **Start a feature** (once per GitHub Project):
    git checkout develop && git pull
-   git checkout -b feature/<namn>
-   git push -u origin feature/<namn>
-2. **Ta ett issue** ur featuren:
-   git checkout feature/<namn> && git pull
-   git checkout -b <nr>-<kort>
-3. **PR** `<nr>-<kort>` → `feature/<namn>`.
-4. När featuren är klar: **PR** `feature/<namn>` → `develop`.
+   git checkout -b feature/<name>
+   git push -u origin feature/<name>
+2. **Take an issue** from the feature:
+   git checkout feature/<name> && git pull
+   git checkout -b <nr>-<short>
+3. **PR** `<nr>-<short>` → `feature/<name>`.
+4. When the feature is done: **PR** `feature/<name>` → `develop`.
 5. Release: **PR** `develop` → `main`.
 
-> Riktningen är strikt och hoppas aldrig över: `<nr>-<kort>` → `feature/<namn>` → `develop` → `main`.
-> Ett issue PR:as **aldrig** direkt till `develop` eller `main`.
+> The direction is strict and never skipped: `<nr>-<short>` → `feature/<name>` → `develop` → `main`.
+> An issue is **never** PR'd directly to `develop` or `main`.
 
-## Enforcement av merge-riktning
-Riktningen ovan är inte bara en konvention — den tvingas fram i CI:
-- `.github/workflows/branch-policy.yml` kör på varje PR och **failar** om `head → base` bryter mot
-  hierarkin (issue → `feature/*`, `feature/*` → `develop`, `develop` → `main`). Felmeddelandet namnger
-  rätt målgren.
-- Checken `validate-source-branch` är en **required status check** via ett repository ruleset som
-  matchar `main`, `develop` och `feature/**`, så en felriktad PR går inte att merga. Rulesetet sätts
-  upp (idempotent) av en repo-admin med `scripts/setup-branch-protection.sh`.
+## Merge Direction Enforcement
 
-## CI / DEV-deploy
-- Varje push till `feature/<namn>` **och** `develop` kör DEV-deploy (se `.github/workflows/deploy-dev.yml`).
-- `<nr>-<kort>`-grenar deployar inte — de testas via sin feature.
+The merge direction above is not just a convention — it is enforced by CI:
 
-## Håll grenar i synk
-- Uppdatera ditt issue mot featuren ofta: `git merge feature/<namn>`.
-- Uppdatera featuren mot develop: `git merge develop`.
+- `.github/workflows/branch-policy.yml` runs on every pull request and **fails** if the `head → base` branch relationship violates the hierarchy (`issue/*` → `feature/*`, `feature/*` → `develop`, `develop` → `main`). The error message specifies the correct target branch.
+- The `validate-source-branch` check is configured as a **required status check** through a repository ruleset that applies to `main`, `develop`, and `feature/**`. This prevents incorrectly targeted pull requests from being merged. The ruleset is configured (idempotently) by a repository administrator using `scripts/setup-branch-protection.sh`.
+## CI / DEV deploy
+- Every push to `feature/<name>` **and** `develop` runs a DEV deploy (see `.github/workflows/deploy-dev.yml`).
+- `<nr>-<short>` branches do not deploy — they are tested via their feature.
+
+## Keep branches in sync
+- Update your issue against the feature often: `git merge feature/<name>`.
+- Update the feature against develop: `git merge develop`.

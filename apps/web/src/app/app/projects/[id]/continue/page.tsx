@@ -2,7 +2,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Download } from "lucide-react";
-import { Button, Card } from "@/components/ui";
+import { Button } from "@/components/ui/button";
+import { Card, CardBody } from "@/components/ui/card";
 import { requireSession } from "@/lib/auth";
 import { getProject, latestModelVersion } from "@/lib/data/store";
 import { CopyBlock } from "@/features/delivery/CopyBlock";
@@ -12,11 +13,11 @@ export const metadata = { title: "Continue locally" };
 export default async function ContinuePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { org } = await requireSession();
-  const project = getProject(org.id, id);
+  const project = await getProject(org.id, id);
   if (!project) notFound();
   if (project.status !== "ready") redirect(`/app/projects/${id}`);
 
-  const model = latestModelVersion(id)?.model;
+  const model = (await latestModelVersion(id))?.model;
   const slug = project.slug;
   const isGh = model?.stack.repoProvider !== "azure_devops";
 
@@ -56,43 +57,43 @@ export default async function ContinuePage({ params }: { params: Promise<{ id: s
   ];
 
   return (
-    <div className="mx-auto max-w-2xl px-8 py-12">
-      <p className="font-mono text-xs text-accent">Continue locally</p>
-      <h1 className="mt-2 text-xl font-semibold tracking-tight text-fg">
+    <div className="mx-auto max-w-2xl animate-slide-up px-6 py-12 md:px-8">
+      <p className="font-mono text-xs text-fg-faint">Continue locally</p>
+      <h1 className="mt-2 text-2xl font-semibold tracking-tight text-fg">
         From foundation to first feature
       </h1>
-      <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">
+      <p className="mt-2 text-base leading-relaxed text-fg-muted">
         Five steps. After this, your repository — and its README, START_HERE, and roadmap — takes
         over as the guide.
       </p>
 
       <div className="mt-8 space-y-4">
         {steps.map((s, i) => (
-          <Card key={s.title} className="p-5">
-            <div className="flex items-start gap-4">
+          <Card key={s.title}>
+            <CardBody className="flex items-start gap-4 p-5">
               <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border font-mono text-xs text-fg-muted">
                 {i + 1}
               </span>
               <div className="min-w-0 flex-1">
-                <h3 className="text-sm font-semibold text-fg">{s.title}</h3>
-                <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">{s.body}</p>
+                <h3 className="text-base font-semibold text-fg">{s.title}</h3>
+                <p className="mt-1 text-sm leading-relaxed text-fg-muted">{s.body}</p>
                 {s.block ? <CopyBlock text={s.block} /> : null}
               </div>
-            </div>
+            </CardBody>
           </Card>
         ))}
       </div>
 
       <div className="mt-8 flex items-center justify-between">
-        <Link href={`/app/projects/${id}/preview`} className="text-[13px] text-fg-muted hover:text-fg">
+        <Link href={`/app/projects/${id}/preview`} className="text-sm text-fg-muted hover:text-fg">
           ← Back to preview
         </Link>
-        <a href={`/api/projects/${id}/zip`}>
-          <Button>
+        <Button asChild>
+          <a href={`/api/projects/${id}/zip`}>
             <Download className="size-4" />
             Download ZIP
-          </Button>
-        </a>
+          </a>
+        </Button>
       </div>
     </div>
   );

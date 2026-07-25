@@ -7,7 +7,8 @@ export type ProductType =
   | "mobile_app"
   | "api"
   | "internal_tool"
-  | "browser_extension";
+  | "browser_extension"
+  | "hobby";
 
 export type Audience = "b2b" | "b2c" | "both" | "internal";
 
@@ -30,21 +31,42 @@ export type Framework = "nextjs" | "vite";
 export type RepoProvider = "github" | "azure_devops";
 export type TeamShape = "solo" | "small_team" | "startup" | "agency";
 export type SecurityLevel = "standard" | "elevated";
-export type ScaleExpectation = "validate" | "growth";
+export type ScaleExpectation = "validate" | "growth" | "high_scale";
 
-/** Raw interview answers, keyed by question id. */
+/** How data is organized & isolated — drives the data model and RLS strategy. */
+export type Tenancy = "single_user" | "organizations" | "marketplace" | "internal";
+/** How users authenticate (multi-select; `public` means no accounts). */
+export type AuthMethod = "email_password" | "magic_link" | "social" | "sso" | "public";
+/** Kind of AI in the product; the model stores `"none"` when AI is not selected. */
+export type AiUsage = "llm_calls" | "rag" | "agents" | "ml_models";
+/** Data sensitivity / compliance posture. */
+export type DataSensitivity = "standard" | "pii" | "regulated";
+/** Deploy target. */
+export type Hosting = "vercel" | "azure" | "self_host";
+/** Database provider — all PostgreSQL, to keep RLS + SQL migrations (constitution §II). */
+export type Database = "supabase" | "postgres";
+
+/** Raw interview answers, keyed by question id. Order mirrors the interview flow. */
 export interface InterviewAnswers {
   productType?: ProductType;
+  vision?: string;
+  mvpFocus?: string;
   audience?: Audience;
-  features?: FeatureId[];
+  coreEntities?: string;
+  tenancy?: Tenancy;
+  authModel?: AuthMethod[];
   roles?: "simple" | "granular";
+  capabilities?: FeatureId[];
+  /** `"none"` lets the founder back out of AI after selecting the capability. */
+  aiUsage?: AiUsage | "none";
+  integrations?: string;
+  dataSensitivity?: DataSensitivity;
+  scale?: ScaleExpectation;
   framework?: Framework;
+  database?: Database;
+  hosting?: Hosting;
   repoProvider?: RepoProvider;
   team?: TeamShape;
-  security?: SecurityLevel;
-  scale?: ScaleExpectation;
-  mvpFocus?: string;
-  goal90?: string;
 }
 
 /** Fully resolved, validated model the engine generates from. */
@@ -53,27 +75,36 @@ export interface ProjectModel {
   name: string;
   slug: string;
   description: string;
+  vision: string;
   productType: ProductType;
   audience: Audience;
+  tenancy: Tenancy;
+  authModel: AuthMethod[];
+  /** Projected capability list (includes derived `auth`/`organizations`). */
   features: FeatureId[];
   roles: "simple" | "granular" | "none";
+  aiUsage: AiUsage | "none";
+  integrations: string;
+  hosting: Hosting;
   stack: {
     framework: Framework;
     language: "typescript";
     styling: "tailwind";
     ui: "shadcn/ui";
     backend: "supabase";
-    database: "postgresql";
+    database: Database;
     deployment: "vercel";
     repoProvider: RepoProvider;
     editor: "vscode";
     ai: "claude-code";
   };
   team: TeamShape;
+  /** Raw sensitivity answer — `security` is its coarse projection, kept for callers that only need the level. */
+  dataSensitivity: DataSensitivity;
   security: SecurityLevel;
   scale: ScaleExpectation;
   mvpFocus: string;
-  goal90: string;
+  coreEntities: string;
   derived: {
     multiTenant: boolean;
     hasPayments: boolean;

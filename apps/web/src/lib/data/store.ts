@@ -1,8 +1,10 @@
-// Local-mode DataStore (ADR-0005). All persistence flows through this module —
-// the Supabase implementation replaces it behind the same functions.
+// DataStore. Org-scoped domain data lives in Supabase (issue #14). Identity comes from
+// Supabase Auth (issue #18) — resolved in lib/auth.ts; this module only maps auth user
+// ids to their organization via getOrgForUser.
 // Server-side only: imported exclusively from RSC, actions, and route handlers.
-import fs from "node:fs";
-import path from "node:path";
+//
+// The Supabase client uses the service-role key and therefore bypasses RLS — every query
+// here is additionally scoped by organization_id server-side (defense in depth, §II).
 import crypto from "node:crypto";
 import type {
   InterviewAnswers,
@@ -11,6 +13,7 @@ import type {
   GenerationResult,
   ProjectModel
 } from "@airrow/schemas";
+import { db, rows, maybe, single } from "./supabase";
 
 export type ProjectStatus = "interviewing" | "generating" | "ready" | "failed";
 
@@ -18,12 +21,6 @@ export interface UserRecord {
   id: string;
   email: string;
   name: string;
-  createdAt: string;
-}
-
-export interface SessionRecord {
-  token: string;
-  userId: string;
   createdAt: string;
 }
 
@@ -92,299 +89,356 @@ export interface DeliveryRecord {
   createdAt: string;
 }
 
-interface Db {
-  users: UserRecord[];
-  sessions: SessionRecord[];
-  organizations: OrgRecord[];
-  members: MemberRecord[];
-  projects: ProjectRecord[];
-  interviews: InterviewRecord[];
-  modelVersions: ModelVersionRecord[];
-  jobs: JobRecord[];
-  deliveries: DeliveryRecord[];
-}
-
-const EMPTY: Db = {
-  users: [],
-  sessions: [],
-  organizations: [],
-  members: [],
-  projects: [],
-  interviews: [],
-  modelVersions: [],
-  jobs: [],
-  deliveries: []
-};
-
-function findRepoRoot(): string {
-  let dir = process.cwd();
-  for (let i = 0; i < 6; i++) {
-    if (fs.existsSync(path.join(dir, "pnpm-workspace.yaml"))) return dir;
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return process.cwd();
-}
-
-const DATA_DIR = process.env.AIRROW_DATA_DIR ?? path.join(findRepoRoot(), ".data");
-const DB_PATH = path.join(DATA_DIR, "db.json");
-const ARTIFACTS_DIR = path.join(DATA_DIR, "artifacts");
-
-function load(): Db {
-  try {
-    const raw = fs.readFileSync(DB_PATH, "utf8");
-    return { ...EMPTY, ...(JSON.parse(raw) as Partial<Db>) };
-  } catch {
-    return structuredClone(EMPTY);
-  }
-}
-
-function save(db: Db): void {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const tmp = DB_PATH + ".tmp";
-  fs.writeFileSync(tmp, JSON.stringify(db, null, 2), "utf8");
-  fs.renameSync(tmp, DB_PATH);
-}
-
-/** Read-modify-write helper. Process-local; fine for local mode. */
-function mutate<T>(fn: (db: Db) => T): T {
-  const db = load();
-  const out = fn(db);
-  save(db);
-  return out;
-}
-
 export const uid = (): string => crypto.randomUUID();
 const now = (): string => new Date().toISOString();
 
-/* ── Users / auth ───────────────────────────────────────────────────────── */
+/* ── Row shapes (snake_case) + mappers ────────────────────────────────────── */
 
-export function upsertUserByEmail(email: string, name: string): UserRecord {
-  return mutate((db) => {
-    const existing = db.users.find((u) => u.email === email.toLowerCase());
-    if (existing) return existing;
-    const user: UserRecord = { id: uid(), email: email.toLowerCase(), name, createdAt: now() };
-    db.users.push(user);
-    const org: OrgRecord = { id: uid(), name: `${name}'s workspace`, kind: "personal", createdBy: user.id };
-    db.organizations.push(org);
-    db.members.push({ organizationId: org.id, userId: user.id, role: "owner" });
-    return user;
-  });
+interface OrgRow {
+  id: string;
+  name: string;
+  kind: "personal" | "team";
+  created_by: string | null;
+}
+const toOrg = (r: OrgRow): OrgRecord => ({
+  id: r.id,
+  name: r.name,
+  kind: r.kind,
+  createdBy: r.created_by ?? ""
+});
+
+interface ProjectRow {
+  id: string;
+  organization_id: string;
+  name: string;
+  slug: string;
+  description: string;
+  status: ProjectStatus;
+  created_at: string;
+  updated_at: string;
+}
+const toProject = (r: ProjectRow): ProjectRecord => ({
+  id: r.id,
+  organizationId: r.organization_id,
+  name: r.name,
+  slug: r.slug,
+  description: r.description,
+  status: r.status,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at
+});
+
+interface InterviewRow {
+  id: string;
+  project_id: string;
+  schema_version: string;
+  answers: InterviewAnswers;
+  completed_at: string | null;
+}
+const toInterview = (r: InterviewRow): InterviewRecord => ({
+  id: r.id,
+  projectId: r.project_id,
+  schemaVersion: r.schema_version,
+  answers: r.answers,
+  completedAt: r.completed_at
+});
+
+interface ModelRow {
+  id: string;
+  project_id: string;
+  version: number;
+  model: ProjectModel;
+  created_at: string;
+}
+const toModel = (r: ModelRow): ModelVersionRecord => ({
+  id: r.id,
+  projectId: r.project_id,
+  version: r.version,
+  model: r.model,
+  createdAt: r.created_at
+});
+
+interface JobRow {
+  id: string;
+  project_id: string;
+  model_version_id: string;
+  status: JobStatus;
+  stage: JobStage | null;
+  stages_done: JobStage[];
+  files_authored: number;
+  total_files: number;
+  current_path: string | null;
+  error: string | null;
+  heartbeat_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+const toJob = (r: JobRow): JobRecord => ({
+  id: r.id,
+  projectId: r.project_id,
+  modelVersionId: r.model_version_id,
+  status: r.status,
+  stage: r.stage,
+  stagesDone: r.stages_done,
+  filesAuthored: r.files_authored,
+  totalFiles: r.total_files,
+  currentPath: r.current_path,
+  error: r.error,
+  heartbeatAt: r.heartbeat_at,
+  startedAt: r.started_at,
+  finishedAt: r.finished_at
+});
+
+/* ── Organization resolution (identity comes from Supabase Auth, in lib/auth.ts) ── */
+
+/** The organization a user belongs to (their personal org). Null if none yet. */
+export async function getOrgForUser(userId: string): Promise<OrgRecord | null> {
+  const memberships = rows<{ organization_id: string }>(
+    await db().from("organization_members").select("organization_id").eq("user_id", userId)
+  );
+  const orgId = memberships[0]?.organization_id;
+  if (!orgId) return null;
+  const org = maybe<OrgRow>(
+    await db().from("organizations").select("id, name, kind, created_by").eq("id", orgId).maybeSingle()
+  );
+  return org ? toOrg(org) : null;
 }
 
-export function updateUserName(userId: string, name: string): void {
-  mutate((db) => {
-    const u = db.users.find((x) => x.id === userId);
-    if (u) u.name = name;
-  });
+/** Keep profiles.display_name in sync with the auth user's name. */
+export async function setDisplayName(userId: string, name: string): Promise<void> {
+  const res = await db().from("profiles").update({ display_name: name }).eq("id", userId);
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
 }
 
-export function createSession(userId: string): SessionRecord {
-  return mutate((db) => {
-    const s: SessionRecord = { token: crypto.randomBytes(24).toString("hex"), userId, createdAt: now() };
-    db.sessions.push(s);
-    return s;
-  });
+/* ── Projects (always org-scoped) ─────────────────────────────────────────── */
+
+export async function listProjects(orgId: string): Promise<ProjectRecord[]> {
+  const data = rows<ProjectRow>(
+    await db()
+      .from("projects")
+      .select("*")
+      .eq("organization_id", orgId)
+      .order("updated_at", { ascending: false })
+  );
+  return data.map(toProject);
 }
 
-export function deleteSession(token: string): void {
-  mutate((db) => {
-    db.sessions = db.sessions.filter((s) => s.token !== token);
-  });
+export async function getProject(orgId: string, projectId: string): Promise<ProjectRecord | null> {
+  const row = maybe<ProjectRow>(
+    await db().from("projects").select("*").eq("id", projectId).eq("organization_id", orgId).maybeSingle()
+  );
+  return row ? toProject(row) : null;
 }
 
-export interface SessionContext {
-  user: UserRecord;
-  org: OrgRecord;
-}
-
-export function resolveSession(token: string): SessionContext | null {
-  const db = load();
-  const s = db.sessions.find((x) => x.token === token);
-  if (!s) return null;
-  const user = db.users.find((u) => u.id === s.userId);
-  if (!user) return null;
-  const membership = db.members.find((m) => m.userId === user.id);
-  const org = membership
-    ? db.organizations.find((o) => o.id === membership.organizationId)
-    : undefined;
-  if (!org) return null;
-  return { user, org };
-}
-
-/* ── Projects (always org-scoped — F-205 Security) ──────────────────────── */
-
-export function listProjects(orgId: string): ProjectRecord[] {
-  return load()
-    .projects.filter((p) => p.organizationId === orgId)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-}
-
-export function getProject(orgId: string, projectId: string): ProjectRecord | null {
-  return load().projects.find((p) => p.id === projectId && p.organizationId === orgId) ?? null;
-}
-
-export function createProject(
+export async function createProject(
   orgId: string,
   name: string,
   description: string,
   slugify: (s: string) => string
-): ProjectRecord {
-  return mutate((db) => {
-    const base = slugify(name);
-    let slug = base;
-    let n = 2;
-    while (db.projects.some((p) => p.organizationId === orgId && p.slug === slug)) {
-      slug = `${base}-${n++}`;
-    }
-    const p: ProjectRecord = {
-      id: uid(),
-      organizationId: orgId,
-      name,
-      slug,
-      description,
-      status: "interviewing",
-      createdAt: now(),
-      updatedAt: now()
-    };
-    db.projects.push(p);
-    db.interviews.push({ id: uid(), projectId: p.id, schemaVersion: "1", answers: {}, completedAt: null });
-    return p;
-  });
+): Promise<ProjectRecord> {
+  const base = slugify(name);
+  const taken = new Set(
+    rows<{ slug: string }>(
+      await db().from("projects").select("slug").eq("organization_id", orgId)
+    ).map((r) => r.slug)
+  );
+  let slug = base;
+  let n = 2;
+  while (taken.has(slug)) slug = `${base}-${n++}`;
+
+  const project = single<ProjectRow>(
+    await db()
+      .from("projects")
+      .insert({ organization_id: orgId, name, slug, description, status: "interviewing" })
+      .select("*")
+      .single()
+  );
+  const interviewRes = await db()
+    .from("interviews")
+    .insert({ project_id: project.id, schema_version: "1", answers: {} });
+  if (interviewRes.error) throw new Error(`Supabase: ${interviewRes.error.message}`);
+  return toProject(project);
 }
 
-export function setProjectStatus(projectId: string, status: ProjectStatus): void {
-  mutate((db) => {
-    const p = db.projects.find((x) => x.id === projectId);
-    if (p) {
-      p.status = status;
-      p.updatedAt = now();
-    }
-  });
+export async function setProjectStatus(projectId: string, status: ProjectStatus): Promise<void> {
+  const res = await db()
+    .from("projects")
+    .update({ status, updated_at: now() })
+    .eq("id", projectId);
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
 }
 
-export function deleteProject(orgId: string, projectId: string): void {
-  mutate((db) => {
-    const p = db.projects.find((x) => x.id === projectId && x.organizationId === orgId);
-    if (!p) return;
-    const jobIds = db.jobs.filter((j) => j.projectId === projectId).map((j) => j.id);
-    db.projects = db.projects.filter((x) => x.id !== projectId);
-    db.interviews = db.interviews.filter((x) => x.projectId !== projectId);
-    db.modelVersions = db.modelVersions.filter((x) => x.projectId !== projectId);
-    db.jobs = db.jobs.filter((x) => x.projectId !== projectId);
-    db.deliveries = db.deliveries.filter((x) => x.projectId !== projectId);
-    for (const id of jobIds) {
-      try {
-        fs.rmSync(path.join(ARTIFACTS_DIR, `${id}.json`));
-      } catch {
-        /* already gone */
-      }
-    }
-  });
+/** Delete a project; interviews/models/jobs/artifacts/deliveries cascade via FK. */
+export async function deleteProject(orgId: string, projectId: string): Promise<void> {
+  const res = await db()
+    .from("projects")
+    .delete()
+    .eq("id", projectId)
+    .eq("organization_id", orgId);
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
 }
 
 /* ── Interviews ─────────────────────────────────────────────────────────── */
 
-export function getInterview(projectId: string): InterviewRecord | null {
-  return load().interviews.find((i) => i.projectId === projectId) ?? null;
+export async function getInterview(projectId: string): Promise<InterviewRecord | null> {
+  const row = maybe<InterviewRow>(
+    await db().from("interviews").select("*").eq("project_id", projectId).maybeSingle()
+  );
+  return row ? toInterview(row) : null;
 }
 
-export function saveInterviewAnswers(projectId: string, answers: InterviewAnswers): void {
-  mutate((db) => {
-    const i = db.interviews.find((x) => x.projectId === projectId);
-    if (i) i.answers = answers;
-    const p = db.projects.find((x) => x.id === projectId);
-    if (p) p.updatedAt = now();
-  });
+export async function saveInterviewAnswers(
+  projectId: string,
+  answers: InterviewAnswers
+): Promise<void> {
+  const res = await db().from("interviews").update({ answers }).eq("project_id", projectId);
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
+  const touch = await db().from("projects").update({ updated_at: now() }).eq("id", projectId);
+  if (touch.error) throw new Error(`Supabase: ${touch.error.message}`);
 }
 
-export function completeInterview(projectId: string): void {
-  mutate((db) => {
-    const i = db.interviews.find((x) => x.projectId === projectId);
-    if (i) i.completedAt = now();
-  });
+export async function completeInterview(projectId: string): Promise<void> {
+  const res = await db()
+    .from("interviews")
+    .update({ completed_at: now() })
+    .eq("project_id", projectId);
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
 }
 
 /* ── Model versions ─────────────────────────────────────────────────────── */
 
-export function createModelVersion(projectId: string, model: ProjectModel): ModelVersionRecord {
-  return mutate((db) => {
-    const version = db.modelVersions.filter((m) => m.projectId === projectId).length + 1;
-    const rec: ModelVersionRecord = { id: uid(), projectId, version, model, createdAt: now() };
-    db.modelVersions.push(rec);
-    return rec;
-  });
+export async function createModelVersion(
+  projectId: string,
+  model: ProjectModel
+): Promise<ModelVersionRecord> {
+  const latest = await latestModelVersion(projectId);
+  const version = (latest?.version ?? 0) + 1;
+  const row = single<ModelRow>(
+    await db()
+      .from("project_models")
+      .insert({ project_id: projectId, version, model })
+      .select("*")
+      .single()
+  );
+  return toModel(row);
 }
 
-export function latestModelVersion(projectId: string): ModelVersionRecord | null {
-  const all = load()
-    .modelVersions.filter((m) => m.projectId === projectId)
-    .sort((a, b) => b.version - a.version);
-  return all[0] ?? null;
+export async function latestModelVersion(projectId: string): Promise<ModelVersionRecord | null> {
+  const row = maybe<ModelRow>(
+    await db()
+      .from("project_models")
+      .select("*")
+      .eq("project_id", projectId)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  );
+  return row ? toModel(row) : null;
 }
 
 /* ── Jobs ───────────────────────────────────────────────────────────────── */
 
-export function createJob(projectId: string, modelVersionId: string): JobRecord {
-  return mutate((db) => {
-    const job: JobRecord = {
-      id: uid(),
-      projectId,
-      modelVersionId,
-      status: "queued",
-      stage: null,
-      stagesDone: [],
-      filesAuthored: 0,
-      totalFiles: 0,
-      currentPath: null,
-      error: null,
-      heartbeatAt: now(),
-      startedAt: null,
-      finishedAt: null
-    };
-    db.jobs.push(job);
-    return job;
-  });
+export async function createJob(projectId: string, modelVersionId: string): Promise<JobRecord> {
+  const row = single<JobRow>(
+    await db()
+      .from("generation_jobs")
+      .insert({ project_id: projectId, model_version_id: modelVersionId, status: "queued" })
+      .select("*")
+      .single()
+  );
+  return toJob(row);
 }
 
-export function getJob(jobId: string): JobRecord | null {
-  return load().jobs.find((j) => j.id === jobId) ?? null;
+export async function getJob(jobId: string): Promise<JobRecord | null> {
+  const row = maybe<JobRow>(
+    await db().from("generation_jobs").select("*").eq("id", jobId).maybeSingle()
+  );
+  return row ? toJob(row) : null;
 }
 
-export function latestJob(projectId: string): JobRecord | null {
-  const all = load()
-    .jobs.filter((j) => j.projectId === projectId)
-    .sort((a, b) => (b.startedAt ?? b.heartbeatAt).localeCompare(a.startedAt ?? a.heartbeatAt));
-  return all[0] ?? null;
+export async function latestJob(projectId: string): Promise<JobRecord | null> {
+  const row = maybe<JobRow>(
+    await db()
+      .from("generation_jobs")
+      .select("*")
+      .eq("project_id", projectId)
+      .order("started_at", { ascending: false, nullsFirst: false })
+      .order("heartbeat_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  );
+  return row ? toJob(row) : null;
 }
 
-export function updateJob(jobId: string, patch: Partial<JobRecord>): void {
-  mutate((db) => {
-    const j = db.jobs.find((x) => x.id === jobId);
-    if (j) Object.assign(j, patch, { heartbeatAt: now() });
-  });
+/** Column mapping for a partial job update; heartbeat is always bumped (matches prior behavior). */
+function jobPatchToRow(patch: Partial<JobRecord>): Record<string, unknown> {
+  const row: Record<string, unknown> = { heartbeat_at: now() };
+  if (patch.status !== undefined) row.status = patch.status;
+  if (patch.stage !== undefined) row.stage = patch.stage;
+  if (patch.stagesDone !== undefined) row.stages_done = patch.stagesDone;
+  if (patch.filesAuthored !== undefined) row.files_authored = patch.filesAuthored;
+  if (patch.totalFiles !== undefined) row.total_files = patch.totalFiles;
+  if (patch.currentPath !== undefined) row.current_path = patch.currentPath;
+  if (patch.error !== undefined) row.error = patch.error;
+  if (patch.startedAt !== undefined) row.started_at = patch.startedAt;
+  if (patch.finishedAt !== undefined) row.finished_at = patch.finishedAt;
+  return row;
 }
 
-/* ── Artifacts ──────────────────────────────────────────────────────────── */
-
-export function saveArtifact(jobId: string, result: GenerationResult): void {
-  fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
-  fs.writeFileSync(path.join(ARTIFACTS_DIR, `${jobId}.json`), JSON.stringify(result), "utf8");
+export async function updateJob(jobId: string, patch: Partial<JobRecord>): Promise<void> {
+  const res = await db().from("generation_jobs").update(jobPatchToRow(patch)).eq("id", jobId);
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
 }
 
-export function loadArtifact(jobId: string): GenerationResult | null {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(ARTIFACTS_DIR, `${jobId}.json`), "utf8")) as GenerationResult;
-  } catch {
-    return null;
-  }
+/* ── Artifacts (GenerationResult as jsonb; one per job) ───────────────────── */
+
+export async function saveArtifact(jobId: string, result: GenerationResult): Promise<void> {
+  const res = await db()
+    .from("artifacts")
+    .upsert({ generation_job_id: jobId, result }, { onConflict: "generation_job_id" });
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
+}
+
+export async function loadArtifact(jobId: string): Promise<GenerationResult | null> {
+  const row = maybe<{ result: GenerationResult }>(
+    await db().from("artifacts").select("result").eq("generation_job_id", jobId).maybeSingle()
+  );
+  return row ? row.result : null;
+}
+
+/**
+ * Replace one file's content in a stored artifact (founder edits in the preview). The manifest entry
+ * is re-stamped so byte counts stay true and the file is marked as founder-edited — regeneration
+ * always produces a fresh artifact, so an edit never silently outlives the answers it came from.
+ */
+export async function updateArtifactFile(
+  jobId: string,
+  filePath: string,
+  content: string
+): Promise<boolean> {
+  const artifact = await loadArtifact(jobId);
+  if (!artifact) return false;
+  const file = artifact.files.find((f) => f.path === filePath);
+  const entry = artifact.manifest.files.find((f) => f.path === filePath);
+  if (!file || !entry) return false;
+
+  file.content = content;
+  file.source = "authored";
+  entry.source = "authored";
+  entry.bytes = new TextEncoder().encode(content).length;
+  await saveArtifact(jobId, artifact);
+  return true;
 }
 
 /* ── Deliveries ─────────────────────────────────────────────────────────── */
 
-export function recordDelivery(projectId: string, jobId: string, method: "zip" | "github"): void {
-  mutate((db) => {
-    db.deliveries.push({ id: uid(), projectId, jobId, method, status: "completed", createdAt: now() });
-  });
+export async function recordDelivery(
+  projectId: string,
+  jobId: string,
+  method: "zip" | "github"
+): Promise<void> {
+  const res = await db()
+    .from("deliveries")
+    .insert({ project_id: projectId, job_id: jobId, method, status: "completed" });
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
 }
