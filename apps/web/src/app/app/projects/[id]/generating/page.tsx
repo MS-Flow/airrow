@@ -10,7 +10,7 @@ export default async function GeneratingPage({ params }: { params: Promise<{ id:
   const { org } = await requireSession();
   const project = await getProject(org.id, id);
   if (!project) notFound();
-  if (project.status === "ready") redirect(`/app/projects/${id}/preview`);
+  if (project.status === "ready") redirect(`/app/projects/${id}`);
   if (project.status === "interviewing") redirect(`/app/projects/${id}/interview`);
   return <GenerationProgress projectId={project.id} projectName={project.name} />;
 }

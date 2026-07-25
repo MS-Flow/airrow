@@ -24,10 +24,11 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 ## Status overview
 | Feature | Spec | Status |
 |---------|------|--------|
-| Interview-driven project generator | [1-interview-generator.md](1-interview-generator.md) | 🔄 In progress |
-| Vercel + Supabase infrastructure setup | [9-vercel-supabase-setup.md](9-vercel-supabase-setup.md) | 🔄 In progress |
-| Supabase full schema migration + DataStore cutover | [14-supabase-schema-auth.md](14-supabase-schema-auth.md) | 🔄 In progress |
-| Supabase Auth — email + password login | [18-supabase-auth.md](18-supabase-auth.md) | 🔄 In progress |
-| Premium Airrow UI (v1) — design system + all screens | [19-premium-ui-system.md](19-premium-ui-system.md) | 🔄 In progress |
+| Interview-driven project generator | [1-interview-generator.md](1-interview-generator.md) | ✅ Done |
+| Vercel + Supabase infrastructure setup | [9-vercel-supabase-setup.md](9-vercel-supabase-setup.md) | ✅ Done |
+| Supabase full schema migration + DataStore cutover | [14-supabase-schema-auth.md](14-supabase-schema-auth.md) | ✅ Done |
+| Supabase Auth — email + password login | [18-supabase-auth.md](18-supabase-auth.md) | ✅ Done |
+| Premium Airrow UI (v1) — design system + all screens | [19-premium-ui-system.md](19-premium-ui-system.md) | ✅ Done |
 | Redesign interview into architecture-first question set | [6-fix-interview-template.md](6-fix-interview-template.md) | ✅ Done |
+| Fix UI design flaws — shell corrections + anonymous interview | [11-ui-design-flaws.md](11-ui-design-flaws.md) | ✅ Done |
 | Downloaded foundation must fully reflect the interview answers | [10-foundation-reflects-answers.md](10-foundation-reflects-answers.md) | ✅ Done |

@@ -50,7 +50,9 @@ export function GenerationProgress({
         setJob(data.job);
         if (data.job.status === "completed" && !done.current) {
           done.current = true;
-          setTimeout(() => router.push(`/app/projects/${projectId}/preview`), 900);
+          // The project page, not the file browser: it frames what was generated before
+          // dropping the founder into a tree of files.
+          setTimeout(() => router.push(`/app/projects/${projectId}`), 900);
         }
       } catch {
         /* transient poll failure — next tick retries */

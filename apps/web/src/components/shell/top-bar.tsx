@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Plus, Search } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Breadcrumbs, type Crumb } from "@/components/ui/breadcrumbs";
 import { Button } from "@/components/ui/button";
 
@@ -11,11 +11,8 @@ const SEGMENT_LABELS: Record<string, string> = {
   interview: "Interview",
   generating: "Generating",
   preview: "Preview",
-  docs: "Documentation",
   continue: "Continue locally",
-  settings: "Settings",
-  templates: "Templates",
-  prompts: "Prompts"
+  settings: "Settings"
 };
 
 /** Derives the trail from the URL; project ids become their name via `projectNames`. */
@@ -38,7 +35,16 @@ export function buildCrumbs(pathname: string, projectNames: Record<string, strin
   return crumbs;
 }
 
-export function TopBar({ projectNames }: { projectNames: Record<string, string> }) {
+export function TopBar({
+  projectNames,
+  themeSwitch,
+  userMenu
+}: {
+  projectNames: Record<string, string>;
+  /** Rendered on the server so the theme cookie is never read on the client. */
+  themeSwitch: React.ReactNode;
+  userMenu: React.ReactNode;
+}) {
   const pathname = usePathname();
   const crumbs = buildCrumbs(pathname, projectNames);
 
@@ -46,16 +52,14 @@ export function TopBar({ projectNames }: { projectNames: Record<string, string> 
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-bg/80 px-6 backdrop-blur-md max-md:pl-14">
       <Breadcrumbs items={crumbs} />
       <div className="flex shrink-0 items-center gap-2">
-        <span className="hidden items-center gap-1.5 rounded-md border border-border bg-bg-subtle px-2 py-1 text-xs text-fg-faint sm:flex">
-          <Search className="size-3" />
-          <kbd className="font-mono">⌘K</kbd>
-        </span>
         <Button size="sm" asChild>
           <Link href="/app/projects/new">
             <Plus className="size-4" />
             New project
           </Link>
         </Button>
+        {themeSwitch}
+        {userMenu}
       </div>
     </header>
   );
