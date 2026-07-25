@@ -5,7 +5,7 @@
 
 |                |                                                                                    |
 | -------------- | ---------------------------------------------------------------------------------- |
-| **Status**     | ⏳ Not started                                                                     |
+| **Status**     | ✅ Done                                                                            |
 | **Issue**      | #14 — "Make tests to check new PRs into develope so that the page wont crash"       |
 | **Branch**     | `14-pr-ci-checks` (from `feature/ci-cd`)                                            |
 | **Feature**    | CI/CD                                                                              |
@@ -80,16 +80,16 @@ miljön — den täckningen kommer från `pnpm build` plus en framtida Playwrigh
 
 _What "done" means. Every line is something a reviewer can check._
 
-- [ ] En GitHub Actions-workflow triggas på `pull_request` mot `develop`.
-- [ ] Workflowen kör `pnpm -r typecheck`, `pnpm -r lint` och `pnpm -r test`.
-- [ ] Workflowen kör `pnpm build` och misslyckas om bygget kraschar.
-- [ ] Smoke-test finns som renderar de publika sidorna — `/`, `/login`, `/signup` — och verifierar att
+- [x] En GitHub Actions-workflow triggas på `pull_request` mot `develop`.
+- [x] Workflowen kör `pnpm -r typecheck`, `pnpm -r lint` och `pnpm -r test`.
+- [x] Workflowen kör `pnpm build` och misslyckas om bygget kraschar.
+- [x] Smoke-test finns som renderar de publika sidorna — `/`, `/login`, `/signup` — och verifierar att
       de monterar utan att kasta.
-- [ ] Om något steg misslyckas kan PR:en inte mergas — checken är required på `develop`.
-- [ ] `scripts/setup-branch-protection.sh` listar CI-kontexten som required, och skriptet är fortfarande
+- [x] Om något steg misslyckas kan PR:en inte mergas — checken är required på `develop`.
+- [x] `scripts/setup-branch-protection.sh` listar CI-kontexten som required, och skriptet är fortfarande
       idempotent att köra om.
-- [ ] `docs/architecture/BRANCHING.md` beskriver vilka checkar som är obligatoriska på `develop`/`main`.
-- [ ] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures).
+- [x] `docs/architecture/BRANCHING.md` beskriver vilka checkar som är obligatoriska på `develop`/`main`.
+- [x] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures).
 
 ### Verification
 
@@ -100,12 +100,48 @@ _How each criterion above is proven._
   [`/signup`](apps/web/src/app/signup/page.tsx) i jsdom och assertar att de monterar utan att kasta.
   Valt just dessa för att de renderar utan inloggning och utan datafixtures. Filändelsen `.tsx` gör att
   jsdom-miljön väljs automatiskt ([apps/web/vitest.config.ts:14](apps/web/vitest.config.ts#L14)).
-- Workflow-kriterierna → verifieras på den här PR:ens egen Actions-körning (alla steg gröna) samt genom
-  en avsiktligt trasig commit som ska ge röd check. [NEEDS CLARIFICATION: ska den negativa verifieringen
-  göras som ett engångsexperiment lokalt/i en scratch-PR, eller dokumenteras som manuellt steg?]
-- Required-check-kriteriet → `gh api repos/MS-Flow/airrow/rulesets/<id>` visar CI-kontexten efter att
-  skriptet körts av en repo-admin.
+- Workflow-kriterierna → verifieras på den här PR:ens egen Actions-körning (alla steg gröna).
+- **Negativ verifiering** → gjord lokalt som ett engångsexperiment, inte som scratch-PR: ett
+  `throw` lades tillfälligt in i `Landing()` och smoke-testet gick rött (2 av 6 fall) på exakt den
+  raden; ändringen revertades direkt. Testet är alltså inte tomt.
+- Required-check-kriteriet → **applicerat 2026-07-25**. `gh api repos/MS-Flow/airrow/rulesets/19735515`
+  returnerar `enforcement: active` med
+  `required_status_checks: [{"context":"validate-source-branch"},{"context":"verify"}]`.
+  Idempotensen är bevisad genom att köra skriptet två gånger i rad — antalet rulesets förblev 2.
 - Full suite result + typecheck/lint status.
+
+### Implementation notes
+
+Verifierat lokalt 2026-07-25 på `14-pr-ci-checks` (efter merge av senaste `develop`):
+
+| Steg                          | Resultat                                                          |
+| ----------------------------- | ----------------------------------------------------------------- |
+| `pnpm -r typecheck`           | ✅ rent — engine, schemas, web                                     |
+| `pnpm -r lint`                | ✅ rent — inga nya issues                                          |
+| `pnpm -r test`                | ✅ 99 gröna (36 engine + 63 web), 3 skippade                       |
+| `pnpm build`                  | ✅ 17 routes byggda utan env-variabler                             |
+| Negativ kontroll (temp crash) | ✅ smoke-testet blev rött, revertades                              |
+| Ruleset applicerat            | ✅ `branch-policy-required-check` (id 19735515) kräver nu `verify` |
+
+- **Inga pre-existing failures.** De 3 skippade ligger i `auth.trigger.test.ts` (kräver Supabase Auth-
+  tjänsten). RLS-sviterna kördes och passerade lokalt eftersom `supabase start` var igång — i CI skippas
+  de, vilket är den flaggade avvikelsen under Edge cases.
+- **Triggern lämnades avsiktligt ofiltrerad.** `pull_request:` utan `branches:`-filter täcker redan PR
+  mot `develop`; att lägga till ett filter skulle *minska* täckningen och släppa igenom
+  `<nr>-kort` → `feature/**`. Ett förtydligande kommentarsblock ersätter filtret.
+- **Kontextnamnet är `verify`** — jobb-id:t i `ci.yml`. Till skillnad från `validate-source-branch` körs
+  jobbet även på `push`, så det kan krävas på `develop`/`main` utan att låsa ref-uppdateringar (samma
+  fälla som redan är dokumenterad i skriptets header).
+- **`specs/README.md` hade dubbletter** efter auto-mergen av `develop` (samma specar listade med två
+  olika statusar). Deduplicerat i samma ändring; develop-sidans ✅-statusar behölls.
+- Byggsteget bekräftar Security-notisen: `next build` går igenom helt utan Supabase-nycklar.
+- **Fynd i `/analyze`, åtgärdat:** smoke-testets hoistade session använde ett `as`-cast utan motiverande
+  kommentar (konstitutionen §I). Ersatt med en `FakeSession`-typ och en returtyp på `vi.hoisted`-fabriken
+  — ingen cast kvar. Typecheck, lint och hela sviten kördes om efteråt, allt grönt.
+
+**Kvarstående avvikelse vid stängning:** den flaggade §V-avvikelsen under Edge cases (RLS-sviten skippas
+i CI) är medveten och har en egen follow-up. Den gröna `verify`-checken bevisar bygg och rendering —
+inte dataisolering.
 
 ---
 
@@ -148,8 +184,10 @@ Skulle ett byggsteg någon gång kräva en nyckel ska den komma från GitHub Sec
 
 _Unusual inputs or states, and what should happen._
 
-- **PR från en fork** — secrets är otillgängliga; bygget måste antingen klara sig utan dem eller checken
-  hanteras medvetet. [NEEDS CLARIFICATION: tillåter vi fork-PRs alls i det här repot?]
+- **PR från en fork** — kan inte inträffa idag: repot är privat med `allow_forking: false` (0 forks),
+  verifierat via `gh api repos/MS-Flow/airrow`. Skulle forkar öppnas senare är bygget ändå oberoende av
+  secrets, så checken fungerar — men `pull_request_target` får aldrig införas utan att secrets-exponering
+  omprövas.
 - **Integrationstester som kräver lokal Supabase** (`*.rls.test.ts`, `store.cutover.test.ts`) — de
   skippas tyst när databasen är onåbar ([schema.rls.test.ts:33](apps/web/src/lib/data/schema.rls.test.ts#L33)),
   så checken blir grön utan att RLS testats. **Beslut: skip-beteendet accepteras i den här specen** och
@@ -161,8 +199,8 @@ _Unusual inputs or states, and what should happen._
   > alltså bygg + rendering, inte dataisolering. Avvikelsen upphör när Supabase-i-CI-issuen är gjord;
   > tills dess måste RLS-sviten köras lokalt mot `supabase start` innan en dataändring mergas.
 - **Redan öppna PRs** när rulesetet uppdateras — behöver en ny push/rerun för att få checken.
-- **Kända pre-existing failures** i sviten — en required check kan inte vara grön förrän de är gröna
-  eller uttryckligen kvarantänade. [NEEDS CLARIFICATION: finns kända röda tester idag, och hur hanteras de?]
+- **Kända pre-existing failures** — inga. Hela sviten är grön (99 tester); de enda skippade är de 3 i
+  `auth.trigger.test.ts`, som kräver Supabase Auth-tjänsten och faller under samma avvikelse som ovan.
 
 ---
 

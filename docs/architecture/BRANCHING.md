@@ -58,6 +58,31 @@ them at all, so push, force-push and delete work as usual.
 > Already committed locally on `develop`? Move the work to a branch instead:
 > `git switch -c feature/<name>` (or `<nr>-<short>`), then `git switch develop && git reset --hard origin/develop`.
 
+## Required checks
+
+Two checks are **required** on `main` and `develop` — a PR with either one red cannot be merged.
+Both are configured by the same ruleset (`branch-policy-required-check`, set idempotently by
+`scripts/setup-branch-protection.sh`):
+
+| Check                    | Workflow            | Blocks a merge when                                        |
+| ------------------------ | ------------------- | ---------------------------------------------------------- |
+| `validate-source-branch` | `branch-policy.yml` | the PR targets the wrong branch for the hierarchy above     |
+| `verify`                 | `ci.yml`            | typecheck, lint, tests **or** `pnpm build` fails            |
+
+`verify` is one job on purpose — one install, and one context to keep in sync with the ruleset. It
+ends with `pnpm build`, which is what catches the crashes unit tests cannot see: bad server/client
+boundaries, RSC-only imports, failed prerenders. A render smoke test (`apps/web/src/app/smoke.test.tsx`)
+covers the public pages `/`, `/login` and `/signup`.
+
+On `feature/*` and `<nr>-<short>` neither check is required — both still run on every PR and mark it
+red, but the ruleset does not apply. Full reasoning under _Merge Direction Enforcement_ above; `verify`
+would be safe to require (it runs on `push` too), while `validate-source-branch` would not.
+
+> Integration tests that need a local Supabase (`*.rls.test.ts`, `store.cutover.test.ts`) **skip**
+> when no database is reachable, so a green `verify` does not prove RLS. Run them locally against
+> `supabase start` before merging a data-layer change. Tracked as a deviation in
+> [`../../specs/14-pr-ci-checks.md`](../../specs/14-pr-ci-checks.md).
+
 ## CI / DEV deploy
 - Every push to `feature/<name>` **and** `develop` runs a DEV deploy (see `.github/workflows/deploy-dev.yml`).
 - `<nr>-<short>` branches do not deploy — they are tested via their feature.
