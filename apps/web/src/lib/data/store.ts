@@ -381,6 +381,26 @@ export function loadArtifact(jobId: string): GenerationResult | null {
   }
 }
 
+/**
+ * Replace one file's content in a stored artifact (founder edits in the preview). The manifest entry
+ * is re-stamped so byte counts stay true and the file is marked as founder-edited — regeneration
+ * always produces a fresh artifact, so an edit never silently outlives the answers it came from.
+ */
+export function updateArtifactFile(jobId: string, filePath: string, content: string): boolean {
+  const artifact = loadArtifact(jobId);
+  if (!artifact) return false;
+  const file = artifact.files.find((f) => f.path === filePath);
+  const entry = artifact.manifest.files.find((f) => f.path === filePath);
+  if (!file || !entry) return false;
+
+  file.content = content;
+  file.source = "authored";
+  entry.source = "authored";
+  entry.bytes = new TextEncoder().encode(content).length;
+  saveArtifact(jobId, artifact);
+  return true;
+}
+
 /* ── Deliveries ─────────────────────────────────────────────────────────── */
 
 export function recordDelivery(projectId: string, jobId: string, method: "zip" | "github"): void {

@@ -1,12 +1,14 @@
 "use client";
 
 // Repository preview (F-402): tree + rendered content, deep-linkable.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, ChevronRight, FileText } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, FileText, Pencil, X } from "lucide-react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
+import { Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { saveGeneratedFileAction } from "./actions";
 
 export interface PreviewFile {
   path: string;
@@ -101,7 +103,7 @@ function Dir({
   );
 }
 
-export function PreviewBrowser({ files }: { files: PreviewFile[] }) {
+export function PreviewBrowser({ files, projectId }: { files: PreviewFile[]; projectId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const byPath = useMemo(() => new Map(files.map((f) => [f.path, f.content])), [files]);
@@ -152,6 +154,32 @@ export function PreviewBrowser({ files }: { files: PreviewFile[] }) {
     setHtml(DOMPurify.sanitize(typeof raw === "string" ? raw : ""));
   }, [content, isMarkdown]);
 
+  // ── Editing ───────────────────────────────────────────────────────────────
+  const [draft, setDraft] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, startSaving] = useTransition();
+  const editing = draft !== null;
+
+  // Switching files always leaves edit mode — a draft belongs to the file it was opened on.
+  useEffect(() => {
+    setDraft(null);
+    setError(null);
+  }, [active]);
+
+  const save = useCallback(() => {
+    if (draft === null) return;
+    startSaving(async () => {
+      const result = await saveGeneratedFileAction(projectId, active, draft);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setDraft(null);
+      setError(null);
+      router.refresh();
+    });
+  }, [active, draft, projectId, router]);
+
   return (
     <div className="flex h-[calc(100vh-57px)]">
       <aside className="w-72 shrink-0 overflow-y-auto border-r border-border bg-bg-subtle p-3">
@@ -159,8 +187,41 @@ export function PreviewBrowser({ files }: { files: PreviewFile[] }) {
       </aside>
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-10 py-10">
-          <p className="mb-6 font-mono text-xs text-fg-faint">{active}</p>
-          {isMarkdown ? (
+          <div className="mb-6 flex items-center justify-between gap-4">
+            <p className="font-mono text-xs text-fg-faint">{active}</p>
+            {editing ? (
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="ghost" onClick={() => setDraft(null)} disabled={saving}>
+                  <X className="size-3.5" />
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={save} disabled={saving}>
+                  <Check className="size-3.5" />
+                  {saving ? "Saving…" : "Save"}
+                </Button>
+              </div>
+            ) : (
+              <Button size="sm" variant="ghost" onClick={() => setDraft(content)}>
+                <Pencil className="size-3.5" />
+                Edit
+              </Button>
+            )}
+          </div>
+
+          {error ? (
+            <p className="mb-4 rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
+              {error}
+            </p>
+          ) : null}
+
+          {editing ? (
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              spellCheck={false}
+              className="h-[60vh] w-full resize-y rounded-lg border border-border bg-bg-subtle p-4 font-mono text-[13px] leading-relaxed text-fg outline-none focus:border-accent"
+            />
+          ) : isMarkdown ? (
             <div className="prose-airrow" dangerouslySetInnerHTML={{ __html: html }} />
           ) : (
             <pre className="overflow-x-auto rounded-lg border border-border bg-bg-subtle p-4 font-mono text-[13px] leading-relaxed text-fg">
