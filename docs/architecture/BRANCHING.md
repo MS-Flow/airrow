@@ -34,6 +34,29 @@ The merge direction above is not just a convention — it is enforced by CI:
 
 - `.github/workflows/branch-policy.yml` runs on every pull request and **fails** if the `head → base` branch relationship violates the hierarchy (`issue/*` → `feature/*`, `feature/*` → `develop`, `develop` → `main`). The error message specifies the correct target branch.
 - The `validate-source-branch` check is configured as a **required status check** through a repository ruleset that applies to `main`, `develop`, and `feature/**`. This prevents incorrectly targeted pull requests from being merged. The ruleset is configured (idempotently) by a repository administrator using `scripts/setup-branch-protection.sh`.
+
+## Push protection
+
+`develop` and `main` are integration branches — they change **only** through a merged pull request.
+The `branch-push-protection` ruleset (same script) enforces this on `refs/heads/main` and
+`refs/heads/develop`:
+
+| Blocked on `develop` / `main`             | Why                                            |
+| ----------------------------------------- | ---------------------------------------------- |
+| `git push origin develop` / `main`        | a pull request is required before merging      |
+| Merging without **1 approving review**    | every change is seen by a second person        |
+| Force-push (non-fast-forward)             | history on an integration branch is never rewritten |
+| Deleting the branch                       | protects against accidental removal            |
+
+`bypass_actors` is empty — the rules apply to repository administrators too, so there is no direct
+hotfix path; a hotfix is a PR like anything else.
+
+`feature/*` and `<nr>-<short>` branches are deliberately **not** push-protected: push, force-push and
+delete them freely. They keep only the `validate-source-branch` required check above.
+
+> Already committed locally on `develop`? Move the work to a branch instead:
+> `git switch -c feature/<name>` (or `<nr>-<short>`), then `git switch develop && git reset --hard origin/develop`.
+
 ## CI / DEV deploy
 - Every push to `feature/<name>` **and** `develop` runs a DEV deploy (see `.github/workflows/deploy-dev.yml`).
 - `<nr>-<short>` branches do not deploy — they are tested via their feature.
