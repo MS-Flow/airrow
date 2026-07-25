@@ -12,11 +12,11 @@ export const metadata = { title: "Continue locally" };
 export default async function ContinuePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { org } = await requireSession();
-  const project = getProject(org.id, id);
+  const project = await getProject(org.id, id);
   if (!project) notFound();
   if (project.status !== "ready") redirect(`/app/projects/${id}`);
 
-  const model = latestModelVersion(id)?.model;
+  const model = (await latestModelVersion(id))?.model;
   const slug = project.slug;
   const isGh = model?.stack.repoProvider !== "azure_devops";
 

@@ -13,11 +13,11 @@ export const metadata = { title: "Project" };
 export default async function ProjectOverview({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { org } = await requireSession();
-  const project = getProject(org.id, id);
+  const project = await getProject(org.id, id);
   if (!project) notFound();
 
-  const job = latestJob(id);
-  const artifact = job && job.status === "completed" ? loadArtifact(job.id) : null;
+  const job = await latestJob(id);
+  const artifact = job && job.status === "completed" ? await loadArtifact(job.id) : null;
 
   const primary =
     project.status === "interviewing"

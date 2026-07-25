@@ -9,11 +9,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const project = getProject(session.org.id, id);
+  const project = await getProject(session.org.id, id);
   if (!project) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  const job = latestJob(id);
-  const artifact = job && job.status === "completed" ? loadArtifact(job.id) : null;
+  const job = await latestJob(id);
+  const artifact = job && job.status === "completed" ? await loadArtifact(job.id) : null;
   if (!job || !artifact) return NextResponse.json({ error: "no_ready_artifact" }, { status: 409 });
 
   const zip = new JSZip();
@@ -23,7 +23,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   }
   const bytes = await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
 
-  recordDelivery(id, job.id, "zip");
+  await recordDelivery(id, job.id, "zip");
 
   return new NextResponse(Buffer.from(bytes), {
     headers: {

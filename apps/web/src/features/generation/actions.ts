@@ -8,12 +8,12 @@ import { runGenerationJob } from "./runner";
 
 export async function retryGenerationAction(projectId: string): Promise<{ error?: string }> {
   const { org } = await requireSession();
-  const project = getProject(org.id, projectId);
+  const project = await getProject(org.id, projectId);
   if (!project) return { error: "Project not found." };
-  const mv = latestModelVersion(projectId);
+  const mv = await latestModelVersion(projectId);
   if (!mv) return { error: "No interview submission found — complete the interview first." };
-  const job = createJob(projectId, mv.id);
-  setProjectStatus(projectId, "generating");
+  const job = await createJob(projectId, mv.id);
+  await setProjectStatus(projectId, "generating");
   void runGenerationJob(job.id, mv.model);
   redirect(`/app/projects/${projectId}/generating`);
 }
