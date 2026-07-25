@@ -58,8 +58,9 @@ const cases: Case[] = [
   { name: "generation_jobs", table: "generation_jobs", idA: JOB_A, idB: JOB_B },
   { name: "artifacts", table: "artifacts", idA: ARTIFACT_A, idB: ARTIFACT_B },
   { name: "deliveries", table: "deliveries", idA: DELIVERY_A, idB: DELIVERY_B },
-  { name: "repo_connections", table: "repo_connections", idA: REPO_A, idB: REPO_B },
-  { name: "profiles", table: "profiles", idA: USER_A, idB: USER_B }
+  { name: "repo_connections", table: "repo_connections", idA: REPO_A, idB: REPO_B }
+  // `profiles` RLS is covered by auth.trigger.test.ts, which creates a real auth user
+  // (profiles.id is FK'd to auth.users as of #18, so synthetic ids can't be seeded here).
 ];
 
 describe.skipIf(!dbUp)("full schema RLS (local Supabase)", () => {
@@ -72,7 +73,6 @@ describe.skipIf(!dbUp)("full schema RLS (local Supabase)", () => {
     await db.query("insert into public.organizations (id, name) values ($1, 'Org A'), ($2, 'Org B')", [ORG_A, ORG_B]);
     await db.query("insert into public.organization_members (organization_id, user_id) values ($1,$2),($3,$4)",
       [ORG_A, USER_A, ORG_B, USER_B]);
-    await db.query("insert into public.profiles (id, email) values ($1,'a@x.test'),($2,'b@x.test')", [USER_A, USER_B]);
     await db.query(
       "insert into public.projects (id, organization_id, name, slug, status) values ($1,$2,'A','a','ready'),($3,$4,'B','b','ready')",
       [PROJECT_A, ORG_A, PROJECT_B, ORG_B]);
