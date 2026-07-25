@@ -7,11 +7,12 @@ import { signIn } from "@/lib/auth";
 async function loginAction(formData: FormData) {
   "use server";
   const parsed = loginSchema.safeParse({
-    name: formData.get("name"),
-    email: formData.get("email")
+    email: formData.get("email"),
+    password: formData.get("password")
   });
   if (!parsed.success) redirect("/login?error=1");
-  await signIn(parsed.data.name, parsed.data.email);
+  const { error } = await signIn(parsed.data.email, parsed.data.password);
+  if (error) redirect("/login?error=1");
   redirect("/app");
 }
 
@@ -32,32 +33,31 @@ export default async function LoginPage({
         </Link>
         <Card className="p-8">
           <h1 className="text-lg font-semibold tracking-tight text-fg">Sign in</h1>
-          <p className="mt-1 text-[13px] text-fg-muted">
-            Your projects are stored under this identity.
-          </p>
+          <p className="mt-1 text-[13px] text-fg-muted">Welcome back to your workspace.</p>
           {error ? (
             <p className="mt-3 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-[13px] text-danger">
-              Please enter a valid name and email address.
+              Invalid email or password.
             </p>
           ) : null}
           <form action={loginAction} className="mt-6 space-y-4">
             <div>
-              <Label htmlFor="name">Name</Label>
-              <Input id="name" name="name" placeholder="Ada Lovelace" required autoFocus />
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" name="email" type="email" placeholder="you@company.com" required autoFocus />
             </div>
             <div>
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" placeholder="you@company.com" required />
+              <Label htmlFor="password">Password</Label>
+              <Input id="password" name="password" type="password" placeholder="••••••••" required />
             </div>
             <Button type="submit" className="w-full">
-              Continue
+              Sign in
             </Button>
           </form>
         </Card>
-        <p className="mt-4 text-center font-mono text-[11px] leading-relaxed text-fg-faint">
-          Local development auth — no password, data stays on this machine.
-          <br />
-          Supabase Auth activates with production keys (ADR-0005).
+        <p className="mt-4 text-center text-[13px] text-fg-muted">
+          No account?{" "}
+          <Link href="/signup" className="font-medium text-fg underline-offset-4 hover:underline">
+            Create one
+          </Link>
         </p>
       </div>
     </div>

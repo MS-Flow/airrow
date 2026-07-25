@@ -3,14 +3,13 @@ import { redirect } from "next/navigation";
 import { Github } from "lucide-react";
 import { profileUpdateSchema } from "@airrow/schemas";
 import { Badge, Button, Card, Input, Label, Separator } from "@/components/ui";
-import { requireSession } from "@/lib/auth";
-import { updateUserName } from "@/lib/data/store";
+import { requireSession, updateName } from "@/lib/auth";
 
 async function updateProfileAction(formData: FormData) {
   "use server";
-  const { user } = await requireSession();
+  await requireSession();
   const parsed = profileUpdateSchema.safeParse({ name: formData.get("name") });
-  if (parsed.success) updateUserName(user.id, parsed.data.name);
+  if (parsed.success) await updateName(parsed.data.name);
   redirect("/app/settings?saved=1");
 }
 
@@ -42,7 +41,7 @@ export default async function SettingsPage({
             <Label htmlFor="email">Email</Label>
             <Input id="email" value={user.email} disabled />
             <p className="mt-1.5 text-xs text-fg-faint">
-              Email is your identity in local mode and can&apos;t be changed here.
+              Email is managed by your account sign-in and can&apos;t be changed here.
             </p>
           </div>
           <Button type="submit" size="sm">
@@ -91,15 +90,14 @@ export default async function SettingsPage({
 
       <div className="rounded-lg border border-border bg-bg-subtle p-5">
         <h2 className="font-mono text-xs font-semibold uppercase tracking-wide text-fg-muted">
-          Local mode
+          Environment
         </h2>
         <p className="mt-2 text-[13px] leading-relaxed text-fg-muted">
-          Airrow is running fully on this machine (ADR-0005): data lives in{" "}
-          <code className="font-mono text-xs">.data/</code> at the repository root, and document
-          authoring uses the deterministic local agent. Adding Supabase keys and an{" "}
-          <code className="font-mono text-xs">ANTHROPIC_API_KEY</code> to{" "}
-          <code className="font-mono text-xs">.env</code> activates production auth, storage, and
-          Claude-authored documents — see <code className="font-mono text-xs">.env.example</code>.
+          Accounts and project data are stored in Supabase (auth + Postgres with row-level security).
+          Document authoring still uses the deterministic local agent; adding an{" "}
+          <code className="font-mono text-xs">ANTHROPIC_API_KEY</code> and GitHub App credentials to{" "}
+          <code className="font-mono text-xs">.env</code> activates Claude-authored documents and
+          push-to-GitHub — see <code className="font-mono text-xs">.env.example</code>.
         </p>
       </div>
     </div>
