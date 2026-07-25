@@ -25,3 +25,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Feature | Spec | Status |
 |---------|------|--------|
 | Interview-driven project generator | [1-interview-generator.md](1-interview-generator.md) | 🔄 In progress |
+| Auto-assign issue on `/createspec` | [27-auto-assign-createspec.md](27-auto-assign-createspec.md) | ✅ Done |
