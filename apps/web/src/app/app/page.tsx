@@ -24,7 +24,7 @@ export const metadata = { title: "Projects" };
 
 export default async function Dashboard() {
   const { org, user } = await requireSession();
-  const projects = listProjects(org.id);
+  const projects = await listProjects(org.id);
 
   return (
     <div className="mx-auto max-w-4xl px-8 py-10">

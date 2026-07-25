@@ -9,27 +9,29 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const STAGES: JobStage[] = ["resolve", "author", "assemble", "validate", "manifest"];
 
 export async function runGenerationJob(jobId: string, model: ProjectModel): Promise<void> {
-  const job = getJob(jobId);
+  const job = await getJob(jobId);
   if (!job) return;
   const done: JobStage[] = [];
 
   try {
-    updateJob(jobId, { status: "running", startedAt: new Date().toISOString(), stage: "resolve" });
+    await updateJob(jobId, { status: "running", startedAt: new Date().toISOString(), stage: "resolve" });
     await sleep(700);
     done.push("resolve");
 
-    // Author: run the engine, streaming per-file progress with deliberate pacing —
-    // the "watching your foundation being built" moment (F-401 UX).
-    updateJob(jobId, { stagesDone: [...done], stage: "author" });
+    // Author: run the engine, collecting per-file paths; progress is written after the
+    // synchronous generate() call so the store writes stay ordered (F-401 UX).
+    await updateJob(jobId, { stagesDone: [...done], stage: "author" });
     const authoredPaths: string[] = [];
+    let totalFiles = 0;
     const result = generate(model, {
       onFile: (path, index, total) => {
         authoredPaths.push(path);
-        if (index === 1) updateJob(jobId, { totalFiles: total });
+        if (index === 1) totalFiles = total;
       }
     });
+    if (totalFiles > 0) await updateJob(jobId, { totalFiles });
     for (let i = 0; i < authoredPaths.length; i++) {
-      updateJob(jobId, {
+      await updateJob(jobId, {
         filesAuthored: i + 1,
         currentPath: authoredPaths[i] ?? null
       });
@@ -37,33 +39,33 @@ export async function runGenerationJob(jobId: string, model: ProjectModel): Prom
     }
     done.push("author");
 
-    updateJob(jobId, { stagesDone: [...done], stage: "assemble", currentPath: null });
+    await updateJob(jobId, { stagesDone: [...done], stage: "assemble", currentPath: null });
     await sleep(500);
     done.push("assemble");
 
-    updateJob(jobId, { stagesDone: [...done], stage: "validate" });
+    await updateJob(jobId, { stagesDone: [...done], stage: "validate" });
     await sleep(500);
     done.push("validate");
 
-    updateJob(jobId, { stagesDone: [...done], stage: "manifest" });
-    saveArtifact(jobId, result);
+    await updateJob(jobId, { stagesDone: [...done], stage: "manifest" });
+    await saveArtifact(jobId, result);
     await sleep(400);
     done.push("manifest");
 
-    updateJob(jobId, {
+    await updateJob(jobId, {
       stagesDone: [...done],
       stage: null,
       status: "completed",
       finishedAt: new Date().toISOString()
     });
-    setProjectStatus(job.projectId, "ready");
+    await setProjectStatus(job.projectId, "ready");
   } catch (err) {
-    updateJob(jobId, {
+    await updateJob(jobId, {
       status: "failed",
       error: err instanceof Error ? err.message : "Unknown generation error",
       finishedAt: new Date().toISOString()
     });
-    setProjectStatus(job.projectId, "failed");
+    await setProjectStatus(job.projectId, "failed");
   }
 }
 
