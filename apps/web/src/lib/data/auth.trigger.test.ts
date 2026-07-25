@@ -30,8 +30,11 @@ async function reachable(): Promise<boolean> {
 const dbUp = await reachable();
 
 describe.skipIf(!dbUp)("handle_new_user signup trigger (local Supabase)", () => {
+  // Constructed in beforeAll, not here: the describe factory body runs during collection
+  // even when skipIf() skips the tests, and createClient() spins up a RealtimeClient that
+  // needs a WebSocket (absent on Node < 22 in CI). Lazy construction keeps the skip clean.
   const db = new Client({ connectionString: DB_URL });
-  const admin: SupabaseClient = createClient(URL, SERVICE_KEY, { auth: { persistSession: false } });
+  let admin!: SupabaseClient; // assigned in beforeAll (definite assignment)
   let userId = "";
   let userIdB = "";
 
@@ -57,6 +60,7 @@ describe.skipIf(!dbUp)("handle_new_user signup trigger (local Supabase)", () => 
   }
 
   beforeAll(async () => {
+    admin = createClient(URL, SERVICE_KEY, { auth: { persistSession: false } });
     await db.connect();
     await deleteByEmail(EMAIL);
     await deleteByEmail(EMAIL_B);
