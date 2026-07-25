@@ -4,7 +4,7 @@
 **Branch:** `9-vercel-supabase-setup` (from `feature/infrastructure`)
 **Feature:** Infrastructure
 **Depends on:** nothing — first infra step for Airrow.
-**Status:** 🔄 In progress
+**Status:** ✅ Done
 
 <!-- Status legend: ⏳ Not started · 🔄 In progress · ✅ Done -->
 

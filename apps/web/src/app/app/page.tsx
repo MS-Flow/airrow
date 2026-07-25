@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
-import { ComingSoon, EmptyState } from "@/components/ui/states";
+import { EmptyState } from "@/components/ui/states";
 import { ProjectRow, nextRoute } from "@/features/projects/ProjectCard";
 import { requireSession } from "@/lib/auth";
 import { listProjects } from "@/lib/data/store";
@@ -112,26 +112,6 @@ export default async function Dashboard() {
               ))}
           </div>
         )}
-      </section>
-
-      {/* Surfaces with no data source yet — designed, honest, not faked. */}
-      <section className="mt-12 grid gap-4 md:grid-cols-2">
-        <ComingSoon
-          title="Templates"
-          description="Start from a proven foundation — SaaS, marketplace, internal tool — instead of a blank interview."
-        />
-        <ComingSoon
-          title="Roadmap"
-          description="Your generated milestones, tracked here as you ship them."
-        />
-        <ComingSoon
-          title="Usage"
-          description="Generations, documents authored and tokens spent across your workspace."
-        />
-        <ComingSoon
-          title="News"
-          description="What changed in Airrow — new documents, better prompts, engine upgrades."
-        />
       </section>
     </div>
   );

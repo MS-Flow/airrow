@@ -46,7 +46,7 @@ export default async function SignupPage({
       <div className="flex min-h-screen items-center justify-center bg-bg px-6 py-16">
         <div className="w-full max-w-sm animate-slide-up text-center">
           <Link href="/" className="mb-10 flex justify-center" aria-label="Airrow home">
-            <AirrowLogo size="md" priority />
+            <AirrowLogo size="lg" priority />
           </Link>
           <Card>
             <CardBody className="p-8">
@@ -72,7 +72,7 @@ export default async function SignupPage({
     <div className="flex min-h-screen items-center justify-center bg-bg px-6 py-16">
       <div className="w-full max-w-sm animate-slide-up">
         <Link href="/" className="mb-10 flex justify-center" aria-label="Airrow home">
-          <AirrowLogo size="md" priority />
+          <AirrowLogo size="lg" priority />
         </Link>
 
         <Card>
