@@ -1,25 +1,43 @@
 name: Branch policy
 on:
   pull_request:
-    branches: [main, develop]
+    types: [opened, reopened, synchronize, edited]
 
 jobs:
   validate-source-branch:
     runs-on: ubuntu-latest
     steps:
       - name: Enforce merge rules
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
         run: |
-          BASE="${{ github.base_ref }}"
-          HEAD="${{ github.head_ref }}"
           echo "Källgren: $HEAD -> Målgren: $BASE"
-          if [ "$BASE" = "main" ]; then
-            if [ "$HEAD" != "develop" ]; then
-              echo "::error::Endast 'develop' får mergas in i main (fick '$HEAD')."
-              exit 1
-            fi
-          elif [ "$BASE" = "develop" ]; then
-            case "$HEAD" in
-              feature/*) echo "OK: $HEAD -> develop" ;;
-              *) echo "::error::Endast 'feature/*' får mergas in i develop (fick '$HEAD')."; exit 1 ;;
-            esac
-          fi
+          case "$BASE" in
+            main)
+              if [ "$HEAD" != "develop" ]; then
+                echo "::error::Endast 'develop' får mergas in i 'main' (fick '$HEAD')."
+                exit 1
+              fi
+              ;;
+            develop)
+              case "$HEAD" in
+                feature/*) : ;;
+                *)
+                  echo "::error::Endast 'feature/*' får mergas in i 'develop' (fick '$HEAD')."
+                  exit 1
+                  ;;
+              esac
+              ;;
+            feature/*)
+              if ! echo "$HEAD" | grep -qE '^[0-9]+-'; then
+                echo "::error::Endast issue-grenar ('<nr>-<kort>') får mergas in i '$BASE' (fick '$HEAD')."
+                exit 1
+              fi
+              ;;
+            *)
+              echo "Målgren '$BASE' omfattas inte av grenpolicyn — hoppar över."
+              exit 0
+              ;;
+          esac
+          echo "OK: $HEAD -> $BASE"
