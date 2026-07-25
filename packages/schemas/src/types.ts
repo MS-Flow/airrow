@@ -57,7 +57,8 @@ export interface InterviewAnswers {
   authModel?: AuthMethod[];
   roles?: "simple" | "granular";
   capabilities?: FeatureId[];
-  aiUsage?: AiUsage;
+  /** `"none"` lets the founder back out of AI after selecting the capability. */
+  aiUsage?: AiUsage | "none";
   integrations?: string;
   dataSensitivity?: DataSensitivity;
   scale?: ScaleExpectation;
@@ -98,6 +99,8 @@ export interface ProjectModel {
     ai: "claude-code";
   };
   team: TeamShape;
+  /** Raw sensitivity answer — `security` is its coarse projection, kept for callers that only need the level. */
+  dataSensitivity: DataSensitivity;
   security: SecurityLevel;
   scale: ScaleExpectation;
   mvpFocus: string;

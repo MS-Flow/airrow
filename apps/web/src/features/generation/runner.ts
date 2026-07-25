@@ -3,6 +3,7 @@
 import { generate } from "@airrow/engine";
 import type { JobStage, ProjectModel } from "@airrow/schemas";
 import { saveArtifact, setProjectStatus, updateJob, getJob } from "@/lib/data/store";
+import { loadTemplate } from "@/lib/template/load";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -18,12 +19,12 @@ export async function runGenerationJob(jobId: string, model: ProjectModel): Prom
     await sleep(700);
     done.push("resolve");
 
-    // Author: run the engine, collecting per-file paths; progress is written after the
-    // synchronous generate() call so the store writes stay ordered (F-401 UX).
+    // Author: render the canonical template through the engine, collecting per-file paths;
+    // progress is written after the synchronous generate() call so store writes stay ordered.
     await updateJob(jobId, { stagesDone: [...done], stage: "author" });
     const authoredPaths: string[] = [];
     let totalFiles = 0;
-    const result = generate(model, {
+    const result = generate(loadTemplate(), model, {
       onFile: (path, index, total) => {
         authoredPaths.push(path);
         if (index === 1) totalFiles = total;

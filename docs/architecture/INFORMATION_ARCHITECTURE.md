@@ -34,6 +34,7 @@ Every Airrow project receives the same minimal, strict skeleton — the invarian
 ```
 <project>/
 ├── README.md                     entry point: what, stack, how to start
+├── START_HERE.md                 the guided first hour: setup → first spec → the loop
 ├── CLAUDE.md                     AI assistant entry context
 ├── .claude/
 │   ├── spec-kit/
@@ -41,18 +42,18 @@ Every Airrow project receives the same minimal, strict skeleton — the invarian
 │   │   └── spec-template.md      canonical one-file-per-issue spec format
 │   └── commands/                 createspec · clarify · implement · analyze · push · pr-check
 ├── specs/
-│   ├── README.md                 how the spec system works
-│   └── NNN-kort.md               one spec per issue (seed specs from the interview)
+│   └── README.md                 how the spec system works + a brief per chosen capability
 ├── docs/
 │   ├── README.md                 doc index
+│   ├── VISION.md                 what this becomes, MVP focus, v1 scope
 │   ├── architecture/
-│   │   ├── SYSTEM_OVERVIEW.md     purpose, data flow, roles, entities
+│   │   ├── SYSTEM_OVERVIEW.md     purpose, data flow, sign-in, tenancy, entities, security posture
 │   │   └── BRANCHING.md           branch + PR model
 │   └── guides/DEVELOPER_GUIDE.md  setup, patterns, verification bar
 └── .github/workflows/            ci · branch-policy · close-issue-on-merge · deploy-dev
 ```
 
-Rules for generated IA: root holds only `README.md` + `CLAUDE.md`; rules live once in the constitution and everything links to it; every folder has an entry file; nothing exists twice. Founder-in-control — the full tree is previewed and approved before anything is written.
+Rules for generated IA: root holds only `README.md`, `START_HERE.md`, and `CLAUDE.md`; rules live once in the constitution and everything links to it; every folder has an entry file; nothing exists twice. No ADRs — a decision is recorded in the spec that introduces it, so there is exactly one place to look. Founder-in-control — the full tree is previewed and approved before anything is written.
 
 ## 3. Airrow's own repo
 

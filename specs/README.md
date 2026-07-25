@@ -29,3 +29,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Supabase full schema migration + DataStore cutover | [14-supabase-schema-auth.md](14-supabase-schema-auth.md) | 🔄 In progress |
 | Supabase Auth — email + password login | [18-supabase-auth.md](18-supabase-auth.md) | 🔄 In progress |
 | Redesign interview into architecture-first question set | [6-fix-interview-template.md](6-fix-interview-template.md) | ✅ Done |
+| Downloaded foundation must fully reflect the interview answers | [10-foundation-reflects-answers.md](10-foundation-reflects-answers.md) | ✅ Done |

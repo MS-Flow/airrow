@@ -33,14 +33,17 @@ app/** routes (RSC by default)
           → Postgres (+RLS) · Storage · Claude API · GitHub App
 ```
 External calls happen **server-side only**. The engine is a pure
-`generate(projectModel) → RepoTree + Manifest`; its LLM output is Zod-validated against document
-contracts before acceptance, with feedback-retry on failure.
+`generate(templateFiles, projectModel) → RepoTree + Manifest`; any LLM output is Zod-validated against
+document contracts before acceptance, with feedback-retry on failure.
 
 ## Generation pipeline (`packages/engine`)
-Resolve (model → repo blueprint) → Author (structured prompt → Claude → validate contract) →
-Assemble (merge static + authored, render cross-refs) → Validate (completeness, links) → Manifest
-(per-file source, template + prompt version, model, inputs hash → Postgres). Fully testable offline
-via a mock authoring provider + snapshot fixtures.
+[`template/`](../../template/) is the **single source of generated output** — the canonical scaffold,
+catalogued in `.airrow-template.json`. The app reads it from disk (the engine stays pure) and passes it
+in: Resolve (interview answers → `ProjectModel`) → Render (`renderScaffold` substitutes every
+`{{TOKEN}}` from the model; unanswered optionals become `[NEEDS CLARIFICATION]` markers, never invented
+content) → Validate (required files present, no unresolved token) → Manifest (per-file source, template
+id + version, bytes → Postgres). `renderScaffold` also returns a `ScaffoldPlan` for the founder to
+approve before anything is written.
 
 ## Roles & tenancy
 Supabase Auth (email magic link + GitHub OAuth). Every user gets a personal **organization** at

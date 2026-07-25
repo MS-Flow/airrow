@@ -154,7 +154,8 @@ export const interviewQuestions: Question[] = [
       { value: "llm_calls", label: "LLM calls", description: "Prompt-in, text-out features" },
       { value: "rag", label: "RAG over your data", description: "Retrieval-augmented answers from your content" },
       { value: "agents", label: "Autonomous agents", description: "Multi-step tool-using workflows" },
-      { value: "ml_models", label: "Custom ML models", description: "Your own trained/hosted models" }
+      { value: "ml_models", label: "Custom ML models", description: "Your own trained/hosted models" },
+      { value: "none", label: "No AI after all", description: "Drops AI from the plan — nothing AI-related is generated" }
     ]
   },
   {

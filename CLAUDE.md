@@ -51,7 +51,9 @@ Layered, and data flows in one direction:
 `app/**` routes (RSC by default) → client components → **Server Actions / Route Handlers** →
 feature `queries.ts` / `actions.ts` → `apps/web/src/lib/data/store.ts` (the DataStore) → Supabase
 (or the local file-backed store). The **generation engine** (`packages/engine`) is a pure, headless
-`generate(projectModel) → RepoTree + Manifest` — no app imports, no env access.
+`generate(templateFiles, projectModel) → RepoTree + Manifest` — no app imports, no env access. All
+generated output comes from the canonical scaffold in `template/`; the app reads it from disk and
+passes it in.
 
 - External calls happen **only server-side**: Claude API via the engine's authoring provider;
   Supabase / GitHub App via the DataStore and server actions. Never from client components; never
