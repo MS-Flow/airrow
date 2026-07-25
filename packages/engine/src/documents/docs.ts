@@ -2,12 +2,18 @@
 
 import type { FeatureId, GeneratedFile, ProjectModel } from "../../../schemas/src/types.ts";
 import {
+  aiUsageLabel,
   audienceLabel,
+  authSummary,
+  databaseLabel,
   featureLabel,
   frameworkLabel,
+  hostingLabel,
+  isSpaFramework,
   productTypeLabel,
   repoLabel,
-  teamLabel
+  teamLabel,
+  usesSupabase
 } from "../model.ts";
 
 const authored = (path: string, templateId: string, content: string): GeneratedFile => ({
@@ -30,15 +36,17 @@ ${m.description}
 
 ${m.name} is a ${productTypeLabel[m.productType]} for ${audienceLabel[m.audience]}.
 
+## The long-term vision
+
+> ${m.vision || "[NEEDS CLARIFICATION: long-term vision]"}
+
+This is the destination. Every milestone below is a step toward it — build for this, not just the MVP.
+
 ## The MVP promise
 
 > ${m.mvpFocus}
 
 Everything in the first milestones serves this promise. Features that don't serve it wait.
-
-## 90-day definition of success
-
-> ${m.goal90}
 
 ## Guiding principles
 
@@ -81,7 +89,7 @@ Work strictly top to bottom. Each feature: spec → implement → review → doc
 ## Milestone 0 — Setup (you are here)
 
 - Environment per \`docs/GETTING_STARTED.md\`
-- ${frameworkLabel(m)} scaffold with design tokens + CI to Vercel
+- ${frameworkLabel(m)} scaffold with design tokens + CI to ${hostingLabel[m.hosting]}
 - Supabase project, initial schema + RLS baseline
 
 ## Milestone 1 — MVP core
@@ -102,7 +110,7 @@ ${later.length > 0 ? later.map((f, i) => `${i + 1}. **${featureLabel[f]}** — s
 - Error tracking + analytics baseline
 - Security review (\`docs/standards/SECURITY_STANDARDS.md\` checklist)
 - Performance pass, empty/error states, legal pages
-- ${m.goal90 ? `Launch motion toward the 90-day goal: *"${m.goal90}"*` : "Public launch"}
+- Public launch toward the vision: *"${m.vision}"*
 
 ## Later (direction, not commitments)
 
@@ -142,11 +150,17 @@ ${
 3. \`git remote add origin https://dev.azure.com/<org>/${m.slug}/_git/${m.slug} && git push -u origin main\``
 }
 
-## 3. Create the Supabase project
+## 3. Create the database
 
-1. https://supabase.com → New project (name: \`${m.slug}\`).
+${
+  usesSupabase(m)
+    ? `1. https://supabase.com → New project (name: \`${m.slug}\`).
 2. Save the project URL, anon key, and service-role key — you'll add them to \`.env.local\` when the app scaffold exists.
-3. \`supabase init\` in this repo; migrations will live in \`supabase/migrations/\`.
+3. \`supabase init\` in this repo; migrations will live in \`supabase/migrations/\`.`
+    : `1. Provision a **${databaseLabel(m)}** PostgreSQL database and save its connection string for \`.env.local\`.
+2. Wire Auth and file Storage yourself (Auth.js/Clerk + S3/R2, or use Supabase for those) — the golden path is Supabase for all of it.
+3. Keep migrations in \`supabase/migrations/\` (plain SQL) and apply them with your preferred Postgres migration tool.`
+}
 
 ## 4. Scaffold the application (first Claude Code session)
 
@@ -154,7 +168,7 @@ Open this folder in VS Code, run \`claude\`, and use the **Kickoff** prompt from
 
 ## 5. Deploy early
 
-Connect the repo to Vercel (framework preset: ${m.stack.framework === "nextjs" ? "Next.js" : "Vite"}) so every PR gets a preview URL from day one.
+Connect the repo to ${hostingLabel[m.hosting]}${m.hosting === "vercel" ? ` (framework preset: ${m.stack.framework === "nextjs" ? "Next.js" : "Vite"}) so every PR gets a preview URL from day one` : " and wire CI/CD for preview deploys (the generated workflow defaults to Vercel — adjust it)"}.
 
 ## Daily loop
 
@@ -173,9 +187,9 @@ export function architectureDoc(m: ProjectModel): GeneratedFile {
 ## Shape
 
 ${
-  m.stack.framework === "nextjs"
-    ? `A ${productTypeLabel[m.productType]} built as a Next.js App Router application on Vercel, with Supabase as the managed backend (PostgreSQL, Auth${m.features.includes("storage") ? ", Storage" : ""}${m.derived.hasRealtime ? ", Realtime" : ""}). Server Components render by default; Server Actions handle mutations; client components exist only where interactivity demands.`
-    : `A ${productTypeLabel[m.productType]} built as a Vite + React SPA deployed on Vercel, talking directly to Supabase (PostgreSQL, Auth${m.features.includes("storage") ? ", Storage" : ""}${m.derived.hasRealtime ? ", Realtime" : ""}) through a typed data layer. Server-side needs are covered by Supabase Edge Functions.`
+  isSpaFramework(m)
+    ? `A ${productTypeLabel[m.productType]} built as a Vite + React SPA deployed on ${hostingLabel[m.hosting]}, talking directly to ${databaseLabel(m)} (PostgreSQL) through a typed data layer. Server-side needs are covered by ${usesSupabase(m) ? "Supabase Edge Functions" : "your own server functions"}.`
+    : `A ${productTypeLabel[m.productType]} built as ${frameworkLabel(m)} on ${hostingLabel[m.hosting]}, with ${databaseLabel(m)} (PostgreSQL) as the backend. Server Components render by default; Server Actions handle mutations; client components exist only where interactivity demands.`
 }
 
 ## Modules
@@ -185,7 +199,7 @@ Organize by feature, not by layer. Each feature owns its UI, data access, and ty
 \`\`\`
 src/features/<feature>/
   components/   UI for this feature
-  ${m.stack.framework === "nextjs" ? "actions.ts    server actions (mutations)\n  queries.ts    data reads" : "api.ts        typed Supabase calls"}
+  ${isSpaFramework(m) ? "api.ts        typed Supabase calls" : "actions.ts    server actions (mutations)\n  queries.ts    data reads"}
   types.ts
 \`\`\`
 
@@ -201,15 +215,17 @@ ${
 
 See \`docs/architecture/DATABASE.md\` for the starting schema.
 
+${m.derived.needsAuth ? `## Identity & access\n\nSign-in methods: ${authSummary(m)}, via Supabase Auth. ${m.derived.multiTenant ? `Access is scoped through ${m.tenancy === "marketplace" ? "marketplace-side roles" : `organization membership (roles: ${m.roles})`}.` : "Rows are scoped to their owning user."}\n` : ""}
+${m.integrations ? `## Integrations\n\nPlanned external systems: ${m.integrations}. Each lives behind a typed module with server-side secrets only — never called from the client.\n` : ""}
 ${m.derived.hasPayments ? `## Payments\n\nStripe ${m.audience === "b2c" ? "Checkout" : "Billing (subscriptions)"}. The webhook handler is the single source of truth for entitlement state — client callbacks are UX hints only. Store Stripe IDs on your own tables; never derive access from the client.\n` : ""}
-${m.derived.hasAi ? `## AI features\n\nAll LLM calls server-side${m.stack.framework === "nextjs" ? " (Server Actions / Route Handlers)" : " (Edge Functions)"}. Prompts live in \`prompts/\` and are versioned like code. Outputs are Zod-validated before touching the database or UI. Log token usage per call from day one.\n` : ""}
+${m.derived.hasAi ? `## AI features\n\n${m.aiUsage !== "none" ? `Approach: ${aiUsageLabel[m.aiUsage]}. ` : ""}All LLM calls server-side${isSpaFramework(m) ? " (Supabase Edge Functions)" : " (Server Actions / Route Handlers)"}. Prompts live in \`prompts/\` and are versioned like code. Outputs are Zod-validated before touching the database or UI. Log token usage per call from day one.\n` : ""}
 ${m.derived.hasRealtime ? `## Realtime\n\nSupabase Realtime channels, scoped per ${m.derived.multiTenant ? "organization" : "user"}. Subscribe narrowly (specific rows/topics), never table-wide from the client.\n` : ""}
 ## Cross-cutting rules
 
 - Zod at every boundary; types inferred from schemas, never duplicated.
 - Migrations are the only schema change path.
 - Errors surface typed; user-facing failures always have designed states.
-- ${m.scale === "growth" ? "Growth posture: paginate every list from day one; index every foreign key; avoid N+1 with explicit joins." : "Validation posture: prefer the simplest correct implementation; add caching/optimization only on measured need."}
+- ${m.scale === "validate" ? "Validation posture: prefer the simplest correct implementation; add caching/optimization only on measured need." : m.scale === "high_scale" ? "High-scale posture: paginate and index from day one; design for horizontal scale; load-test the critical path; cache deliberately." : "Growth posture: paginate every list from day one; index every foreign key; avoid N+1 with explicit joins."}
 `
   );
 }
@@ -225,13 +241,13 @@ Decided in ADR-0001. Changes require a superseding ADR.
 
 | Layer | Choice | Notes |
 |-------|--------|-------|
-| Framework | ${frameworkLabel(m)} | ${m.stack.framework === "nextjs" ? "App Router, RSC-first" : "SPA; Edge Functions for server needs"} |
+| Framework | ${frameworkLabel(m)} | ${isSpaFramework(m) ? "SPA; Edge Functions for server needs" : "App Router, RSC-first"} |
 | Language | TypeScript (strict) | \`any\` forbidden |
 | Styling | Tailwind CSS | design tokens as CSS variables |
 | Components | shadcn/ui | owned in-repo, themed |
-| Backend | Supabase | PostgreSQL + RLS${m.derived.needsAuth ? ", Auth" : ""}${m.features.includes("storage") ? ", Storage" : ""}${m.derived.hasRealtime ? ", Realtime" : ""} |
+| Database | ${databaseLabel(m)} | PostgreSQL + RLS${usesSupabase(m) ? `${m.derived.needsAuth ? ", Auth" : ""}${m.features.includes("storage") ? ", Storage" : ""}${m.derived.hasRealtime ? ", Realtime" : ""}` : " — bring your own Auth/Storage"} |
 | Validation | Zod | every boundary |
-${m.derived.hasPayments ? "| Payments | Stripe | webhooks = source of truth |\n" : ""}${m.derived.hasAi ? "| AI | Anthropic Claude API | server-side only, prompts versioned |\n" : ""}| Deployment | Vercel | preview per PR |
+${m.derived.hasPayments ? "| Payments | Stripe | webhooks = source of truth |\n" : ""}${m.derived.hasAi ? "| AI | Anthropic Claude API | server-side only, prompts versioned |\n" : ""}| Deployment | ${hostingLabel[m.hosting]} | ${m.hosting === "vercel" ? "preview per PR" : "adjust the generated deploy workflow (defaults to Vercel)"} |
 | Repository | ${repoLabel(m)} | trunk-based, PRs |
 | Editor / AI | VS Code + Claude Code | context system in \`context/\` |
 
@@ -313,7 +329,7 @@ create policy "<t>_owner" on <t> for all using (user_id = auth.uid());
 ## Rules
 
 - Migrations only (\`supabase/migrations/\`) — never dashboard-edit production schema.
-- Index every foreign key${m.scale === "growth" ? "; paginate every list query" : ""}.
+- Index every foreign key${m.scale !== "validate" ? "; paginate every list query" : ""}.
 ${m.features.includes("audit_logs") ? "- `audit_logs` table is append-only (no update/delete policies) recording actor, action, entity, timestamp." : ""}
 ${m.security === "elevated" ? "- Personal/sensitive fields: minimize collection, never log values, plan deletion/export paths from the first migration." : ""}
 `

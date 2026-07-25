@@ -2,12 +2,18 @@
 // Pure. No I/O, no env, no external deps (F-101 FR-7).
 
 import type {
+  AiUsage,
   Audience,
+  AuthMethod,
+  Database,
   FeatureId,
   Framework,
+  Hosting,
   InterviewAnswers,
   ProductType,
-  ProjectModel
+  ProjectModel,
+  SecurityLevel,
+  Tenancy
 } from "../../schemas/src/types.ts";
 
 export const ENGINE_VERSION = "0.1.0";
@@ -33,51 +39,73 @@ export function slugify(name: string): string {
 export function resolveProjectModel(input: ResolveInput): ProjectModel {
   const a = input.answers;
   const productType: ProductType = a.productType ?? "saas";
-  const features: FeatureId[] = [...(a.features ?? [])];
 
-  // Auth is implied by almost everything user-facing.
-  if (!features.includes("auth") && productType !== "api") features.unshift("auth");
+  // Tenancy drives multi-tenancy explicitly (was inferred from a feature checkbox).
+  const tenancy: Tenancy = a.tenancy ?? (productType === "internal_tool" ? "internal" : "single_user");
+  const multiTenant = tenancy === "organizations" || tenancy === "marketplace";
 
-  const audience: Audience = productType === "internal_tool" ? "internal" : (a.audience ?? "b2b");
+  // Auth model: default to email+password; "public"-only means no accounts.
+  const authModel: AuthMethod[] = a.authModel && a.authModel.length > 0 ? [...a.authModel] : ["email_password"];
+  const needsAuth = productType !== "api" && !(authModel.length === 1 && authModel[0] === "public");
+
+  // Project the capability list into the engine's FeatureId set: selected capabilities
+  // plus the identity-adjacent features derived from tenancy/auth.
+  const capabilities: FeatureId[] = [...(a.capabilities ?? [])];
+  const features: FeatureId[] = [...capabilities];
+  if (multiTenant && !features.includes("organizations")) features.unshift("organizations");
+  if (needsAuth && !features.includes("auth")) features.unshift("auth");
+
+  const audience: Audience =
+    productType === "internal_tool"
+      ? "internal"
+      : (a.audience ?? (productType === "hobby" ? "b2c" : "b2b"));
 
   const framework: Framework =
     a.framework ?? (productType === "mobile_app" || productType === "browser_extension" ? "vite" : "nextjs");
 
-  const multiTenant = features.includes("organizations");
+  const security: SecurityLevel = (a.dataSensitivity ?? "standard") === "standard" ? "standard" : "elevated";
+  const hasAi = capabilities.includes("ai");
+  const aiUsage: AiUsage | "none" = hasAi ? (a.aiUsage ?? "llm_calls") : "none";
 
   return {
     schemaVersion: "1",
     name: input.name.trim(),
     slug: slugify(input.name),
     description: input.description.trim(),
+    vision: (a.vision ?? "").trim(),
     productType,
     audience,
+    tenancy,
+    authModel,
     features,
     roles: multiTenant ? (a.roles ?? "simple") : "none",
+    aiUsage,
+    integrations: (a.integrations ?? "").trim(),
+    hosting: a.hosting ?? "vercel",
     stack: {
       framework,
       language: "typescript",
       styling: "tailwind",
       ui: "shadcn/ui",
       backend: "supabase",
-      database: "postgresql",
+      database: a.database ?? "supabase",
       deployment: "vercel",
       repoProvider: a.repoProvider ?? "github",
       editor: "vscode",
       ai: "claude-code"
     },
     team: a.team ?? "solo",
-    security: a.security ?? "standard",
+    security,
     scale: a.scale ?? "validate",
     mvpFocus: (a.mvpFocus ?? "").trim(),
-    goal90: (a.goal90 ?? "").trim(),
+    coreEntities: (a.coreEntities ?? "").trim(),
     derived: {
       multiTenant,
       hasPayments: features.includes("payments"),
-      hasAi: features.includes("ai"),
+      hasAi,
       hasRealtime: features.includes("realtime"),
       hasAdmin: features.includes("admin"),
-      needsAuth: features.includes("auth"),
+      needsAuth,
       isWeb: productType !== "mobile_app"
     }
   };
@@ -92,7 +120,8 @@ export const productTypeLabel: Record<ProductType, string> = {
   mobile_app: "mobile app",
   api: "API / developer platform",
   internal_tool: "internal tool",
-  browser_extension: "browser extension"
+  browser_extension: "browser extension",
+  hobby: "side project"
 };
 
 export const audienceLabel: Record<Audience, string> = {
@@ -129,8 +158,72 @@ export function frameworkLabel(m: ProjectModel): string {
   return m.stack.framework === "nextjs" ? "Next.js (App Router)" : "Vite + React";
 }
 
+/** The Vite SPA is the only non-server-rendered web framework we generate. */
+export function isSpaFramework(m: ProjectModel): boolean {
+  return m.stack.framework === "vite";
+}
+
 export function repoLabel(m: ProjectModel): string {
   return m.stack.repoProvider === "github" ? "GitHub" : "Azure DevOps";
+}
+
+export const tenancyLabel: Record<Tenancy, string> = {
+  single_user: "per-user (each person sees only their own data)",
+  organizations: "multi-tenant with teams / organizations",
+  marketplace: "a two-sided marketplace",
+  internal: "a single internal organization"
+};
+
+export const authMethodLabel: Record<AuthMethod, string> = {
+  email_password: "email & password",
+  magic_link: "magic link",
+  social: "social login",
+  sso: "enterprise SSO (SAML/OIDC)",
+  public: "no accounts (public)"
+};
+
+export function authSummary(m: ProjectModel): string {
+  return m.authModel.map((a) => authMethodLabel[a]).join(", ");
+}
+
+export const aiUsageLabel: Record<AiUsage, string> = {
+  llm_calls: "LLM calls (prompt-in, text-out)",
+  rag: "retrieval-augmented generation over your data",
+  agents: "autonomous, tool-using agents",
+  ml_models: "custom ML models"
+};
+
+export const hostingLabel: Record<Hosting, string> = {
+  vercel: "Vercel",
+  azure: "Azure",
+  self_host: "self-hosted"
+};
+
+const DATABASE_LABEL: Record<Database, string> = {
+  supabase: "Supabase",
+  postgres: "PostgreSQL (self-hosted)"
+};
+
+export function databaseLabel(m: ProjectModel): string {
+  return DATABASE_LABEL[m.stack.database];
+}
+
+/** Supabase is the golden path; other providers are raw Postgres (bring-your-own Auth/Storage/Realtime). */
+export function usesSupabase(m: ProjectModel): boolean {
+  return m.stack.database === "supabase";
+}
+
+/** One-line backend description for stack summaries — accurate for every database provider. */
+export function backendSummary(m: ProjectModel): string {
+  const extras = [
+    m.derived.needsAuth ? "Auth" : null,
+    m.features.includes("storage") ? "Storage" : null,
+    m.derived.hasRealtime ? "Realtime" : null
+  ].filter((x): x is string => x !== null);
+  if (usesSupabase(m)) {
+    return `Supabase (PostgreSQL${extras.length ? ", " + extras.join(", ") : ""})`;
+  }
+  return `${databaseLabel(m)} (PostgreSQL)${extras.length ? ` — wire ${extras.join(", ")} yourself` : ""}`;
 }
 
 export function featureList(m: ProjectModel): string {

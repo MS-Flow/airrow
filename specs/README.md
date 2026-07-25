@@ -26,3 +26,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 |---------|------|--------|
 | Interview-driven project generator | [1-interview-generator.md](1-interview-generator.md) | 🔄 In progress |
 | Vercel + Supabase infrastructure setup | [9-vercel-supabase-setup.md](9-vercel-supabase-setup.md) | 🔄 In progress |
+| Redesign interview into architecture-first question set | [6-fix-interview-template.md](6-fix-interview-template.md) | ✅ Done |
