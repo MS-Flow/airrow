@@ -12,6 +12,7 @@ import {
   type InterviewAnswers,
   type Question
 } from "@airrow/schemas";
+import { PageContainer } from "@/components/shell/page-container";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
@@ -121,7 +122,7 @@ export function InterviewRuntime({
   /* ── Review screen (F-301 FR-5) ─────────────────────────────────────── */
   if (mode === "review") {
     return (
-      <div className="mx-auto max-w-2xl animate-slide-up px-6 py-12 md:px-8">
+      <PageContainer className="max-w-2xl animate-slide-up py-12">
         <p className="font-mono text-xs text-fg-faint">{regenerating ? "Change answers" : "Review"}</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-fg">
           {regenerating
@@ -177,7 +178,7 @@ export function InterviewRuntime({
             {submitting ? pendingLabel : submitLabel}
           </Button>
         </div>
-      </div>
+      </PageContainer>
     );
   }
 
@@ -187,7 +188,7 @@ export function InterviewRuntime({
 
   /* ── Question screen ─────────────────────────────────────────────────── */
   return (
-    <div className="mx-auto max-w-2xl px-6 py-12 md:px-8">
+    <PageContainer className="max-w-2xl py-12">
       <div className="flex items-center justify-between gap-4">
         <p className="font-mono text-xs text-fg-faint">
           {projectName} · question {Math.min(cursor + 1, visible.length)} of {visible.length}
@@ -339,6 +340,6 @@ export function InterviewRuntime({
           </button>
         ) : null}
       </div>
-    </div>
+    </PageContainer>
   );
 }

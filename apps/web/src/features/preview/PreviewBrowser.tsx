@@ -200,7 +200,10 @@ export function PreviewBrowser({
         <Dir dir={tree} depth={0} active={active} onSelect={select} openSet={openSet} toggle={toggle} />
       </aside>
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-10 py-10">
+        {/* The tree moves with the rail; the text does not. `.preview-reader` insets the
+            column to wherever the viewport's centre is, so collapsing the rail leaves the
+            file exactly where it was. */}
+        <div className="preview-reader py-10">
           <div className="mb-6 flex items-center justify-between gap-4">
             <p className="font-mono text-xs text-fg-faint">{active}</p>
             {editing ? (

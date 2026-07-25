@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import type { JobStage } from "@airrow/schemas";
 import { AirrowMark } from "@/components/brand/mark";
+import { PageContainer } from "@/components/shell/page-container";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -70,7 +71,7 @@ export function GenerationProgress({
   const percent = job ? (job.stagesDone.length / JOB_STAGE_COUNT) * 100 : 0;
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-16 md:px-8">
+    <PageContainer className="max-w-2xl py-16">
       <div className="flex flex-col items-center text-center">
         <span
           className={cn(
@@ -166,6 +167,6 @@ export function GenerationProgress({
           </div>
         </div>
       ) : null}
-    </div>
+    </PageContainer>
   );
 }

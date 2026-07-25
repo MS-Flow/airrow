@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Download } from "lucide-react";
+import { PageContainer } from "@/components/shell/page-container";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { requireSession } from "@/lib/auth";
@@ -57,7 +58,7 @@ export default async function ContinuePage({ params }: { params: Promise<{ id: s
   ];
 
   return (
-    <div className="mx-auto max-w-2xl animate-slide-up px-6 py-12 md:px-8">
+    <PageContainer className="max-w-2xl animate-slide-up py-12">
       <p className="font-mono text-xs text-fg-faint">Continue locally</p>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight text-fg">
         From foundation to first feature
@@ -95,6 +96,6 @@ export default async function ContinuePage({ params }: { params: Promise<{ id: s
           </a>
         </Button>
       </div>
-    </div>
+    </PageContainer>
   );
 }

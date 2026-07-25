@@ -1,6 +1,7 @@
 // Dashboard: what you were doing, what to do next, and what is coming.
 import Link from "next/link";
 import { ArrowRight, Plus } from "lucide-react";
+import { PageContainer } from "@/components/shell/page-container";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/states";
@@ -19,10 +20,12 @@ export default async function Dashboard() {
   const firstName = user.name.split(" ")[0] ?? user.name;
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10 md:px-8">
+    <PageContainer>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-fg">Welcome back, {firstName}.</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-fg">
+            Welcome back, {firstName}.
+          </h1>
           <p className="mt-1 text-base text-fg-muted">
             {projects.length === 0
               ? "Let's build your first engineering foundation."
@@ -113,6 +116,6 @@ export default async function Dashboard() {
           </div>
         )}
       </section>
-    </div>
+    </PageContainer>
   );
 }

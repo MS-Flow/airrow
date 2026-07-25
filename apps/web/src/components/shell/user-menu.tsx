@@ -28,7 +28,7 @@ export function UserMenu({
         aria-label="Account menu"
         className="flex cursor-pointer items-center rounded-full transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-border bg-surface-raised text-2xs font-medium uppercase text-fg-muted">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-surface-raised text-xs font-medium uppercase text-fg-muted">
           {name.slice(0, 1)}
         </span>
       </DropdownTrigger>
