@@ -85,6 +85,18 @@ never hand-edited.
 
 ---
 
+## Security
+*Required by the constitution — every spec has one. "Nothing security-relevant here, and why" is a
+valid answer; silence is not.*
+
+- **New surface:** <what an attacker can now reach — a route, action, table, upload, external call — or
+  "none".>
+- **Who may reach it:** <how authorization is decided **server-side**; never from client-supplied ids.>
+- **Untrusted input:** <what is validated, and against what. Anything rendered is sanitized.>
+- **Secrets & logs:** <what must never appear in code, the client bundle, or a log line.>
+
+---
+
 ## Edge cases
 *Unusual inputs or states, and what should happen.*
 

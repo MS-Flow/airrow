@@ -6,7 +6,7 @@
 **Depends on:** [1-interview-generator.md](1-interview-generator.md) (the `template/` + `renderScaffold`
 split, whose app-wiring criterion is still open) · [6-fix-interview-template.md](6-fix-interview-template.md)
 (architecture-first interview)
-**Status:** 🔄 In progress
+**Status:** ✅ Done
 
 <!--
 Canonical single-file spec format for Airrow. One file per issue: specs/NNN-kort.md. It combines the
@@ -199,6 +199,9 @@ the new file set.
 - [x] The spec template is readable by a human skimming it — plain-language summary, status table, and
       "what goes here" hints — in both Airrow's own `.claude/spec-kit/spec-template.md` and the copy
       founders download in `template/`, and the two stay identical apart from `{{PROJECT_NAME}}`.
+- [x] Preview: a founder can edit any generated file, and go back to change the interview answers.
+- [x] The spec carries a Security note, and both spec templates gained a `## Security` section so the
+      constitution (§VI) and the template no longer disagree.
 - [x] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures).
 
 ### Verification
@@ -238,6 +241,19 @@ the new file set.
 ---
 
 ## Implementation notes
+- **`/analyze` findings (both fixed before closing).**
+  1. **No Security note — a constitution §VI violation.** The spec added a write path
+     (`saveGeneratedFileAction`) and never documented its authorization or input handling. The code was
+     already correct; the record was missing. Root cause was systemic: **the spec template itself had no
+     `## Security` section**, so the template contradicted the constitution it ships beside — and this
+     spec is the one that rewrote that template. A `## Security` section was added to both
+     `.claude/spec-kit/spec-template.md` and the `template/` copy, and the note written for this spec.
+  2. **Merge-integration drift.** Bringing develop's Supabase DataStore cutover into this work
+     (merge `f10db88`) required `updateArtifactFile` to become async and awaits to be added in
+     `preview/actions.ts`. Git auto-merged `store.ts` **cleanly but wrongly** — the sync function was
+     left calling the newly-async `loadArtifact`/`saveArtifact`, so the artifact would have been a
+     Promise at runtime; `preview/actions.ts` is a new file so git never inspected it at all. Both fixed
+     in the merge commit.
 - **Output shrank from ~30 authored files to 21 template files.** Dropped with the authored set:
   `context/*`, `prompts/PROMPT_LIBRARY.md`, `templates/*`, `docs/ROADMAP.md`,
   `docs/architecture/{ARCHITECTURE,TECH_STACK,DATABASE}.md`, `docs/standards/*`, `WORKFLOW.md`,
@@ -291,6 +307,32 @@ the new file set.
   byte-identical because `.claude/commands/{createspec,implement,analyze}.md` and
   `.claude/spec-kit/constitution.md` reference them in prose — renaming them would have broken the
   workflow contract for no readability gain. `{{PROJECT_NAME}}` in the downloaded copy is untouched.
+
+---
+
+## Security
+- **New surface.** One server action, `saveGeneratedFileAction`
+  ([`preview/actions.ts`](../apps/web/src/features/preview/actions.ts)) — the first write path into a
+  stored artifact. Everything else is read-only or engine-internal. `loadTemplate()` reads
+  `template/**` from disk, but only paths the repo itself ships; nothing user-supplied reaches the
+  filesystem.
+- **Who may reach it.** Authorization is decided server-side: `requireSession()` then
+  `getProject(org.id, projectId)` ([`:15-16`](../apps/web/src/features/preview/actions.ts#L15-L16)) —
+  a client-supplied project id that isn't in the caller's organization resolves to nothing. The
+  ZIP/preview read paths already scope the same way.
+- **Untrusted input.** `filePath` is **not** used as a filesystem path. It is matched against the
+  artifact's own file list ([`:24`](../apps/web/src/features/preview/actions.ts#L24)), so traversal
+  (`../`), absolute paths, and any name the engine did not emit are rejected before the write. Content
+  is stored as data and never executed; the preview keeps rendering it through DOMPurify
+  ([`PreviewBrowser.tsx:154`](../apps/web/src/features/preview/PreviewBrowser.tsx#L154)) — editing did
+  not introduce a `dangerouslySetInnerHTML` path for raw founder input. Empty content is refused so a
+  file cannot be silently blanked.
+- **Secrets & logs.** Nothing added to logs — the action returns typed errors and logs no answer
+  content or document bodies (§II). No secret is read, and the engine still reads no `process.env`.
+- **Known limitation (follow-up, not a blocker).** `updateArtifactFile` is a read-modify-write on the
+  artifact jsonb. Two concurrent edits to different files in the same foundation can lose one of them.
+  Harmless for the single-founder flow this ships for; a per-file write or optimistic concurrency check
+  is needed before multi-user editing.
 
 ---
 
