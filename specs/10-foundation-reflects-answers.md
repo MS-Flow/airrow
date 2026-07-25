@@ -311,28 +311,14 @@ the new file set.
 ---
 
 ## Security
-- **New surface.** One server action, `saveGeneratedFileAction`
-  ([`preview/actions.ts`](../apps/web/src/features/preview/actions.ts)) — the first write path into a
-  stored artifact. Everything else is read-only or engine-internal. `loadTemplate()` reads
-  `template/**` from disk, but only paths the repo itself ships; nothing user-supplied reaches the
-  filesystem.
-- **Who may reach it.** Authorization is decided server-side: `requireSession()` then
-  `getProject(org.id, projectId)` ([`:15-16`](../apps/web/src/features/preview/actions.ts#L15-L16)) —
-  a client-supplied project id that isn't in the caller's organization resolves to nothing. The
-  ZIP/preview read paths already scope the same way.
-- **Untrusted input.** `filePath` is **not** used as a filesystem path. It is matched against the
-  artifact's own file list ([`:24`](../apps/web/src/features/preview/actions.ts#L24)), so traversal
-  (`../`), absolute paths, and any name the engine did not emit are rejected before the write. Content
-  is stored as data and never executed; the preview keeps rendering it through DOMPurify
-  ([`PreviewBrowser.tsx:154`](../apps/web/src/features/preview/PreviewBrowser.tsx#L154)) — editing did
-  not introduce a `dangerouslySetInnerHTML` path for raw founder input. Empty content is refused so a
-  file cannot be silently blanked.
-- **Secrets & logs.** Nothing added to logs — the action returns typed errors and logs no answer
-  content or document bodies (§II). No secret is read, and the engine still reads no `process.env`.
-- **Known limitation (follow-up, not a blocker).** `updateArtifactFile` is a read-modify-write on the
-  artifact jsonb. Two concurrent edits to different files in the same foundation can lose one of them.
-  Harmless for the single-founder flow this ships for; a per-file write or optimistic concurrency check
-  is needed before multi-user editing.
+One new write path: `saveGeneratedFileAction`
+([`preview/actions.ts`](../apps/web/src/features/preview/actions.ts)). Authorization is decided
+server-side via `requireSession()` + `getProject(org.id, …)`, and `filePath` is matched against the
+artifact's own file list rather than used as a filesystem path — so traversal and unknown names are
+rejected before the write. Rendering stays DOMPurify-sanitized.
+
+**Follow-up:** `updateArtifactFile` is a read-modify-write on the artifact jsonb, so two concurrent
+edits can lose one. Fine for the single-founder flow; needs fixing before multi-user editing.
 
 ---
 

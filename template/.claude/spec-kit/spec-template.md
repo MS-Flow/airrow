@@ -94,14 +94,8 @@ never hand-edited.
 
 ## Security
 
-_Required by the constitution — every spec has one. "Nothing security-relevant here, and why" is a
-valid answer; silence is not._
-
-- **New surface:** what an attacker can now reach — a route, action, table, upload, external call — or
-  "none".
-- **Who may reach it:** how authorization is decided **server-side**; never from client-supplied ids.
-- **Untrusted input:** what is validated, and against what. Anything rendered is sanitized.
-- **Secrets & logs:** what must never appear in code, the client bundle, or a log line.
+_Two lines at most: what this opens up and who may reach it — or "nothing security-relevant, because …".
+Required by the constitution; silence is not an answer._
 
 ---
 
