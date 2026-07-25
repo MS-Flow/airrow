@@ -162,6 +162,63 @@
 
 }
 
+/* In-page anchors glide instead of snapping; the reduced-motion block below opts out. */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ── App rail ─────────────────────────────────────────────────────────────────
+   `--rail` is the space the app's left rail claims: zero by default, because outside the
+   app shell there is no rail and below `md` it is an overlay drawer that reserves nothing.
+   Registering it makes the variable itself animatable, so everything derived from it (the
+   shell's offset, the preview reader's inset, the centring correction) moves as one value.
+   Animating those properties separately is what made content jump and settle back. */
+@property --rail {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+:root {
+  --rail: 0px;
+}
+
+.app-shell {
+  transition: --rail 200ms var(--ease-out-quart);
+}
+
+@media (min-width: 48rem) {
+  .app-shell {
+    --rail: var(--rail-width, 0px);
+  }
+}
+
+/* Content that must not move with the rail: step back out of the shell's offset and centre
+   on the viewport instead, so collapsing the rail widens the margins rather than sliding
+   the page. A no-op outside the shell, where `--rail` is 0. */
+.viewport-column {
+  margin-left: calc(var(--rail) * -1);
+  width: calc(100% + var(--rail));
+}
+
+/* The preview reader keeps its text column in the same place while the rail and the file
+   tree move beside it, and stops short rather than sliding under the tree when the
+   viewport is too narrow to centre. */
+.preview-reader {
+  --tree: 0rem;
+  --measure: 48rem;
+  /* content-box, so the measure stays 48rem however large the centring inset grows. */
+  box-sizing: content-box;
+  max-width: var(--measure);
+  padding-left: max(2.5rem, calc((100vw - var(--measure)) / 2 - var(--rail) - var(--tree)));
+  padding-right: 2.5rem;
+}
+@media (min-width: 48rem) {
+  .preview-reader {
+    --tree: 18rem;
+  }
+}
+
 body {
   background: var(--color-bg);
   color: var(--color-fg);

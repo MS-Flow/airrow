@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { ChatSlot } from "@/components/shell/chat-slot";
+import { RailProvider } from "@/components/shell/rail";
 import { Sidebar, type GeneratingProject } from "@/components/shell/sidebar";
 import { ThemeSwitch } from "@/components/shell/theme-switch";
 import { TopBar } from "@/components/shell/top-bar";
@@ -54,9 +55,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <TooltipProvider delayDuration={200}>
       <Toaster>
-        <div className="flex min-h-screen bg-bg">
+        <RailProvider>
           <Sidebar generating={generating} />
-          <div className="flex min-w-0 flex-1 flex-col">
+          {/* The column starts where the rail ends, so the top bar and the preview's file
+              tree move with it. Centred page content opts back out to the viewport via
+              `.viewport-column`, which is why it never shifts. `--rail` animates itself, so
+              nothing here needs its own transition. */}
+          <div className="flex min-w-0 flex-1 flex-col pl-(--rail)">
             <TopBar
               projectNames={projectNames}
               themeSwitch={<ThemeSwitch current={theme} />}
@@ -67,7 +72,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <main className="flex-1">{children}</main>
           </div>
           <ChatSlot />
-        </div>
+        </RailProvider>
         <CommandPalette items={commands} />
         <ClaimGuestDraft />
       </Toaster>

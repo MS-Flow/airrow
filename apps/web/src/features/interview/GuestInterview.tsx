@@ -47,7 +47,7 @@ export function GuestInterview() {
   /* ── Step 1: the basics, mirroring /app/projects/new ──────────────────── */
   if (!basics) {
     return (
-      <div className="mx-auto max-w-xl animate-slide-up px-6 py-16 md:px-8">
+      <div className="mx-auto max-w-xl animate-slide-up px-6 py-16">
         <div className="flex items-center justify-between gap-4">
           <p className="font-mono text-xs text-fg-faint">Step 1 of 2 — the basics</p>
           <Progress value={50} aria-label="Setup progress" className="w-32" />

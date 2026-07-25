@@ -15,18 +15,21 @@ export function Breadcrumbs({ items, className }: { items: Crumb[]; className?: 
         const last = i === items.length - 1;
         return (
           <span key={`${item.label}-${i}`} className="flex min-w-0 items-center gap-1.5">
-            {i > 0 ? <ChevronRight className="size-3.5 shrink-0 text-fg-faint" /> : null}
+            {i > 0 ? <ChevronRight className="size-4 shrink-0 text-fg-faint" /> : null}
             {item.href && !last ? (
               <Link
                 href={item.href}
-                className="truncate text-sm text-fg-muted transition-colors hover:text-fg"
+                className="truncate text-lg text-fg-muted transition-colors hover:text-fg"
               >
                 {item.label}
               </Link>
             ) : (
               <span
                 aria-current={last ? "page" : undefined}
-                className={cn("truncate text-sm", last ? "text-fg" : "text-fg-muted")}
+                className={cn(
+                  "truncate text-lg",
+                  last ? "font-medium text-fg" : "text-fg-muted"
+                )}
               >
                 {item.label}
               </span>
