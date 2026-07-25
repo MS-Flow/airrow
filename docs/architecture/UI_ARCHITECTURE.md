@@ -86,6 +86,7 @@ to work. Below ~24px the mark drops the gradient for flat `currentColor`.
 
 ```
 /                                  Landing
+/start                             Signed-out interview — no account until "generate" (spec 11)
 /login  /signup                    Auth — email+password live; Google/GitHub/Email/magic-link disabled
 /app                               Dashboard: continue, recent projects, recent generations
 /app/projects                      Project list
@@ -93,15 +94,15 @@ to work. Below ~24px the mark drops the gradient for flat `currentColor`.
 /app/projects/[id]                 Project workspace
 /app/projects/[id]/interview       Adaptive interview
 /app/projects/[id]/generating      Live generation
-/app/projects/[id]/preview         Repo browser (tree + reader + editor)
-/app/projects/[id]/docs            Documentation reader for the generated docs
+/app/projects/[id]/preview         Repo browser (tree + reader + editor) — the one view of the output
 /app/projects/[id]/continue        "Continue locally" handoff
-/app/templates  /app/prompts       Coming soon
 /app/settings                      Profile, theme, workspace, connections
 ```
 
 Shell: collapsible sidebar + sticky top bar with breadcrumbs derived from the URL + ⌘K command
-palette + a reserved `ChatSlot` column for the future repository-aware assistant.
+palette + a reserved `ChatSlot` column for the future repository-aware assistant. The sidebar logo
+links to `/`, not `/app` — the rail already has Projects. Theme switch and account menu sit top-right
+in both the app top bar and the landing header; the theme is a cookie, so the switch works signed out.
 
 ## Responsive
 

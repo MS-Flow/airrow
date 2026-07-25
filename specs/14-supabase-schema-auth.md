@@ -7,7 +7,7 @@
 **Split from this spec:** real Supabase Auth (email + password login/logout, `handle_new_user()`
 signup trigger on `auth.users`, `profiles.id → auth.users` FK, `resolveSession` via the Supabase
 SSR session) is a **follow-up auth issue** — not built here. See Out of scope.
-**Status:** 🔄 In progress
+**Status:** ✅ Done
 
 <!-- Status legend: ⏳ Not started · 🔄 In progress · ✅ Done -->
 

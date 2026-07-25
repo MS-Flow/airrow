@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
-import { ArrowRight, BookOpen, Download, Undo2 } from "lucide-react";
+import { ArrowRight, Download, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LoadingState } from "@/components/ui/states";
 import { requireSession } from "@/lib/auth";
@@ -57,12 +57,6 @@ export default async function PreviewPage({
             <Link href={`/app/projects/${id}/interview`}>
               <Undo2 className="size-3.5" />
               Change answers
-            </Link>
-          </Button>
-          <Button variant="ghost" size="sm" asChild>
-            <Link href={`/app/projects/${id}/docs`}>
-              <BookOpen className="size-3.5" />
-              Docs
             </Link>
           </Button>
           <Button size="sm" asChild>

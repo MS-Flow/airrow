@@ -4,7 +4,7 @@
 **Branch:** `1-interview-generator` (from `feature/interview-generator`)
 **Feature:** Generation
 **Depends on:** the canonical template in `template/` and the resolved `ProjectModel` (`packages/schemas`).
-**Status:** 🔄 In progress
+**Status:** ✅ Done
 
 <!-- Status legend: ⏳ Not started · 🔄 In progress · ✅ Done -->
 

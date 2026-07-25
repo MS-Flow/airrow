@@ -6,6 +6,7 @@
 // The Supabase client uses the service-role key and therefore bypasses RLS — every query
 // here is additionally scoped by organization_id server-side (defense in depth, §II).
 import crypto from "node:crypto";
+import { cache } from "react";
 import type {
   InterviewAnswers,
   JobStage,
@@ -212,7 +213,12 @@ export async function setDisplayName(userId: string, name: string): Promise<void
 
 /* ── Projects (always org-scoped) ─────────────────────────────────────────── */
 
-export async function listProjects(orgId: string): Promise<ProjectRecord[]> {
+/**
+ * Memoised per request: the app shell and the dashboard each need the project list, and
+ * without this a single `/app` render queried it twice. `cache()` is scoped to one
+ * request, so a mutation followed by a fresh navigation still reads current data.
+ */
+export const listProjects = cache(async (orgId: string): Promise<ProjectRecord[]> => {
   const data = rows<ProjectRow>(
     await db()
       .from("projects")
@@ -221,7 +227,7 @@ export async function listProjects(orgId: string): Promise<ProjectRecord[]> {
       .order("updated_at", { ascending: false })
   );
   return data.map(toProject);
-}
+});
 
 export async function getProject(orgId: string, projectId: string): Promise<ProjectRecord | null> {
   const row = maybe<ProjectRow>(

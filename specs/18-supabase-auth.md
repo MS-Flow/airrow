@@ -5,7 +5,7 @@
 **Feature:** Infrastructure
 **Depends on:** [`14-supabase-schema-auth`](14-supabase-schema-auth.md) — the Supabase schema and
 DataStore cutover, which left `profiles.id → auth.users` unlinked and kept a dev-auth bridge.
-**Status:** 🔄 In progress
+**Status:** ✅ Done
 
 <!-- Status legend: ⏳ Not started · 🔄 In progress · ✅ Done -->
 
