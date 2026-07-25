@@ -15,14 +15,14 @@ export async function createProjectAction(formData: FormData): Promise<void> {
     description: formData.get("description")
   });
   if (!parsed.success) redirect("/app/projects/new?error=1");
-  const project = createProject(org.id, parsed.data.name, parsed.data.description, slugify);
+  const project = await createProject(org.id, parsed.data.name, parsed.data.description, slugify);
   redirect(`/app/projects/${project.id}/interview`);
 }
 
 export async function deleteProjectAction(formData: FormData): Promise<void> {
   const { org } = await requireSession();
   const id = String(formData.get("projectId") ?? "");
-  if (getProject(org.id, id)) deleteProject(org.id, id);
+  if (await getProject(org.id, id)) await deleteProject(org.id, id);
   revalidatePath("/app");
   redirect("/app");
 }
