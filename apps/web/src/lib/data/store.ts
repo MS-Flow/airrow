@@ -1,11 +1,10 @@
-// DataStore. Org-scoped domain data lives in Supabase (issue #14); the dev-auth bridge
-// (users + sessions) stays on the local .data/ JSON file until real Supabase Auth lands.
+// DataStore. Org-scoped domain data lives in Supabase (issue #14). Identity comes from
+// Supabase Auth (issue #18) — resolved in lib/auth.ts; this module only maps auth user
+// ids to their organization via getOrgForUser.
 // Server-side only: imported exclusively from RSC, actions, and route handlers.
 //
 // The Supabase client uses the service-role key and therefore bypasses RLS — every query
 // here is additionally scoped by organization_id server-side (defense in depth, §II).
-import fs from "node:fs";
-import path from "node:path";
 import crypto from "node:crypto";
 import type {
   InterviewAnswers,
@@ -22,12 +21,6 @@ export interface UserRecord {
   id: string;
   email: string;
   name: string;
-  createdAt: string;
-}
-
-export interface SessionRecord {
-  token: string;
-  userId: string;
   createdAt: string;
 }
 
@@ -196,127 +189,25 @@ const toJob = (r: JobRow): JobRecord => ({
   finishedAt: r.finished_at
 });
 
-/* ── Dev-auth bridge: users + sessions on the .data/ file store ───────────── */
+/* ── Organization resolution (identity comes from Supabase Auth, in lib/auth.ts) ── */
 
-interface BridgeDb {
-  users: UserRecord[];
-  sessions: SessionRecord[];
-}
-const EMPTY_BRIDGE: BridgeDb = { users: [], sessions: [] };
-
-function findRepoRoot(): string {
-  let dir = process.cwd();
-  for (let i = 0; i < 6; i++) {
-    if (fs.existsSync(path.join(dir, "pnpm-workspace.yaml"))) return dir;
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return process.cwd();
-}
-
-const DATA_DIR = process.env.AIRROW_DATA_DIR ?? path.join(findRepoRoot(), ".data");
-const DB_PATH = path.join(DATA_DIR, "bridge.json");
-
-function loadBridge(): BridgeDb {
-  try {
-    const raw = fs.readFileSync(DB_PATH, "utf8");
-    return { ...EMPTY_BRIDGE, ...(JSON.parse(raw) as Partial<BridgeDb>) };
-  } catch {
-    return structuredClone(EMPTY_BRIDGE);
-  }
-}
-
-function saveBridge(bridge: BridgeDb): void {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const tmp = DB_PATH + ".tmp";
-  fs.writeFileSync(tmp, JSON.stringify(bridge, null, 2), "utf8");
-  fs.renameSync(tmp, DB_PATH);
-}
-
-function mutateBridge<T>(fn: (bridge: BridgeDb) => T): T {
-  const bridge = loadBridge();
-  const out = fn(bridge);
-  saveBridge(bridge);
-  return out;
-}
-
-/* ── Users / auth (bridge) ────────────────────────────────────────────────── */
-
-/** Create the user (bridge) plus their personal org + owner membership (Supabase). */
-export async function upsertUserByEmail(email: string, name: string): Promise<UserRecord> {
-  const lower = email.toLowerCase();
-  const existing = loadBridge().users.find((u) => u.email === lower);
-  if (existing) return existing;
-
-  const user: UserRecord = { id: uid(), email: lower, name, createdAt: now() };
-  const orgId = uid();
-  single<OrgRow>(
-    await db()
-      .from("organizations")
-      .insert({ id: orgId, name: `${name}'s workspace`, kind: "personal", created_by: user.id })
-      .select("id, name, kind, created_by")
-      .single()
-  );
-  const memberRes = await db()
-    .from("organization_members")
-    .insert({ organization_id: orgId, user_id: user.id, role: "owner" });
-  if (memberRes.error) throw new Error(`Supabase: ${memberRes.error.message}`);
-
-  mutateBridge((bridge) => {
-    bridge.users.push(user);
-  });
-  return user;
-}
-
-export function updateUserName(userId: string, name: string): void {
-  mutateBridge((bridge) => {
-    const u = bridge.users.find((x) => x.id === userId);
-    if (u) u.name = name;
-  });
-}
-
-export function createSession(userId: string): SessionRecord {
-  return mutateBridge((bridge) => {
-    const s: SessionRecord = {
-      token: crypto.randomBytes(24).toString("hex"),
-      userId,
-      createdAt: now()
-    };
-    bridge.sessions.push(s);
-    return s;
-  });
-}
-
-export function deleteSession(token: string): void {
-  mutateBridge((bridge) => {
-    bridge.sessions = bridge.sessions.filter((s) => s.token !== token);
-  });
-}
-
-export interface SessionContext {
-  user: UserRecord;
-  org: OrgRecord;
-}
-
-/** Resolve session + user from the bridge, then the user's org from Supabase. */
-export async function resolveSession(token: string): Promise<SessionContext | null> {
-  const bridge = loadBridge();
-  const session = bridge.sessions.find((x) => x.token === token);
-  if (!session) return null;
-  const user = bridge.users.find((u) => u.id === session.userId);
-  if (!user) return null;
-
+/** The organization a user belongs to (their personal org). Null if none yet. */
+export async function getOrgForUser(userId: string): Promise<OrgRecord | null> {
   const memberships = rows<{ organization_id: string }>(
-    await db().from("organization_members").select("organization_id").eq("user_id", user.id)
+    await db().from("organization_members").select("organization_id").eq("user_id", userId)
   );
   const orgId = memberships[0]?.organization_id;
   if (!orgId) return null;
   const org = maybe<OrgRow>(
     await db().from("organizations").select("id, name, kind, created_by").eq("id", orgId).maybeSingle()
   );
-  if (!org) return null;
-  return { user, org: toOrg(org) };
+  return org ? toOrg(org) : null;
+}
+
+/** Keep profiles.display_name in sync with the auth user's name. */
+export async function setDisplayName(userId: string, name: string): Promise<void> {
+  const res = await db().from("profiles").update({ display_name: name }).eq("id", userId);
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
 }
 
 /* ── Projects (always org-scoped) ─────────────────────────────────────────── */

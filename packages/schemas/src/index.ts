@@ -73,8 +73,12 @@ export const profileUpdateSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  name: z.string().trim().min(1).max(80),
-  email: z.string().trim().email().max(200)
+  email: z.string().trim().email().max(200),
+  password: z.string().min(8).max(200)
+});
+
+export const signupSchema = loginSchema.extend({
+  name: z.string().trim().min(1).max(80)
 });
 
 /** Validate a COMPLETE answer set: every visible question answered with a valid value. */

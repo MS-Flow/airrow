@@ -2,15 +2,15 @@
 
 > **In one sentence:** <what changes and why it matters, in plain language.>
 
-|                |                                        |
-| -------------- | -------------------------------------- |
-| **Status**     | ⏳ Not started                          |
-| **Issue**      | #NNN — "<issue title>"                 |
-| **Branch**     | `NNN-kort` (from `feature/<name>`)     |
-| **Feature**    | <area>                                 |
-| **Depends on** | <links to other specs, or "nothing">   |
+|                |                                      |
+| -------------- | ------------------------------------ |
+| **Status**     | ⏳ Not started                       |
+| **Issue**      | #NNN — "<issue title>"               |
+| **Branch**     | `NNN-kort` (from `feature/<name>`)   |
+| **Feature**    | <area>                               |
+| **Depends on** | <links to other specs, or "nothing"> |
 
-**Short on time?** Read *User story* and *Acceptance criteria* — that's the whole point of the change and
+**Short on time?** Read _User story_ and _Acceptance criteria_ — that's the whole point of the change and
 how you'll know it's done. Everything after those is detail for whoever implements and reviews it.
 
 <!--
@@ -25,15 +25,17 @@ Keep the section names as they are — the slash commands and the constitution r
 ---
 
 ## User story
-*Who wants this, and what they get out of it.*
+
+_Who wants this, and what they get out of it._
 
 As a **<role>** I want **<capability>** so that **<outcome>**.
 
 ---
 
 ## Background
-*How things work today and what's wrong with that — grounded in real code (`file:line` links added
-during `/implement`).*
+
+_How things work today and what's wrong with that — grounded in real code (`file:line` links added
+during `/implement`)._
 
 - **Today:** <what exists and where>
 - **The problem:** <the gap or root cause>
@@ -42,7 +44,8 @@ during `/implement`).*
 ---
 
 ## Design decision
-*The approach we picked, and what we deliberately leave alone.*
+
+_The approach we picked, and what we deliberately leave alone._
 
 <The chosen approach in 1–3 sentences.>
 
@@ -51,14 +54,16 @@ during `/implement`).*
 ---
 
 ## Acceptance criteria
-*What "done" means. Every line is something a reviewer can check.*
+
+_What "done" means. Every line is something a reviewer can check._
 
 - [ ] <specific, testable outcome>
 - [ ] <…>
 - [ ] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures).
 
 ### Verification
-*How each criterion above is proven.*
+
+_How each criterion above is proven._
 
 - **New tests** — `<path>`: <what they cover>.
 - <Criterion → the test, the existing wiring, or the manual check that proves it.>
@@ -67,9 +72,10 @@ during `/implement`).*
 ---
 
 ## Exact changes (file:line)
-*The plan, for whoever implements it. Every change grounded in current code; expanded by `/implement`.*
 
-1. **`<path>`** — <what and why>, at ([:NNN](<link>)).
+_The plan, for whoever implements it. Every change grounded in current code; expanded by `/implement`._
+
+1. **`<path>`** — <what and why>, at ([:NNN](link)).
 2. **`<path>`** — <what and why>.
 
 **No change needed:** <what already handles this, and why.>
@@ -77,7 +83,8 @@ during `/implement`).*
 ---
 
 ## Data model
-*Any database change. Most specs have none — say so plainly.*
+
+_Any database change. Most specs have none — say so plainly._
 
 **No schema changes.** — OR — a new table/column sketch. Any DB work follows the data invariants in the
 constitution: access control ships with the new resource, migrations are idempotent, and the schema is
@@ -86,25 +93,28 @@ never hand-edited.
 ---
 
 ## Security
-*Required by the constitution — every spec has one. "Nothing security-relevant here, and why" is a
-valid answer; silence is not.*
 
-- **New surface:** <what an attacker can now reach — a route, action, table, upload, external call — or
-  "none".>
-- **Who may reach it:** <how authorization is decided **server-side**; never from client-supplied ids.>
-- **Untrusted input:** <what is validated, and against what. Anything rendered is sanitized.>
-- **Secrets & logs:** <what must never appear in code, the client bundle, or a log line.>
+_Required by the constitution — every spec has one. "Nothing security-relevant here, and why" is a
+valid answer; silence is not._
+
+- **New surface:** what an attacker can now reach — a route, action, table, upload, external call — or
+  "none".
+- **Who may reach it:** how authorization is decided **server-side**; never from client-supplied ids.
+- **Untrusted input:** what is validated, and against what. Anything rendered is sanitized.
+- **Secrets & logs:** what must never appear in code, the client bundle, or a log line.
 
 ---
 
 ## Edge cases
-*Unusual inputs or states, and what should happen.*
+
+_Unusual inputs or states, and what should happen._
 
 - <input/state → expected behaviour>
 
 ---
 
 ## Out of scope
-*Deliberately excluded, so nobody wonders whether it was forgotten.*
+
+_Deliberately excluded, so nobody wonders whether it was forgotten._
 
 - <excluded item, with a one-line reason or a follow-up pointer>
