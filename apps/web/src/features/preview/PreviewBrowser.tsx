@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Check, ChevronDown, ChevronRight, FileText, Pencil, X } from "lucide-react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { Button } from "@/components/ui";
+import { Button } from "@/components/ui/button";
+import { InlineError } from "@/components/ui/states";
 import { cn } from "@/lib/utils";
 import { saveGeneratedFileAction } from "./actions";
 
@@ -70,7 +71,7 @@ function Dir({
         <button
           type="button"
           onClick={() => toggle(dir.path)}
-          className="flex w-full cursor-pointer items-center gap-1 rounded px-2 py-1 text-left font-mono text-[13px] text-fg-muted transition-colors hover:text-fg"
+          className="flex w-full cursor-pointer items-center gap-1 rounded px-2 py-1 text-left font-mono text-sm text-fg-muted transition-colors hover:text-fg"
           style={{ paddingLeft: `${depth * 12 + 4}px` }}
         >
           {open ? <ChevronDown className="size-3 shrink-0" /> : <ChevronRight className="size-3 shrink-0" />}
@@ -88,8 +89,8 @@ function Dir({
               type="button"
               onClick={() => onSelect(f.path)}
               className={cn(
-                "flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-left font-mono text-[13px] transition-colors",
-                active === f.path ? "bg-accent-muted text-accent" : "text-fg-muted hover:bg-surface hover:text-fg"
+                "flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-left font-mono text-sm transition-colors",
+                active === f.path ? "bg-accent-soft text-fg" : "text-fg-muted hover:bg-surface hover:text-fg"
               )}
               style={{ paddingLeft: `${(depth + (dir.name ? 1 : 0)) * 12 + 8}px` }}
             >
@@ -103,7 +104,19 @@ function Dir({
   );
 }
 
-export function PreviewBrowser({ files, projectId }: { files: PreviewFile[]; projectId: string }) {
+export function PreviewBrowser({
+  files,
+  projectId,
+  highlightedHtml,
+  highlightedFor
+}: {
+  files: PreviewFile[];
+  projectId: string;
+  /** Server-highlighted, already-sanitized HTML for the active code file. */
+  highlightedHtml: string | null;
+  /** The path `highlightedHtml` belongs to — stale markup is never rendered. */
+  highlightedFor: string | null;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const byPath = useMemo(() => new Map(files.map((f) => [f.path, f.content])), [files]);
@@ -180,9 +193,10 @@ export function PreviewBrowser({ files, projectId }: { files: PreviewFile[]; pro
     });
   }, [active, draft, projectId, router]);
 
+  // The tree and reader fill the viewport below the app top bar and preview header.
   return (
-    <div className="flex h-[calc(100vh-57px)]">
-      <aside className="w-72 shrink-0 overflow-y-auto border-r border-border bg-bg-subtle p-3">
+    <div className="flex h-[calc(100vh-7rem)]">
+      <aside className="w-72 shrink-0 overflow-y-auto border-r border-border bg-bg-subtle p-3 max-md:hidden">
         <Dir dir={tree} depth={0} active={active} onSelect={select} openSet={openSet} toggle={toggle} />
       </aside>
       <div className="flex-1 overflow-y-auto">
@@ -208,23 +222,24 @@ export function PreviewBrowser({ files, projectId }: { files: PreviewFile[]; pro
             )}
           </div>
 
-          {error ? (
-            <p className="mb-4 rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
-              {error}
-            </p>
-          ) : null}
+          {error ? <InlineError className="mb-4">{error}</InlineError> : null}
 
           {editing ? (
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               spellCheck={false}
-              className="h-[60vh] w-full resize-y rounded-lg border border-border bg-bg-subtle p-4 font-mono text-[13px] leading-relaxed text-fg outline-none focus:border-accent"
+              className="h-[60vh] w-full resize-y rounded-lg border border-border bg-bg-subtle p-4 font-mono text-sm leading-relaxed text-fg outline-none focus:border-accent"
             />
           ) : isMarkdown ? (
             <div className="prose-airrow" dangerouslySetInnerHTML={{ __html: html }} />
+          ) : highlightedFor === active && highlightedHtml ? (
+            <div
+              className="overflow-x-auto rounded-lg border border-border text-sm leading-relaxed [&_pre]:p-4"
+              dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+            />
           ) : (
-            <pre className="overflow-x-auto rounded-lg border border-border bg-bg-subtle p-4 font-mono text-[13px] leading-relaxed text-fg">
+            <pre className="overflow-x-auto rounded-lg border border-border bg-bg-subtle p-4 font-mono text-sm leading-relaxed text-fg">
               {content}
             </pre>
           )}

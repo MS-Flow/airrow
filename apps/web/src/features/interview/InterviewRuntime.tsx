@@ -12,7 +12,12 @@ import {
   type InterviewAnswers,
   type Question
 } from "@airrow/schemas";
-import { Button, Card, Spinner, Textarea } from "@/components/ui";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { Spinner } from "@/components/ui/spinner";
+import { InlineError } from "@/components/ui/states";
 import { cn } from "@/lib/utils";
 import { saveAnswersAction, submitInterviewAction } from "./actions";
 
@@ -96,14 +101,14 @@ export function InterviewRuntime({ projectId, projectName, initialAnswers, regen
   /* ── Review screen (F-301 FR-5) ─────────────────────────────────────── */
   if (mode === "review") {
     return (
-      <div className="mx-auto max-w-2xl px-8 py-12">
-        <p className="font-mono text-xs text-accent">{regenerating ? "Change answers" : "Review"}</p>
-        <h1 className="mt-2 text-xl font-semibold tracking-tight text-fg">
+      <div className="mx-auto max-w-2xl animate-slide-up px-6 py-12 md:px-8">
+        <p className="font-mono text-xs text-fg-faint">{regenerating ? "Change answers" : "Review"}</p>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-fg">
           {regenerating
             ? `Regenerate ${projectName}'s foundation`
             : `Ready to generate ${projectName}'s foundation`}
         </h1>
-        <p className="mt-1.5 text-sm text-fg-muted">
+        <p className="mt-2 text-base leading-relaxed text-fg-muted">
           {regenerating
             ? "Change any answer, then regenerate. This builds a fresh foundation — edits you made to the current files are not carried over."
             : "Check your answers — each one shapes the output. Generation takes under a minute."}
@@ -112,8 +117,8 @@ export function InterviewRuntime({ projectId, projectName, initialAnswers, regen
           {visible.map((q) => (
             <div key={q.id} className="flex items-start justify-between gap-4 px-5 py-3.5">
               <div className="min-w-0">
-                <p className="text-[13px] text-fg-muted">{q.title}</p>
-                <p className="mt-0.5 truncate text-sm font-medium text-fg">
+                <p className="text-sm text-fg-muted">{q.title}</p>
+                <p className="mt-0.5 truncate text-base font-medium text-fg">
                   {answerLabel(q, answers)}
                 </p>
               </div>
@@ -133,15 +138,11 @@ export function InterviewRuntime({ projectId, projectName, initialAnswers, regen
           ))}
         </Card>
         {!complete ? (
-          <p className="mt-4 rounded-md border border-border bg-surface px-3 py-2 text-[13px] text-fg-muted">
+          <p className="mt-4 rounded-md border border-border bg-surface px-3 py-2 text-sm text-fg-muted">
             Some questions are still unanswered — edit above to finish them.
           </p>
         ) : null}
-        {error ? (
-          <p className="mt-4 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-[13px] text-danger">
-            {error}
-          </p>
-        ) : null}
+        {error ? <InlineError className="mt-4">{error}</InlineError> : null}
         <div className="mt-6 flex items-center justify-between gap-4">
           {regenerating ? (
             <Button
@@ -175,25 +176,27 @@ export function InterviewRuntime({ projectId, projectName, initialAnswers, regen
 
   /* ── Question screen ─────────────────────────────────────────────────── */
   return (
-    <div className="mx-auto max-w-2xl px-8 py-12">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-2xl px-6 py-12 md:px-8">
+      <div className="flex items-center justify-between gap-4">
         <p className="font-mono text-xs text-fg-faint">
           {projectName} · question {Math.min(cursor + 1, visible.length)} of {visible.length}
         </p>
-        <div className="h-1 w-32 overflow-hidden rounded-full bg-surface-raised">
-          <div
-            className="h-full bg-accent transition-all duration-300"
-            style={{ width: `${((cursor + 1) / visible.length) * 100}%` }}
-          />
-        </div>
+        <Progress
+          value={((cursor + 1) / visible.length) * 100}
+          aria-label="Interview progress"
+          className="w-32"
+        />
       </div>
 
-      <h1 className="mt-6 text-xl font-semibold tracking-tight text-fg">{current.title}</h1>
+      {/* Keyed on the question so each step animates in rather than swapping. */}
+      <h1 key={`${current.id}-title`} className="mt-6 animate-slide-up text-2xl font-semibold tracking-tight text-fg">
+        {current.title}
+      </h1>
       {current.help ? (
-        <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">{current.help}</p>
+        <p className="mt-2 animate-slide-up text-base leading-relaxed text-fg-muted">{current.help}</p>
       ) : null}
 
-      <div className="mt-6">
+      <div key={current.id} className="mt-6 animate-slide-up">
         {current.type === "single" && current.options ? (
           <div className="grid gap-2 sm:grid-cols-2">
             {current.options.map((o) => {
@@ -207,15 +210,15 @@ export function InterviewRuntime({ projectId, projectName, initialAnswers, regen
                     setTimeout(advance, 160);
                   }}
                   className={cn(
-                    "cursor-pointer rounded-lg border px-4 py-3.5 text-left transition-colors",
+                    "cursor-pointer rounded-lg border px-4 py-3.5 text-left transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
                     selected
-                      ? "border-accent bg-accent-muted"
-                      : "border-border bg-surface hover:border-border-strong"
+                      ? "border-accent bg-accent-soft"
+                      : "border-border bg-surface hover:border-border-strong hover:shadow-e2"
                   )}
                 >
-                  <span className="block text-sm font-medium text-fg">{o.label}</span>
+                  <span className="block text-base font-medium text-fg">{o.label}</span>
                   {o.description ? (
-                    <span className="mt-0.5 block text-[13px] leading-snug text-fg-muted">
+                    <span className="mt-0.5 block text-sm leading-snug text-fg-muted">
                       {o.description}
                     </span>
                   ) : null}
@@ -240,24 +243,24 @@ export function InterviewRuntime({ projectId, projectName, initialAnswers, regen
                       setAnswer(current.id, next);
                     }}
                     className={cn(
-                      "flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 text-left transition-colors",
+                      "flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 text-left transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
                       selected
-                        ? "border-accent bg-accent-muted"
-                        : "border-border bg-surface hover:border-border-strong"
+                        ? "border-accent bg-accent-soft"
+                        : "border-border bg-surface hover:border-border-strong hover:shadow-e2"
                     )}
                   >
                     <span
                       className={cn(
                         "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border",
-                        selected ? "border-accent bg-accent text-bg" : "border-border-strong"
+                        selected ? "border-fg bg-fg text-bg" : "border-border-strong"
                       )}
                     >
                       {selected ? <Check className="size-3" /> : null}
                     </span>
                     <span>
-                      <span className="block text-sm font-medium text-fg">{o.label}</span>
+                      <span className="block text-base font-medium text-fg">{o.label}</span>
                       {o.description ? (
-                        <span className="mt-0.5 block text-[13px] leading-snug text-fg-muted">
+                        <span className="mt-0.5 block text-sm leading-snug text-fg-muted">
                           {o.description}
                         </span>
                       ) : null}
@@ -294,7 +297,7 @@ export function InterviewRuntime({ projectId, projectName, initialAnswers, regen
               }}
             />
             <div className="mt-5 flex items-center justify-between">
-              <span className="font-mono text-[11px] text-fg-faint">⌘↵ to continue</span>
+              <span className="font-mono text-2xs text-fg-faint">⌘↵ to continue</span>
               <Button onClick={advance} disabled={typeof value !== "string" || !value.trim()}>
                 Continue
               </Button>
@@ -310,7 +313,7 @@ export function InterviewRuntime({ projectId, projectName, initialAnswers, regen
             if (cursor > 0) return setCursor((c) => Math.max(0, c - 1));
             router.push(regenerating ? `/app/projects/${projectId}/preview` : "/app");
           }}
-          className="flex cursor-pointer items-center gap-1.5 text-[13px] text-fg-muted transition-colors hover:text-fg"
+          className="flex cursor-pointer items-center gap-1.5 text-sm text-fg-muted transition-colors hover:text-fg"
         >
           <ArrowLeft className="size-3.5" />
           {cursor > 0 ? "Previous question" : regenerating ? "Back to the foundation" : "Back to projects"}
@@ -319,7 +322,7 @@ export function InterviewRuntime({ projectId, projectName, initialAnswers, regen
           <button
             type="button"
             onClick={() => setMode("review")}
-            className="cursor-pointer text-[13px] text-fg-muted transition-colors hover:text-fg"
+            className="cursor-pointer text-sm text-fg-muted transition-colors hover:text-fg"
           >
             Skip to review →
           </button>

@@ -1,88 +1,138 @@
-// Dashboard (F-205 FR-2): projects + one primary action.
+// Dashboard: what you were doing, what to do next, and what is coming.
 import Link from "next/link";
-import { Plus, ArrowRight } from "lucide-react";
-import { Badge, Button, Card } from "@/components/ui";
+import { ArrowRight, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardBody } from "@/components/ui/card";
+import { ComingSoon, EmptyState } from "@/components/ui/states";
+import { ProjectRow, nextRoute } from "@/features/projects/ProjectCard";
 import { requireSession } from "@/lib/auth";
-import { listProjects, type ProjectStatus } from "@/lib/data/store";
+import { listProjects } from "@/lib/data/store";
 import { timeAgo } from "@/lib/utils";
 
-const statusMeta: Record<ProjectStatus, { label: string; tone: "neutral" | "accent" | "success" | "danger" }> = {
-  interviewing: { label: "Interview in progress", tone: "accent" },
-  generating: { label: "Generating", tone: "accent" },
-  ready: { label: "Ready", tone: "success" },
-  failed: { label: "Generation failed", tone: "danger" }
-};
-
-const nextRoute: Record<ProjectStatus, (id: string) => string> = {
-  interviewing: (id) => `/app/projects/${id}/interview`,
-  generating: (id) => `/app/projects/${id}/generating`,
-  ready: (id) => `/app/projects/${id}`,
-  failed: (id) => `/app/projects/${id}`
-};
-
-export const metadata = { title: "Projects" };
+export const metadata = { title: "Dashboard" };
 
 export default async function Dashboard() {
   const { org, user } = await requireSession();
   const projects = await listProjects(org.id);
+  const recent = projects.slice(0, 4);
+  const inFlight = projects.find((p) => p.status === "interviewing" || p.status === "generating");
+  const firstName = user.name.split(" ")[0] ?? user.name;
 
   return (
-    <div className="mx-auto max-w-4xl px-8 py-10">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-6xl px-6 py-10 md:px-8">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-fg">Projects</h1>
-          <p className="mt-1 text-sm text-fg-muted">
+          <h1 className="text-xl font-semibold tracking-tight text-fg">Welcome back, {firstName}.</h1>
+          <p className="mt-1 text-base text-fg-muted">
             {projects.length === 0
-              ? `Welcome, ${user.name.split(" ")[0]}.`
+              ? "Let's build your first engineering foundation."
               : `${projects.length} project${projects.length === 1 ? "" : "s"} in ${org.name}`}
           </p>
         </div>
-        <Link href="/app/projects/new">
-          <Button>
+        <Button asChild>
+          <Link href="/app/projects/new">
             <Plus className="size-4" />
             New project
-          </Button>
-        </Link>
+          </Link>
+        </Button>
       </div>
 
-      {projects.length === 0 ? (
-        <Card className="mt-10 flex flex-col items-center px-8 py-16 text-center">
-          <div className="flex size-12 items-center justify-center rounded-lg border border-border bg-surface-raised font-mono text-lg text-accent">
-            →
-          </div>
-          <h2 className="mt-5 text-[15px] font-semibold text-fg">Create your first project</h2>
-          <p className="mt-2 max-w-sm text-sm leading-relaxed text-fg-muted">
-            Describe your product, answer the CTO interview, and Airrow generates your complete
-            engineering foundation — ready for Claude Code.
-          </p>
-          <Link href="/app/projects/new" className="mt-6">
-            <Button>Start the interview</Button>
-          </Link>
-        </Card>
-      ) : (
-        <div className="mt-8 space-y-2">
-          {projects.map((p) => {
-            const meta = statusMeta[p.status];
-            return (
-              <Link key={p.id} href={nextRoute[p.status](p.id)} className="block">
-                <Card className="group flex items-center justify-between px-5 py-4 transition-colors hover:border-border-strong">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-3">
-                      <span className="truncate text-[15px] font-medium text-fg">{p.name}</span>
-                      <Badge tone={meta.tone}>{meta.label}</Badge>
-                    </div>
-                    <p className="mt-1 truncate text-[13px] text-fg-muted">{p.description}</p>
-                  </div>
-                  <div className="ml-4 flex shrink-0 items-center gap-3">
-                    <span className="text-xs text-fg-faint">{timeAgo(p.updatedAt)}</span>
-                    <ArrowRight className="size-4 text-fg-faint transition-transform group-hover:translate-x-0.5 group-hover:text-fg-muted" />
-                  </div>
-                </Card>
+      {inFlight ? (
+        <Card interactive className="mt-8">
+          <CardBody className="flex flex-wrap items-center justify-between gap-4 p-5">
+            <div className="min-w-0">
+              <p className="text-2xs font-medium uppercase tracking-wide text-fg-faint">
+                Continue where you left off
+              </p>
+              <p className="mt-1.5 truncate text-md font-medium text-fg">{inFlight.name}</p>
+              <p className="mt-0.5 text-sm text-fg-muted">
+                {inFlight.status === "interviewing"
+                  ? "The CTO interview is unfinished."
+                  : "Generation is running."}
+              </p>
+            </div>
+            <Button variant="secondary" asChild>
+              <Link href={nextRoute(inFlight.status, inFlight.id)}>
+                Resume
+                <ArrowRight className="size-4" />
               </Link>
-            );
-          })}
+            </Button>
+          </CardBody>
+        </Card>
+      ) : null}
+
+      <section className="mt-10">
+        <div className="flex items-center justify-between">
+          <h2 className="text-md font-semibold text-fg">Recent projects</h2>
+          {projects.length > recent.length ? (
+            <Link href="/app/projects" className="text-sm text-fg-muted transition-colors hover:text-fg">
+              View all
+            </Link>
+          ) : null}
         </div>
-      )}
+
+        {projects.length === 0 ? (
+          <EmptyState
+            className="mt-4"
+            title="Create your first project"
+            description="Describe your product, answer the CTO interview, and Airrow generates your complete engineering foundation — ready for Claude Code."
+            action={
+              <Button asChild>
+                <Link href="/app/projects/new">Start the interview</Link>
+              </Button>
+            }
+          />
+        ) : (
+          <div className="mt-4 space-y-2">
+            {recent.map((p) => (
+              <ProjectRow key={p.id} project={p} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="mt-10">
+        <h2 className="text-md font-semibold text-fg">Recent generations</h2>
+        {projects.filter((p) => p.status === "ready").length === 0 ? (
+          <p className="mt-3 text-sm text-fg-faint">
+            Nothing generated yet — finish an interview and your foundation appears here.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-2">
+            {projects
+              .filter((p) => p.status === "ready")
+              .slice(0, 3)
+              .map((p) => (
+                <Link key={p.id} href={`/app/projects/${p.id}/preview`} className="block">
+                  <Card interactive className="flex items-center justify-between px-5 py-3.5">
+                    <span className="truncate text-base text-fg">{p.name}</span>
+                    <span className="shrink-0 text-xs text-fg-faint">{timeAgo(p.updatedAt)}</span>
+                  </Card>
+                </Link>
+              ))}
+          </div>
+        )}
+      </section>
+
+      {/* Surfaces with no data source yet — designed, honest, not faked. */}
+      <section className="mt-12 grid gap-4 md:grid-cols-2">
+        <ComingSoon
+          title="Templates"
+          description="Start from a proven foundation — SaaS, marketplace, internal tool — instead of a blank interview."
+        />
+        <ComingSoon
+          title="Roadmap"
+          description="Your generated milestones, tracked here as you ship them."
+        />
+        <ComingSoon
+          title="Usage"
+          description="Generations, documents authored and tokens spent across your workspace."
+        />
+        <ComingSoon
+          title="News"
+          description="What changed in Airrow — new documents, better prompts, engine upgrades."
+        />
+      </section>
     </div>
   );
 }
