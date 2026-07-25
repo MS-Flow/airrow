@@ -18,6 +18,12 @@ Steps:
      missing or errors, ask the user to paste the issue title + body — do not fail.
    - If `$ARGUMENTS` is a description: no issue yet. Use `#TBD` and leave a
      `[NEEDS CLARIFICATION: assign issue #]` marker.
+   - **Assign the issue to the runner.** For a real issue number, run
+     `gh issue edit <n> --add-assignee "@me"` (quote `"@me"` — PowerShell treats a bare `@me` as the
+     splat operator) so the assignee reflects whoever is working the spec.
+     Skip this for description-based (`#TBD`) specs. It is idempotent — re-running when already
+     assigned is a no-op. If `gh` is missing/unauthenticated or the edit fails, warn and continue;
+     **never** block spec/branch creation on assignment — note it so the runner can assign manually.
 2. **Derive a short name** — 2–4 kebab-case words from the issue title.
 3. **Set up the branch.** Determine the parent `feature/<name>` — the GitHub Project the issue is
    linked to. **Always ask which `feature/*` branch the issue branch should be based on** — never
@@ -34,5 +40,6 @@ Steps:
 4. **Scaffold `specs/NNN-<kort>.md`** from the template. Fill the header, User story, and an initial
    Acceptance criteria list. Leave Background/Exact changes for `/implement`. Mark every unknown with
    `[NEEDS CLARIFICATION: …]`.
-5. Report the created file path, the branch, and the count of `[NEEDS CLARIFICATION]` markers, then
+5. Report the created file path, the branch, and the count of `[NEEDS CLARIFICATION]` markers. If issue
+   assignment was skipped or failed (Step 1), say so and tell the runner to assign manually. Then
    suggest running `/clarify`.
