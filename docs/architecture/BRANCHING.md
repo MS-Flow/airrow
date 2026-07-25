@@ -30,17 +30,27 @@ Issue branches are named `<nr>-<short>` (issue number + short name), **without**
 
 ## The base branch is set for you
 
-GitHub proposes the repository's default branch (`main`) as base for every new PR — the wrong
-direction for any issue branch. `.github/workflows/pr-base-branch.yml` corrects that: when a PR is
-**opened** from a `<nr>-<short>` branch, it rewrites the base to that issue's parent `feature/<name>`.
+GitHub proposes the repository's **default branch** as base for every new PR. That default is
+`develop`, not `main` — deliberately, so a `feature/<name>` PR already points one step up the
+hierarchy instead of at production. (`main` only ever receives `develop`, which is a handful of PRs a
+release; every other PR in the repo goes to `develop` or a feature branch.)
 
-The parent is read from the spec, not guessed: the workflow finds the `specs/<nr>-*.md` whose
-**Branch** row names this branch, and takes the `` (from `feature/<name>`) `` part of it. Matching on
-the branch — not the number alone — is what keeps `14-pr-ci-checks` and `14-supabase-schema-auth`
-apart. Keep that Branch row accurate and the base takes care of itself.
+The two branch types the default gets wrong are fixed by
+`.github/workflows/pr-base-branch.yml`, which rewrites the base when a PR is **opened**:
+
+| Head branch     | Base you get | How it is decided                                      |
+| --------------- | ------------ | ------------------------------------------------------ |
+| `feature/<name>`| `develop`    | the repository default — no code involved              |
+| `<nr>-<short>`  | its `feature/<name>` | read from the spec's **Branch** row            |
+| `develop`       | `main`       | fixed: `develop` is the only branch that may enter `main` |
+
+The parent of an issue branch is read from the spec, not guessed: the workflow finds the
+`specs/<nr>-*.md` whose **Branch** row names this branch, and takes the `` (from `feature/<name>`) ``
+part of it. Matching on the branch — not the number alone — is what keeps `14-pr-ci-checks` and
+`14-supabase-schema-auth` apart. Keep that Branch row accurate and the base takes care of itself.
 
 The workflow leaves the base **untouched** and comments on the PR when it cannot derive a parent (no
-matching spec, no `(from …)` in the Branch row, or the feature branch is already merged and deleted).
+matching spec, no `(from …)` in the Branch row, or the target branch is already merged and deleted).
 It never silently points at `main`.
 
 > **Only on `opened`.** A base changed after the PR exists is never rewritten, so this can't fight you.

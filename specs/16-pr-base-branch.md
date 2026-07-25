@@ -57,11 +57,18 @@ during `/implement`)._
 
 _The approach we picked, and what we deliberately leave alone._
 
-En **GitHub Actions-workflow på `pull_request.opened`** rättar basen när head-grenen matchar
-`^[0-9]+-`. Det är det enda alternativet som täcker båda vägarna en PR kan skapas på — `gh` och
-GitHub-UI:t — och därmed det enda som faktiskt uppfyller acceptanskriteriet. Skript och gh-alias
-valdes bort eftersom de bara hjälper den som råkar använda dem, och `/pr-check` skriver redan ut rätt
-`--base`.
+En **GitHub Actions-workflow på `pull_request.opened`** rättar basen. Det är det enda alternativet som
+täcker båda vägarna en PR kan skapas på — `gh` och GitHub-UI:t — och därmed det enda som faktiskt
+uppfyller acceptanskriteriet. Skript och gh-alias valdes bort eftersom de bara hjälper den som råkar
+använda dem, och `/pr-check` skriver redan ut rätt `--base`.
+
+Hela hierarkin täcks, av två mekanismer:
+
+| Head-gren        | Base          | Hur                                                    |
+| ---------------- | ------------- | ------------------------------------------------------ |
+| `feature/<name>` | `develop`     | repots default-gren — ingen kod                        |
+| `<nr>-kort`      | dess `feature/<name>` | härledd ur specens Branch-rad                  |
+| `develop`        | `main`        | fast värde — `develop` är enda grenen som får in i `main` |
 
 **Parent härleds ur spec-headern.** Workflowen läser `specs/<nr>-*.md` och plockar
 `` (from `feature/<name>`) `` ur Branch-raden. Alla 14 specar följer mönstret idag och det är versionerat
@@ -71,6 +78,18 @@ i repot, så härledningen blir en `grep` — ingen API-slagning, inget nätverk
 `close-issue-on-merge.yml`. Inget nytt paket: `scripts/` ligger utanför pnpm-workspacet och en egen
 workspace-modul för en strängmatchning är mer ceremoni än värdet motiverar. Konsekvensen för
 testbarheten är utskriven under Verification.
+
+**Efterjusteringar efter första skarpa användningen (2026-07-25).** Den ursprungliga leveransen
+hanterade bara issue-grenar och missade därmed issuens kriterium att *icke*-issue-grenar ska ha sitt
+korrekta default. Det syntes direkt: en `feature/ci-cd`-PR föreslogs mot `main`. Två tillägg:
+
+1. **Repots default-gren är nu `develop`** (verifierad via `gh repo view --json defaultBranchRef`).
+   Default-grenen är vad GitHub-UI:t föreslår, så det gör `feature/*` → `develop` rätt utan kod.
+   Rulesetsen påverkas inte — de matchar `refs/heads/main` och `refs/heads/develop` vid namn, inte
+   "default".
+2. **Workflowen hanterar även `develop` → `main`.** Med default-grenen satt till `develop` fick
+   release-PR:en inget vettigt förslag alls, eftersom head och base blev samma gren. Målet är entydigt
+   (`develop` är enda grenen som får in i `main`) och kräver ingen härledning.
 
 **Rättningen sker bara vid `opened`** — aldrig på `synchronize` eller `edited`. En base som ändras i
 efterhand rörs alltså aldrig, och automatiken kan inte hamna i en dragkamp med en människa.
@@ -95,7 +114,8 @@ _What "done" means. Every line is something a reviewer can check._
 - [x] Parent härleds ur `specs/<nr>-*.md` Branch-rad och är deterministisk.
 - [x] Hittas ingen parent lämnas base orörd och en PR-kommentar förklarar varför — aldrig tyst `main`.
 - [x] Workflowen kör **bara** på `pull_request.opened`; en base som ändras senare rörs aldrig.
-- [x] Grenar som inte är issue-grenar rörs inte alls: `feature/*` och `develop` behåller sin base.
+- [x] Grenar som inte är issue-grenar får också rätt base: `feature/*` → `develop` via repots
+      default-gren, `develop` → `main` via workflowen.
 - [x] Beteendet dokumenteras i [`docs/architecture/BRANCHING.md`](docs/architecture/BRANCHING.md).
 - [x] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures).
 
