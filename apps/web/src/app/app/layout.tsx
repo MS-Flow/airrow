@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { ChatSlot } from "@/components/shell/chat-slot";
-import { Sidebar, type GeneratingProject } from "@/components/shell/sidebar";
+import { RailProvider } from "@/components/shell/rail";
+import { Sidebar } from "@/components/shell/sidebar";
 import { ThemeSwitch } from "@/components/shell/theme-switch";
 import { TopBar } from "@/components/shell/top-bar";
 import { UserMenu } from "@/components/shell/user-menu";
@@ -11,8 +12,7 @@ import { NAV_ITEMS } from "@/components/shell/nav-items";
 import { ClaimGuestDraft } from "@/features/interview/ClaimGuestDraft";
 import { requireSession, signOut } from "@/lib/auth";
 import { readTheme } from "@/lib/theme";
-import { latestJob, listProjects } from "@/lib/data/store";
-import { JOB_STAGE_COUNT } from "@/features/generation/stages";
+import { listProjects } from "@/lib/data/store";
 
 async function signOutAction() {
   "use server";
@@ -39,24 +39,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }))
   ];
 
-  // The rail shows live progress for whichever project is generating right now.
-  // Percent comes from the job's real stage count — never an invented number.
-  const running = projects.find((p) => p.status === "generating");
-  const runningJob = running ? await latestJob(running.id) : null;
-  const generating: GeneratingProject | null = running
-    ? {
-        id: running.id,
-        name: running.name,
-        percent: runningJob ? (runningJob.stagesDone.length / JOB_STAGE_COUNT) * 100 : 0
-      }
-    : null;
-
   return (
     <TooltipProvider delayDuration={200}>
       <Toaster>
-        <div className="flex min-h-screen bg-bg">
-          <Sidebar generating={generating} />
-          <div className="flex min-w-0 flex-1 flex-col">
+        <RailProvider>
+          <Sidebar />
+          {/* The column starts where the rail ends, so the top bar and the preview's file
+              tree move with it. Centred page content opts back out to the viewport via
+              `.viewport-column`, which is why it never shifts. `--rail` animates itself, so
+              nothing here needs its own transition. */}
+          <div className="flex min-w-0 flex-1 flex-col pl-(--rail)">
             <TopBar
               projectNames={projectNames}
               themeSwitch={<ThemeSwitch current={theme} />}
@@ -67,7 +59,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <main className="flex-1">{children}</main>
           </div>
           <ChatSlot />
-        </div>
+        </RailProvider>
         <CommandPalette items={commands} />
         <ClaimGuestDraft />
       </Toaster>

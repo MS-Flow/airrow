@@ -49,10 +49,12 @@ export function TopBar({
   const crumbs = buildCrumbs(pathname, projectNames);
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-bg/80 px-6 backdrop-blur-md max-md:pl-14">
+    // `h-17` is the landing header's height (its `py-3.5` around an `h-10` logo), so
+    // moving from the public site into the app doesn't shift the horizon line.
+    <header className="sticky top-0 z-20 flex h-17 shrink-0 items-center justify-between gap-4 border-b border-border bg-bg/80 px-6 backdrop-blur-md max-md:pl-14">
       <Breadcrumbs items={crumbs} />
       <div className="flex shrink-0 items-center gap-2">
-        <Button size="sm" asChild>
+        <Button size="md" asChild>
           <Link href="/app/projects/new">
             <Plus className="size-4" />
             New project

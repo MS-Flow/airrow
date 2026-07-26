@@ -8,6 +8,7 @@ import { Card, CardBody } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { InlineError } from "@/components/ui/states";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { ProviderButtons } from "@/features/auth/ProviderButtons";
 import { signUp } from "@/lib/auth";
 
@@ -106,9 +107,9 @@ export default async function SignupPage({
                   minLength={8}
                 />
               </div>
-              <Button type="submit" className="w-full">
+              <SubmitButton className="w-full" pendingLabel="Creating account…">
                 Create account
-              </Button>
+              </SubmitButton>
             </form>
 
             <div className="my-6 flex items-center gap-3">

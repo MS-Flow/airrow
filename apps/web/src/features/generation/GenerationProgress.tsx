@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import type { JobStage } from "@airrow/schemas";
 import { AirrowMark } from "@/components/brand/mark";
+import { PageContainer } from "@/components/shell/page-container";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -39,6 +40,18 @@ export function GenerationProgress({
   const [retryError, setRetryError] = useState<string | null>(null);
   const done = useRef(false);
 
+  // Start the queued job once, from here, so its stages are written while this screen is
+  // showing them. The endpoint ignores anything not queued, so a refresh or a second tab
+  // cannot start it twice.
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    void fetch(`/api/projects/${projectId}/generate`, { method: "POST" }).catch(() => {
+      /* the poll below reports the job's real state either way */
+    });
+  }, [projectId]);
+
   useEffect(() => {
     let active = true;
     const poll = async () => {
@@ -52,14 +65,16 @@ export function GenerationProgress({
           done.current = true;
           // The project page, not the file browser: it frames what was generated before
           // dropping the founder into a tree of files.
-          setTimeout(() => router.push(`/app/projects/${projectId}`), 900);
+          // Just long enough for the last tick to register as finished, not a pause.
+          setTimeout(() => router.push(`/app/projects/${projectId}`), 400);
         }
       } catch {
         /* transient poll failure — next tick retries */
       }
     };
     void poll();
-    const t = setInterval(poll, 1000);
+    // Comfortably faster than the runner's beat, so no stage lands and clears between polls.
+    const t = setInterval(poll, 150);
     return () => {
       active = false;
       clearInterval(t);
@@ -70,7 +85,7 @@ export function GenerationProgress({
   const percent = job ? (job.stagesDone.length / JOB_STAGE_COUNT) * 100 : 0;
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-16 md:px-8">
+    <PageContainer className="max-w-2xl py-16">
       <div className="flex flex-col items-center text-center">
         <span
           className={cn(
@@ -166,6 +181,6 @@ export function GenerationProgress({
           </div>
         </div>
       ) : null}
-    </div>
+    </PageContainer>
   );
 }

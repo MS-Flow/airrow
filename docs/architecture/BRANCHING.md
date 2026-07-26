@@ -165,9 +165,13 @@ would be safe to require (it runs on `push` too), while `validate-source-branch`
 > `supabase start` before merging a data-layer change. Tracked as a deviation in
 > [`../../specs/14-pr-ci-checks.md`](../../specs/14-pr-ci-checks.md).
 
-## CI / DEV deploy
-- Every push to `feature/<name>` **and** `develop` runs a DEV deploy (see `.github/workflows/deploy-dev.yml`).
-- `<nr>-<short>` branches do not deploy — they are tested via their feature.
+## Deploys
+Vercel's Git integration deploys every push directly — there is no GitHub Actions workflow.
+- `main` → `https://airrow.app` (production).
+- `develop` → `https://dev.airrow.app`, a stable alias that never changes between deploys.
+- `feature/<name>` and `<nr>-<short>` → a throwaway Vercel preview URL, new on every push.
+
+Full setup and the branch → URL mapping: [`INFRASTRUCTURE_SETUP.md`](../guides/INFRASTRUCTURE_SETUP.md#4-custom-domain-airrowapp).
 
 ## Keep branches in sync
 - Update your issue against the feature often: `git merge feature/<name>`.

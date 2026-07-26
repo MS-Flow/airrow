@@ -112,7 +112,7 @@ export function PreviewBrowser({
 }: {
   files: PreviewFile[];
   projectId: string;
-  /** Server-highlighted, already-sanitized HTML for the active code file. */
+  /** Server-highlighted HTML for the active code file; sanitized here before injection. */
   highlightedHtml: string | null;
   /** The path `highlightedHtml` belongs to — stale markup is never rendered. */
   highlightedFor: string | null;
@@ -161,6 +161,13 @@ export function PreviewBrowser({
   const isMarkdown = active.endsWith(".md");
   const [html, setHtml] = useState("");
 
+  // Shiki's markup is built from untrusted file content, so it is sanitized here rather
+  // than on the server — same point of injection, same sanitizer as the markdown above.
+  const safeHighlighted = useMemo(
+    () => (highlightedHtml ? DOMPurify.sanitize(highlightedHtml) : null),
+    [highlightedHtml]
+  );
+
   useEffect(() => {
     if (!isMarkdown) return;
     const raw = marked.parse(content, { async: false });
@@ -200,7 +207,10 @@ export function PreviewBrowser({
         <Dir dir={tree} depth={0} active={active} onSelect={select} openSet={openSet} toggle={toggle} />
       </aside>
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-10 py-10">
+        {/* The tree moves with the rail; the text does not. `.preview-reader` insets the
+            column to wherever the viewport's centre is, so collapsing the rail leaves the
+            file exactly where it was. */}
+        <div className="preview-reader py-10">
           <div className="mb-6 flex items-center justify-between gap-4">
             <p className="font-mono text-xs text-fg-faint">{active}</p>
             {editing ? (
@@ -233,10 +243,10 @@ export function PreviewBrowser({
             />
           ) : isMarkdown ? (
             <div className="prose-airrow" dangerouslySetInnerHTML={{ __html: html }} />
-          ) : highlightedFor === active && highlightedHtml ? (
+          ) : highlightedFor === active && safeHighlighted ? (
             <div
               className="overflow-x-auto rounded-lg border border-border text-sm leading-relaxed [&_pre]:p-4"
-              dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+              dangerouslySetInnerHTML={{ __html: safeHighlighted }}
             />
           ) : (
             <pre className="overflow-x-auto rounded-lg border border-border bg-bg-subtle p-4 font-mono text-sm leading-relaxed text-fg">

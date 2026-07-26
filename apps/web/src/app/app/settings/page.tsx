@@ -2,6 +2,7 @@
 import { redirect } from "next/navigation";
 import { Github } from "lucide-react";
 import { profileUpdateSchema } from "@airrow/schemas";
+import { PageContainer } from "@/components/shell/page-container";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,7 +34,7 @@ export default async function SettingsPage({
   const githubConfigured = Boolean(process.env.GITHUB_APP_ID && process.env.GITHUB_APP_PRIVATE_KEY);
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10 md:px-8">
+    <PageContainer>
       <h1 className="text-2xl font-semibold tracking-tight text-fg">Settings</h1>
       <p className="mt-2 text-base text-fg-muted">Your account, workspace and connections.</p>
 
@@ -146,6 +147,6 @@ export default async function SettingsPage({
           <code className="font-mono text-xs">apps/web/.env.example</code>.
         </p>
       </div>
-    </div>
+    </PageContainer>
   );
 }
