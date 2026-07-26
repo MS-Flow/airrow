@@ -85,6 +85,29 @@ The step is `continue-on-error` on purpose. `validate-source-branch` is a **requ
 failed assignment (a reviewer who is no longer a collaborator, say) must never be what makes a PR
 unmergeable — it warns in the log and the PR stays mergeable once approved manually.
 
+## The description is written for you
+
+An empty PR body hands the reviewer the whole job of working out *why* a change exists, when the spec
+already answers it. So when a PR is **opened** with no description, the workflow writes one from what
+is already true about the change — the spec it touches, the commit subjects and the linked issue.
+
+The shape follows how many specs the PR touches:
+
+| PR touches            | What you get                                                             |
+| --------------------- | ------------------------------------------------------------------------ |
+| One spec              | its one-liner, its acceptance criteria as a review checklist, the commits |
+| Several specs         | one line per spec — this is what `feature/* → develop` and the `develop → main` release look like |
+| No spec               | the commit list plus the issue link                                       |
+| Already has a body    | nothing — a description you wrote is never touched                        |
+
+A spec written before the current template has no one-liner; its H1 heading is used instead, so a line
+is never blank. Written **only on `opened`**, so it can never fight an edit you make afterwards.
+
+The formatting lives in [`scripts/pr-description.mjs`](../../scripts/pr-description.mjs) rather than in
+the workflow, because parsing a one-liner that wraps across several blockquote lines is exactly the
+kind of thing that breaks silently in `awk`. It has unit tests — and since `pnpm -r test` only reaches
+the workspace projects, CI runs them separately via `pnpm test:scripts`.
+
 ## Merge Direction Enforcement
 
 The merge direction above is not just a convention — it is enforced by CI:

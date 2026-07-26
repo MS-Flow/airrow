@@ -147,6 +147,52 @@ jobs:
           esac
           echo "OK: $HEAD -> $BASE"
 
+      # En tom PR-beskrivning flyttar hela kontextbördan till granskaren, trots att svaret
+      # redan står i specen. Formen väljs av hur många specar PR:en rör: en spec ger den
+      # utförliga formen, flera ger en sammanfattningslista (`feature/* -> develop` och
+      # release-PR:en `develop -> main`). Underlaget kommer från `gh`, formatteringen från
+      # scripts/pr-description.mjs — som har egna tester, till skillnad från inbäddad awk.
+      #
+      # Bara vid `opened`, av samma skäl som base-sättningen: texten skrivs en gång och kan
+      # aldrig slåss med något du själv redigerat efteråt.
+      #
+      # `continue-on-error`: jobbet är en required status check, så en misslyckad beskrivning
+      # får aldrig göra PR:en omergbar.
+      - name: Write PR description
+        if: github.event.action == 'opened'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD: ${{ github.head_ref }}
+          SPEC_URL_BASE: ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ -n "$(gh pr view "$PR" --repo "$REPO" --json body --jq '.body')" ]; then
+            echo "PR:en har redan en beskrivning — rör den inte."
+            exit 0
+          fi
+
+          ARGS=""
+          for SPEC in $(gh pr view "$PR" --repo "$REPO" --json files --jq '.files[].path' \
+            | grep -E '^specs/[0-9]+-.*\.md$' || true); do
+            # Filen kan vara raderad i PR:en; då finns den inte på head att läsa.
+            if [ -f "$SPEC" ]; then
+              ARGS="$ARGS --spec $SPEC"
+            fi
+          done
+
+          NUM=$(echo "$HEAD" | grep -oE '^[0-9]+' || true)
+          if [ -n "$NUM" ]; then
+            ARGS="$ARGS --issue $NUM"
+          fi
+
+          # Ordelning av $ARGS är avsiktlig — det är en färdigbyggd argumentlista.
+          gh pr view "$PR" --repo "$REPO" --json commits --jq '.commits[].messageHeadline' \
+            | node scripts/pr-description.mjs $ARGS --spec-url-base "$SPEC_URL_BASE" \
+            | gh pr edit "$PR" --repo "$REPO" --body-file -
+          echo "Beskrivning skriven."
+
       # `develop` och `main` kräver en godkänd review (scripts/setup-branch-protection.sh),
       # men GitHub pekar inte ut någon — utan tilldelning står PR:en blockerad utan att någon
       # fått en notis. Körs sist: en PR med fel riktning har redan stoppat jobbet ovan och
