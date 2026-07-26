@@ -76,6 +76,7 @@ pnpm --filter web test <file>     # single file while iterating
 pnpm -r typecheck   # tsc --noEmit, strict
 pnpm -r lint        # ESLint — no new issues
 pnpm -r test        # Vitest — green (note known pre-existing failures)
+pnpm test:scripts   # the CI helpers in scripts/ — `-r` does not reach them
 ```
 > ESLint + Vitest are the agreed tools. If a package still lacks its `lint` / `test` script or dev
 > dependency, wire it in the change that first needs it — don't skip the bar.

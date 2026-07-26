@@ -19,7 +19,6 @@ import {
   saveInterviewAnswers,
   setProjectStatus
 } from "@/lib/data/store";
-import { runGenerationJob } from "@/features/generation/runner";
 
 export async function saveAnswersAction(projectId: string, raw: unknown): Promise<{ ok: boolean }> {
   const { org } = await requireSession();
@@ -56,8 +55,11 @@ export async function submitInterviewAction(projectId: string, raw: unknown): Pr
     redirect(`/app/projects/${projectId}/generating`);
   }
 
-  const job = await createJob(projectId, modelVersion.id);
+  await createJob(projectId, modelVersion.id);
   await setProjectStatus(projectId, "generating");
-  void runGenerationJob(job.id, model); // fire-and-forget; progress via polling (ADR-0005)
+  // The job is created queued and left that way: the progress screen starts it (POST
+  // .../generate) once it is on screen, so the stages are written while they are being
+  // watched. Running it here instead would mean the founder waits on a blank submit and
+  // then lands on a screen with nothing left to show.
   redirect(`/app/projects/${projectId}/generating`);
 }

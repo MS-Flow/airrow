@@ -79,12 +79,14 @@ schema (projects, interviews, artifacts, etc.) is a separate issue per "Out of s
 Legend: **[code]** delivered by this change · **[manual]** founder dashboard step, guided by
 [`INFRASTRUCTURE_SETUP.md`](../docs/guides/INFRASTRUCTURE_SETUP.md).
 
-- [ ] **[manual]** Vercel project connected to the GitHub repo
+- [ ] **[manual]** Vercel project connected to the GitHub repo — delegated to
+      [12-vercel-domains.md](12-vercel-domains.md)
 - [x] **[code]** Root/monorepo settings pinned (`apps/web`, pnpm) — `apps/web/vercel.json` + runbook
-- [ ] **[manual]** Preview deployments enabled for PRs
-- [ ] **[manual]** Production deployment on `main`
-- [ ] **[manual]** Custom domain `airrow.app` attached to the Vercel project
-- [ ] **[manual]** Supabase project created (free tier)
+- [ ] **[manual]** Preview deployments enabled for PRs — delegated to [12-vercel-domains.md](12-vercel-domains.md)
+- [ ] **[manual]** Production deployment on `main` — delegated to [12-vercel-domains.md](12-vercel-domains.md)
+- [ ] **[manual]** Custom domain `airrow.app` attached to the Vercel project — delegated to
+      [12-vercel-domains.md](12-vercel-domains.md)
+- [x] **[manual]** Supabase project created (free tier)
 - [ ] **[manual]** Database credentials generated
 - [x] **[code]** RLS enabled by default, proven via `organizations` table + policy + access/denial
       test passing green against local Supabase (2/2)

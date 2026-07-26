@@ -3,10 +3,9 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Menu, PanelLeftClose, PanelLeftOpen, Settings, X } from "lucide-react";
+import { LayoutGrid, Menu, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
 import { AirrowLogo } from "@/components/brand/logo";
 import { AirrowMark } from "@/components/brand/mark";
-import { Progress } from "@/components/ui/progress";
 import { Tooltip } from "@/components/ui/tooltip";
 import { NAV_ITEMS, type NavItem } from "./nav-items";
 import { useRail } from "./rail";
@@ -16,12 +15,6 @@ const icons = {
   projects: LayoutGrid,
   settings: Settings
 } as const;
-
-export interface GeneratingProject {
-  id: string;
-  name: string;
-  percent: number;
-}
 
 function isActive(pathname: string, href: string): boolean {
   return href === "/app" ? pathname === "/app" || pathname.startsWith("/app/projects") : pathname.startsWith(href);
@@ -71,10 +64,21 @@ function NavLink({
  * as `--rail` by `RailProvider`, so the shell can decide what follows it and what stays
  * put.
  */
-export function Sidebar({ generating }: { generating: GeneratingProject | null }) {
+export function Sidebar() {
   const { collapsed, toggle } = useRail();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const closeDrawer = React.useCallback(() => setDrawerOpen(false), []);
+
+  // The drawer has no close button of its own, so Escape has to work — tapping the page
+  // behind it should not be the only way out.
+  React.useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDrawerOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawerOpen]);
 
   return (
     <>
@@ -109,9 +113,12 @@ export function Sidebar({ generating }: { generating: GeneratingProject | null }
             mirrors the nav's insets — the rail's `px-3` plus each link's `px-2.5` — so it also
             lines up with "Projects" and "Settings" below it. */}
         {/* The bottom border continues the top bar's, so one line crosses the whole viewport. */}
+        {/* No close button beside the logo, even as a drawer: it left the lockup nowhere to
+            sit straight, and the drawer already closes by tapping the page behind it or
+            pressing Escape. The header is the logo and nothing else, at every width. */}
         <div
           className={cn(
-            "flex h-17 items-center justify-between border-b border-border px-3",
+            "flex h-17 items-center border-b border-border px-3",
             collapsed && "justify-center px-0"
           )}
         >
@@ -120,7 +127,7 @@ export function Sidebar({ generating }: { generating: GeneratingProject | null }
             href="/"
             onClick={closeDrawer}
             aria-label="Airrow home"
-            className={cn("flex items-center px-2.5", collapsed && "px-0")}
+            className={cn("flex shrink-0 items-center px-2.5", collapsed && "px-0")}
           >
             {/* Both states render at h-10, the landing header's logo size. The mark spans
                 nearly the full height of the lockup artwork, so matching the CSS height keeps
@@ -128,14 +135,6 @@ export function Sidebar({ generating }: { generating: GeneratingProject | null }
                 resizing the logo. */}
             {collapsed ? <AirrowMark priority className="h-10" /> : <AirrowLogo size="lg" priority />}
           </Link>
-          <button
-            type="button"
-            onClick={closeDrawer}
-            aria-label="Close navigation"
-            className="cursor-pointer rounded-md p-1 text-fg-faint transition-colors hover:text-fg md:hidden"
-          >
-            <X className="size-4" />
-          </button>
         </div>
 
         <nav className="flex-1 space-y-1 px-3 pt-2">
@@ -143,24 +142,6 @@ export function Sidebar({ generating }: { generating: GeneratingProject | null }
             <NavLink key={item.href} item={item} collapsed={collapsed} onNavigate={closeDrawer} />
           ))}
         </nav>
-
-        {generating ? (
-          <Link
-            href={`/app/projects/${generating.id}/generating`}
-            onClick={closeDrawer}
-            className="mx-3 mb-3 block rounded-md border border-border bg-surface px-3 py-2.5 transition-colors hover:border-border-strong"
-          >
-            {collapsed ? (
-              <Progress value={generating.percent} aria-label={`Generating ${generating.name}`} />
-            ) : (
-              <>
-                <p className="truncate text-xs font-medium text-fg">{generating.name}</p>
-                <p className="mb-2 mt-0.5 text-2xs text-fg-faint">Generating…</p>
-                <Progress value={generating.percent} aria-label={`Generating ${generating.name}`} />
-              </>
-            )}
-          </Link>
-        ) : null}
 
         <button
           type="button"

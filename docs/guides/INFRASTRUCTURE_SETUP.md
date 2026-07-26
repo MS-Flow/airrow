@@ -53,26 +53,48 @@ Day-to-day local database work lives in [`DEVELOPER_GUIDE.md`](./DEVELOPER_GUIDE
 
 ## 3. Git integration (previews + production)
 
+Vercel's Git integration is the **only** deploy mechanism — there is no GitHub Actions workflow.
+Every push deploys automatically once the project is connected.
+
 - **Production Branch:** set to `main` under **Project Settings → Git**. Per Airrow's branch model,
   code only reaches `main` through the strict PR chain (issue → feature → `develop` → `main`).
-- **Preview Deployments:** enabled by default — every PR gets its own URL. Confirm under
-  **Settings → Git** that preview deployments are on.
+- **Preview Deployments:** enabled by default — every PR / branch push gets its own throwaway URL.
+  Confirm under **Settings → Git** that preview deployments are on.
+- **Branch Domain for `develop`:** **Project Settings → Domains → Add** → `dev.airrow.app` → under
+  "Git Branch" pick `develop`. This aliases the hostname to whatever `develop` last deployed, so the
+  URL never changes between deploys. `apps/web/vercel.json` adds `X-Robots-Tag: noindex` on this host
+  so it never gets indexed.
 
 ---
 
 ## 4. Custom domain (`airrow.app`)
 
-1. **Project Settings → Domains → Add** → `airrow.app` (and optionally `www.airrow.app`).
+1. **Project Settings → Domains → Add** → `airrow.app` and `www.airrow.app`.
 2. Since the domain is already on Vercel, assigning it to this project is one click; if DNS was
    external you'd add the A/CNAME records Vercel shows.
-3. Wait for the status to read **Valid Configuration** before calling production done (DNS can lag).
+3. `www.airrow.app` → apex redirect is handled by `apps/web/vercel.json` (host-based redirect), not a
+   dashboard setting — no extra step needed once both hostnames are attached.
+4. Wait for the status to read **Valid Configuration** before calling production done (DNS can lag).
+
+### Branch → URL mapping
+
+| Branch | URL | Stability |
+|---|---|---|
+| `main` | `https://airrow.app` (+ `www.airrow.app` redirect) | Production — never changes |
+| `develop` | `https://dev.airrow.app` | Stable alias — same URL every deploy |
+| `feature/**`, `<nr>-<short>` | Vercel-generated preview URL | Throwaway — new URL per deploy |
 
 ---
 
 ## 5. Verify end-to-end
 
 - `pnpm build` passes locally.
-- The Vercel production deploy is green and `https://airrow.app` loads.
+- The Vercel production deploy is green and `https://airrow.app` loads; `https://www.airrow.app`
+  redirects to it (`curl -I https://www.airrow.app`).
+- Push to `develop` and confirm `https://dev.airrow.app` updates and the hostname stays the same as
+  the previous deploy; `curl -I https://dev.airrow.app` shows `X-Robots-Tag: noindex`.
+- Push a `feature/**` branch and confirm it only gets a throwaway preview URL — never the dev or
+  production hostname.
 - The deployed app can reach Supabase (no auth/network errors in the Function logs once app code
   starts reading from Supabase — that wiring is a later issue; for now the env vars are in place and
   the migration is applied).
