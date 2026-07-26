@@ -1,6 +1,11 @@
 # Documentation
-Root keeps only `README.md` and `CLAUDE.md`; everything else is here. **Rules and workflow live in the
-single source of truth, [`../.claude/spec-kit/constitution.md`](../.claude/spec-kit/constitution.md).**
+Root keeps only `README.md`, `START_HERE.md`, and `CLAUDE.md`; everything else is here. **Rules and
+workflow live in the single source of truth,
+[`../.claude/spec-kit/constitution.md`](../.claude/spec-kit/constitution.md).**
+
+| Doc | What |
+|-----|------|
+| [VISION.md](VISION.md) | What we're building, where it goes, what's in scope for v1 |
 
 ## `architecture/`
 | Doc | What |

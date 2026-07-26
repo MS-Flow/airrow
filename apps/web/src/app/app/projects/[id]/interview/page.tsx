@@ -1,24 +1,25 @@
 import { notFound, redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { getInterview, getProject } from "@/lib/data/store";
-import { InterviewRuntime } from "@/features/interview/InterviewRuntime";
+import { AuthedInterview } from "@/features/interview/AuthedInterview";
 
 export const metadata = { title: "Interview" };
 
 export default async function InterviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { org } = await requireSession();
-  const project = getProject(org.id, id);
+  const project = await getProject(org.id, id);
   if (!project) notFound();
   if (project.status === "generating") redirect(`/app/projects/${id}/generating`);
-  if (project.status === "ready") redirect(`/app/projects/${id}`);
 
-  const interview = getInterview(id);
+  // A generated project may come back to change its answers; submitting regenerates from scratch.
+  const interview = await getInterview(id);
   return (
-    <InterviewRuntime
+    <AuthedInterview
       projectId={project.id}
       projectName={project.name}
       initialAnswers={interview?.answers ?? {}}
+      regenerating={project.status === "ready"}
     />
   );
 }

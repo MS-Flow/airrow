@@ -28,6 +28,8 @@ export interface Question {
   showIf?: Condition[];
 }
 
+const WEB_PRODUCT_TYPES = ["saas", "marketplace", "ai_agent", "mobile_app", "api", "browser_extension"];
+
 export const interviewQuestions: Question[] = [
   {
     id: "productType",
@@ -42,8 +44,25 @@ export const interviewQuestions: Question[] = [
       { value: "mobile_app", label: "Mobile app", description: "iOS / Android as the primary surface" },
       { value: "api", label: "API / developer tool", description: "A product other developers build on" },
       { value: "internal_tool", label: "Internal tool", description: "Software for your own company or team" },
-      { value: "browser_extension", label: "Browser extension", description: "Lives inside the browser" }
+      { value: "browser_extension", label: "Browser extension", description: "Lives inside the browser" },
+      { value: "hobby", label: "Side project / for fun", description: "A passion project or experiment — not (yet) a business" }
     ]
+  },
+  {
+    id: "vision",
+    title: "Where is this heading long-term?",
+    help: "One sentence on what it becomes if it succeeds. Your AI assistants build toward this.",
+    type: "text",
+    required: true,
+    placeholder: "e.g. The default operating system for independent property managers."
+  },
+  {
+    id: "mvpFocus",
+    title: "What's the first thing it needs to do?",
+    help: "The one core action of the MVP — this drives your roadmap and first specs. One sentence.",
+    type: "text",
+    required: true,
+    placeholder: "e.g. Let a property manager create a listing and receive tenant applications online."
   },
   {
     id: "audience",
@@ -51,7 +70,7 @@ export const interviewQuestions: Question[] = [
     help: "B2B and B2C foundations differ: tenancy, onboarding, billing, compliance.",
     type: "single",
     required: true,
-    showIf: [{ questionId: "productType", in: ["saas", "marketplace", "ai_agent", "mobile_app", "api", "browser_extension"] }],
+    showIf: [{ questionId: "productType", in: WEB_PRODUCT_TYPES }],
     options: [
       { value: "b2b", label: "Businesses (B2B)", description: "Teams and companies pay" },
       { value: "b2c", label: "Consumers (B2C)", description: "Individuals use and pay" },
@@ -59,14 +78,59 @@ export const interviewQuestions: Question[] = [
     ]
   },
   {
-    id: "features",
-    title: "Which capabilities will your product need?",
-    help: "Select everything you expect in the first year. Airrow specs the MVP subset and roadmaps the rest.",
+    id: "coreEntities",
+    title: "What are the core objects in your product?",
+    help: "The 3–7 most important things and how they relate. Skip it if you're not sure yet — you can fill it in later.",
+    type: "text",
+    required: false,
+    placeholder: "e.g. Landlords own Properties; a Property has many Listings; a Listing receives Applications from Tenants."
+  },
+  {
+    id: "tenancy",
+    title: "How is your data organized and isolated?",
+    help: "This decides the data model and the row-level security strategy — the hardest thing to change later.",
+    type: "single",
+    required: true,
+    options: [
+      { value: "single_user", label: "Per user", description: "Each person sees only their own data" },
+      { value: "organizations", label: "Teams / organizations", description: "Multi-tenant workspaces; members share data" },
+      { value: "marketplace", label: "Two-sided marketplace", description: "Buyers and sellers with separate access" },
+      { value: "internal", label: "Single internal org", description: "One company; everyone is in the same tenant" }
+    ]
+  },
+  {
+    id: "authModel",
+    title: "How will people sign in?",
+    help: "Pick every method you'll support. Choose \"Public\" only if there are no accounts at all.",
     type: "multi",
     required: true,
     options: [
-      { value: "auth", label: "User accounts", description: "Sign up, sign in, sessions" },
-      { value: "organizations", label: "Organizations / teams", description: "Multi-user workspaces, multi-tenancy" },
+      { value: "email_password", label: "Email & password", description: "Classic credentials" },
+      { value: "magic_link", label: "Magic link", description: "Passwordless email link" },
+      { value: "social", label: "Social login", description: "Google, GitHub, etc." },
+      { value: "sso", label: "Enterprise SSO", description: "SAML / OIDC for B2B customers" },
+      { value: "public", label: "No accounts (public)", description: "Anonymous — no sign-in" }
+    ]
+  },
+  {
+    id: "roles",
+    title: "How sophisticated should roles & permissions be?",
+    help: "You chose a multi-member tenancy — Airrow will spec the permission model.",
+    type: "single",
+    required: true,
+    showIf: [{ questionId: "tenancy", in: ["organizations", "marketplace"] }],
+    options: [
+      { value: "simple", label: "Simple", description: "Owner, admin, member — enough for most products" },
+      { value: "granular", label: "Granular", description: "Custom roles / per-resource permissions" }
+    ]
+  },
+  {
+    id: "capabilities",
+    title: "Which capabilities will your product need?",
+    help: "Select everything you expect in the first year. Airrow specs the MVP subset and roadmaps the rest. (Accounts and teams come from your earlier answers.)",
+    type: "multi",
+    required: true,
+    options: [
       { value: "payments", label: "Payments & billing", description: "Subscriptions or transactions" },
       { value: "notifications", label: "Notifications", description: "In-app or push" },
       { value: "email", label: "Transactional email", description: "Receipts, invites, digests" },
@@ -80,15 +144,50 @@ export const interviewQuestions: Question[] = [
     ]
   },
   {
-    id: "roles",
-    title: "How sophisticated should roles & permissions be?",
-    help: "You selected organizations — Airrow will spec the permission model.",
+    id: "aiUsage",
+    title: "What kind of AI does it use?",
+    help: "You selected AI features — this decides the AI architecture, provider wiring, and output validation.",
     type: "single",
     required: true,
-    showIf: [{ questionId: "features", in: ["organizations"] }],
+    showIf: [{ questionId: "capabilities", in: ["ai"] }],
     options: [
-      { value: "simple", label: "Simple", description: "Owner, admin, member — enough for most products" },
-      { value: "granular", label: "Granular", description: "Custom roles / per-resource permissions" }
+      { value: "llm_calls", label: "LLM calls", description: "Prompt-in, text-out features" },
+      { value: "rag", label: "RAG over your data", description: "Retrieval-augmented answers from your content" },
+      { value: "agents", label: "Autonomous agents", description: "Multi-step tool-using workflows" },
+      { value: "ml_models", label: "Custom ML models", description: "Your own trained/hosted models" },
+      { value: "none", label: "No AI after all", description: "Drops AI from the plan — nothing AI-related is generated" }
+    ]
+  },
+  {
+    id: "integrations",
+    title: "Which external systems will you integrate?",
+    help: "Name the services you already know you'll connect. Skip if none yet.",
+    type: "text",
+    required: false,
+    showIf: [{ questionId: "capabilities", in: ["payments", "email", "notifications", "analytics", "ai"] }],
+    placeholder: "e.g. Stripe for billing, Resend for email, Slack for alerts, HubSpot for CRM."
+  },
+  {
+    id: "dataSensitivity",
+    title: "How sensitive is your data?",
+    help: "Drives encryption, audit, and security posture across the generated standards.",
+    type: "single",
+    required: true,
+    options: [
+      { value: "standard", label: "Standard", description: "Normal user data, best-practice security" },
+      { value: "pii", label: "PII at scale", description: "Lots of personal data or payment details" },
+      { value: "regulated", label: "Regulated", description: "Health, finance, or data about minors — compliance regime applies" }
+    ]
+  },
+  {
+    id: "scale",
+    title: "What scale are you designing for first?",
+    type: "single",
+    required: true,
+    options: [
+      { value: "validate", label: "Validate first", description: "Optimize for speed of learning — hundreds of users" },
+      { value: "growth", label: "Growth-ready", description: "Expect rapid adoption — design for tens of thousands" },
+      { value: "high_scale", label: "High scale", description: "Millions of users / heavy load from the start" }
     ]
   },
   {
@@ -97,10 +196,33 @@ export const interviewQuestions: Question[] = [
     help: "Airrow's golden path is Next.js on Vercel. Vite fits pure SPAs.",
     type: "single",
     required: true,
-    showIf: [{ questionId: "productType", in: ["saas", "marketplace", "ai_agent", "internal_tool"] }],
+    showIf: [{ questionId: "productType", in: ["saas", "marketplace", "ai_agent", "internal_tool", "hobby"] }],
     options: [
-      { value: "nextjs", label: "Next.js", description: "Recommended — SSR, server actions, Vercel-native" },
+      { value: "nextjs", label: "Next.js", description: "Recommended — App Router, server actions, Vercel-native" },
       { value: "vite", label: "Vite + React", description: "Lightweight SPA, backend via Supabase only" }
+    ]
+  },
+  {
+    id: "database",
+    title: "Which database?",
+    help: "All options are PostgreSQL — you keep RLS, SQL migrations, and the same schema. Supabase is the golden path (it also bundles Auth, Storage & Realtime).",
+    type: "single",
+    required: true,
+    options: [
+      { value: "supabase", label: "Supabase", description: "Recommended — Postgres with Auth, Storage, Realtime & RLS built in" },
+      { value: "postgres", label: "Self-hosted Postgres", description: "Your own Postgres server — wire auth & storage yourself" }
+    ]
+  },
+  {
+    id: "hosting",
+    title: "Where will you deploy?",
+    help: "Vercel is the golden path and the generated CI targets it. Other targets need the deploy workflow adjusted.",
+    type: "single",
+    required: true,
+    options: [
+      { value: "vercel", label: "Vercel", description: "Recommended — zero-config for Next.js, preview per PR" },
+      { value: "azure", label: "Azure", description: "For Microsoft-centric organizations" },
+      { value: "self_host", label: "Self-host", description: "Your own servers / containers" }
     ]
   },
   {
@@ -125,42 +247,6 @@ export const interviewQuestions: Question[] = [
       { value: "startup", label: "Growing startup", description: "Multiple engineers, needs coordination" },
       { value: "agency", label: "Agency", description: "Building for clients, repeatable process" }
     ]
-  },
-  {
-    id: "security",
-    title: "How sensitive is your data?",
-    type: "single",
-    required: true,
-    options: [
-      { value: "standard", label: "Standard", description: "Normal user data, best-practice security" },
-      { value: "elevated", label: "Elevated", description: "PII at scale, payments data, health, or regulated industry" }
-    ]
-  },
-  {
-    id: "scale",
-    title: "What scale are you designing for first?",
-    type: "single",
-    required: true,
-    options: [
-      { value: "validate", label: "Validate first", description: "Optimize for speed of learning — hundreds of users" },
-      { value: "growth", label: "Growth-ready", description: "Expect rapid adoption — design for tens of thousands" }
-    ]
-  },
-  {
-    id: "mvpFocus",
-    title: "What must the MVP do, above all else?",
-    help: "One or two sentences. This becomes the heart of your roadmap and first specs.",
-    type: "text",
-    required: true,
-    placeholder: "e.g. Let a property manager create a listing and receive tenant applications online."
-  },
-  {
-    id: "goal90",
-    title: "What does success look like in 90 days?",
-    help: "A business outcome, not a feature list.",
-    type: "text",
-    required: true,
-    placeholder: "e.g. 20 paying customers and a repeatable onboarding motion."
   }
 ];
 

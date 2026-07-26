@@ -1,125 +1,226 @@
-// Landing (F-501 scope pulled forward: functional, minimal, premium).
 import Link from "next/link";
-import { AirrowMark, Badge, Button, Card } from "@/components/ui";
-import { getSession } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import {
+  ArrowRight,
+  BookMarked,
+  Boxes,
+  Check,
+  FileCode2,
+  GitBranch,
+  ShieldCheck,
+  Sparkles,
+  Workflow,
+  type LucideIcon
+} from "lucide-react";
+import { AirrowLogo } from "@/components/brand/logo";
+import { AirrowMark } from "@/components/brand/mark";
+import { SiteFooter } from "@/components/shell/site-footer";
+import { ThemeSwitch } from "@/components/shell/theme-switch";
+import { UserMenu } from "@/components/shell/user-menu";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardBody } from "@/components/ui/card";
+import { GUEST_INTERVIEW_PATH } from "@/features/interview/guest-route";
+import { SpecDrivenShowcase } from "@/features/landing/SpecDrivenShowcase";
+import {
+  DELIVERABLES,
+  HEADER,
+  HERO,
+  INCLUDED,
+  SECTIONS,
+  STEPS,
+  WHY_SDD,
+  type DeliverableIcon
+} from "@/features/landing/copy";
+import { readFoundation } from "@/features/landing/foundation";
+import { getSession, signOut } from "@/lib/auth";
+import { readTheme } from "@/lib/theme";
 
-const steps = [
-  {
-    n: "01",
-    title: "Answer the CTO interview",
-    body: "An adaptive interview captures your product, audience, capabilities, and technical decisions. Only questions that change the output."
-  },
-  {
-    n: "02",
-    title: "Airrow generates your foundation",
-    body: "Architecture, specifications, standards, roadmap, prompt library, and an AI context system — personalized to your product, not boilerplate."
-  },
-  {
-    n: "03",
-    title: "Build with Claude Code",
-    body: "Download your repository, open VS Code, and start implementing. Your AI assistant finally has the context of a senior engineering team."
-  }
-];
+// getSession() hits Supabase over the network; forcing dynamic skips Next's build-time
+// static-generation probe (which would otherwise make that call during every build) rather
+// than relying on cookies() usage to trigger the same bailout implicitly.
+export const dynamic = "force-dynamic";
 
-const deliverables = [
-  ["Architecture", "System design, database schema with RLS, tech stack decisions"],
-  ["Specifications", "A real spec per capability — requirements, edge cases, security"],
-  ["AI context system", "CLAUDE.md and context files so assistants never guess"],
-  ["Roadmap", "Milestones ordered around your MVP promise"],
-  ["Standards", "Coding, testing, security, git — decided, not debated"],
-  ["Prompt library", "Proven prompts for every stage of the workflow"]
-];
+const deliverableIcons: Record<DeliverableIcon, LucideIcon> = {
+  architecture: Boxes,
+  specifications: FileCode2,
+  context: Sparkles,
+  pipeline: Workflow,
+  standards: ShieldCheck,
+  prompts: BookMarked
+};
+
+async function landingSignOutAction() {
+  "use server";
+  await signOut();
+  redirect("/");
+}
 
 export default async function Landing() {
   const session = await getSession();
+  const theme = await readTheme();
+  // The Examples section shows the canonical scaffold, read from disk on the server.
+  const foundation = readFoundation();
+  // Signed out, "get started" is the interview itself — the account comes at generate.
+  const primaryHref = session ? "/app/projects/new" : GUEST_INTERVIEW_PATH;
+
   return (
     <div className="min-h-screen bg-bg">
-      <header className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
-        <div className="flex items-center gap-2.5 text-fg">
-          <AirrowMark className="text-accent" />
-          <span className="text-[15px] font-semibold tracking-tight">Airrow</span>
+      <header className="sticky top-0 z-20 border-b border-border bg-bg/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
+          <AirrowLogo size="lg" priority />
+          <div className="flex items-center gap-2">
+            <ThemeSwitch current={theme} />
+            {session ? (
+              <>
+                {/* Signed in, this is the landing page's real action — so it gets the
+                    primary treatment rather than reading as a muted afterthought. */}
+                <Button size="sm" asChild>
+                  <Link href="/app">
+                    {HEADER.openDashboard}
+                    <ArrowRight className="size-4" />
+                  </Link>
+                </Button>
+                <UserMenu
+                  name={session.user.name}
+                  email={session.user.email}
+                  signOutAction={landingSignOutAction}
+                />
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/login">{HEADER.signIn}</Link>
+                </Button>
+                <Button size="sm" asChild>
+                  <Link href={primaryHref}>{HEADER.getStarted}</Link>
+                </Button>
+              </>
+            )}
+          </div>
         </div>
-        <Link href={session ? "/app" : "/login"}>
-          <Button variant="secondary" size="sm">
-            {session ? "Open dashboard" : "Sign in"}
-          </Button>
-        </Link>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6">
-        {/* Hero */}
-        <section className="py-24 text-center md:py-32">
-          <Badge tone="accent" className="mb-6">
-            For AI-native startups
-          </Badge>
-          <h1 className="mx-auto max-w-3xl text-balance text-4xl font-semibold leading-[1.1] tracking-tight text-fg md:text-6xl">
-            Your startup deserves a real engineering foundation.
+      <main className="mx-auto max-w-6xl px-6">
+        {/* Hero — the one place, with the logo, where the metal shows. */}
+        <section className="flex flex-col items-center py-28 text-center md:py-40">
+          <AirrowMark priority className="h-24 animate-blur-in md:h-32" />
+          <Badge className="mt-8 animate-fade-in">{HERO.badge}</Badge>
+          <h1 className="mt-6 max-w-4xl animate-slide-up text-balance text-4xl font-semibold tracking-tight text-fg md:text-6xl">
+            {HERO.title}
           </h1>
-          <p className="mx-auto mt-6 max-w-xl text-balance text-base leading-relaxed text-fg-muted md:text-lg">
-            Airrow generates the architecture, specifications, standards, and AI context your project
-            needs — so Claude Code builds it like a senior team, not a gamble.
+          <p className="mt-6 max-w-xl animate-slide-up text-balance text-md leading-relaxed text-fg-muted md:text-lg">
+            {/* The brand name is the subject of the sentence, so it carries the full
+                foreground colour instead of sinking into the muted line. */}
+            <span className="font-medium text-fg">{HERO.leadBrand}</span>
+            {HERO.leadRest}
           </p>
-          <div className="mt-10 flex items-center justify-center gap-3">
-            <Link href={session ? "/app/projects/new" : "/login"}>
-              <Button size="lg">Generate your foundation</Button>
-            </Link>
+          <div className="mt-10 flex animate-slide-up items-center gap-3">
+            <Button size="lg" asChild>
+              <Link href={primaryHref}>{HERO.primaryCta}</Link>
+            </Button>
+            <Button size="lg" variant="secondary" asChild>
+              <Link href="#how">{HERO.secondaryCta}</Link>
+            </Button>
           </div>
-          <p className="mt-6 font-mono text-xs text-fg-faint">
-            Idea → Airrow → Claude Code → Company
-          </p>
+          <p className="mt-8 font-mono text-xs text-fg-faint">{HERO.strapline}</p>
         </section>
 
         {/* How it works */}
-        <section className="grid gap-4 pb-24 md:grid-cols-3">
-          {steps.map((s) => (
-            <Card key={s.n} className="p-6">
-              <span className="font-mono text-xs text-accent">{s.n}</span>
-              <h3 className="mt-3 text-[15px] font-semibold text-fg">{s.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-fg-muted">{s.body}</p>
-            </Card>
-          ))}
-        </section>
-
-        {/* What you get */}
-        <section className="pb-24">
-          <h2 className="text-center text-2xl font-semibold tracking-tight text-fg">
-            Everything before the first line of code
-          </h2>
-          <p className="mx-auto mt-3 max-w-lg text-center text-sm text-fg-muted">
-            Airrow doesn&apos;t build your app. It builds the foundation that makes AI-assisted
-            development consistent, correct, and fast.
-          </p>
-          <div className="mt-10 grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-3">
-            {deliverables.map(([title, body]) => (
-              <div key={title} className="bg-surface p-6">
-                <h3 className="text-sm font-semibold text-fg">{title}</h3>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-fg-muted">{body}</p>
-              </div>
+        <section id="how" className="scroll-mt-20 border-t border-border py-24">
+          <h2 className="text-2xl font-semibold tracking-tight text-fg">{SECTIONS.how.title}</h2>
+          <div className="mt-10 grid gap-4 md:grid-cols-3">
+            {STEPS.map((s) => (
+              <Card key={s.n} interactive>
+                <CardBody className="p-6">
+                  <span className="font-mono text-xs text-fg-faint">{s.n}</span>
+                  <h3 className="mt-3 text-md font-semibold text-fg">{s.title}</h3>
+                  <p className="mt-2 text-base leading-relaxed text-fg-muted">{s.body}</p>
+                </CardBody>
+              </Card>
             ))}
           </div>
         </section>
 
-        {/* CTA */}
-        <section className="pb-32 text-center">
-          <Card className="mx-auto max-w-2xl bg-bg-subtle p-12">
-            <h2 className="text-2xl font-semibold tracking-tight text-fg">
-              Start with the foundation.
-            </h2>
-            <p className="mt-3 text-sm text-fg-muted">
-              Ten minutes of questions. A complete engineering foundation. Yours.
-            </p>
-            <Link href={session ? "/app/projects/new" : "/login"} className="mt-8 inline-block">
-              <Button size="lg">Create your project</Button>
-            </Link>
+        {/* Features */}
+        <section className="border-t border-border py-24">
+          <h2 className="text-2xl font-semibold tracking-tight text-fg">
+            {SECTIONS.features.title}
+          </h2>
+          <p className="mt-3 max-w-xl text-base text-fg-muted">{SECTIONS.features.body}</p>
+          <div className="mt-10 grid gap-px overflow-hidden rounded-lg border border-border bg-border md:grid-cols-3">
+            {DELIVERABLES.map(({ icon, title, body }) => {
+              const Icon = deliverableIcons[icon];
+              return (
+                <div key={title} className="bg-surface p-6">
+                  <Icon className="size-4 text-fg-faint" />
+                  <h3 className="mt-3 text-base font-semibold text-fg">{title}</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">{body}</p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Why spec-driven development — the argument, then the loop and the files that
+            make it hold, read from the scaffold itself. */}
+        <section id="spec-driven" className="scroll-mt-20 border-t border-border py-24">
+          <div className="grid gap-10 md:grid-cols-2">
+            <div>
+              <h2 className="text-2xl font-semibold tracking-tight text-fg">
+                {SECTIONS.specDriven.title}
+              </h2>
+              <p className="mt-3 text-base leading-relaxed text-fg-muted">
+                {SECTIONS.specDriven.body}
+              </p>
+            </div>
+            <ul className="space-y-4">
+              {WHY_SDD.map((line) => (
+                <li key={line} className="flex gap-3">
+                  <GitBranch className="mt-0.5 size-4 shrink-0 text-fg-faint" />
+                  <span className="text-base leading-relaxed text-fg-muted">{line}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <SpecDrivenShowcase foundation={foundation} />
+        </section>
+
+        {/* Pricing — free, in full, while Airrow is in early access. */}
+        <section id="pricing" className="scroll-mt-20 border-t border-border py-24">
+          <h2 className="text-2xl font-semibold tracking-tight text-fg">
+            {SECTIONS.pricing.title}
+          </h2>
+          <p className="mt-3 max-w-xl text-base text-fg-muted">{SECTIONS.pricing.body}</p>
+          <Card className="mt-8">
+            <CardBody className="p-8">
+              <p className="text-5xl font-semibold tracking-tight text-fg">
+                {SECTIONS.pricing.amount}
+              </p>
+              <p className="mt-2 text-base text-fg-muted">{SECTIONS.pricing.note}</p>
+              <ul className="mt-7 grid gap-3 sm:grid-cols-2">
+                {INCLUDED.map((item) => (
+                  <li key={item} className="flex items-start gap-2.5 text-base text-fg-muted">
+                    <Check className="mt-0.5 size-4 shrink-0 text-fg" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </CardBody>
           </Card>
+        </section>
+
+        {/* CTA */}
+        <section className="border-t border-border py-28 text-center">
+          <h2 className="text-3xl font-semibold tracking-tight text-fg">{SECTIONS.cta.title}</h2>
+          <p className="mx-auto mt-4 max-w-md text-base text-fg-muted">{SECTIONS.cta.body}</p>
+          <Button size="lg" className="mt-9" asChild>
+            <Link href={primaryHref}>{SECTIONS.cta.action}</Link>
+          </Button>
         </section>
       </main>
 
-      <footer className="border-t border-border py-8">
-        <p className="text-center font-mono text-xs text-fg-faint">
-          Airrow — built with Airrow&apos;s own methodology.
-        </p>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

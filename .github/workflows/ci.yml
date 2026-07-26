@@ -1,6 +1,10 @@
 name: CI
 on:
   push:
+  # Deliberately unfiltered: this covers every PR target, including `develop` and `main`
+  # (the blocking gate) as well as `<nr>-kort` → `feature/**`, where breakage is cheapest
+  # to catch. The `push` trigger matters for the ruleset — a required check must also be
+  # produced by direct ref updates, or merges into develop would wait forever.
   pull_request:
 
 concurrency:
@@ -27,3 +31,52 @@ jobs:
         run: pnpm -r lint
       - name: Test
         run: pnpm -r test
+      # Last, and on purpose: the production build is what catches crashes the unit tests
+      # cannot see — bad server/client boundaries, RSC-only imports, failed prerenders.
+      # No secrets needed; the app runs fully in local mode (apps/web/.env.example).
+      - name: Build
+        run: pnpm build
+      # Dependency advisories (spec 33). `pnpm audit` rather than the Dependabot API: the
+      # latter needs a fine-grained token Actions cannot mint, and today it reports zero
+      # while audit reports 21. Production deps only — a hole in ESLint reaches no user.
+      # Baseline in `.security/audit-baseline.json` makes this adoptable: pre-existing
+      # advisories are accepted debt, anything NEW turns the check red.
+      - name: Audit production dependencies
+        run: |
+          # `pnpm audit` exits non-zero whenever it finds anything, so the gate is our
+          # comparison against the baseline — not this exit code.
+          pnpm audit --prod --json > audit.json || true
+          node - <<'NODE'
+          const fs = require("node:fs");
+
+          const BLOCKING = ["high", "critical"];
+          const audit = JSON.parse(fs.readFileSync("audit.json", "utf8"));
+          const baseline = JSON.parse(fs.readFileSync(".security/audit-baseline.json", "utf8"));
+
+          const accepted = new Set(baseline.accepted.map((a) => a.id));
+          const found = new Map();
+          for (const a of Object.values(audit.advisories ?? {})) {
+            if (BLOCKING.includes(a.severity)) {
+              found.set(a.github_advisory_id, { severity: a.severity, module: a.module_name, url: a.url });
+            }
+          }
+
+          // Baseline rows that no longer match anything: warn, never fail. Failing here
+          // would punish a successful upgrade, which is the behaviour we want to encourage.
+          const stale = [...accepted].filter((id) => !found.has(id));
+          if (stale.length) {
+            console.log(`::warning::${stale.length} rad(er) i .security/audit-baseline.json matchar ingen advisory längre och kan tas bort: ${stale.join(", ")}`);
+          }
+
+          const newly = [...found].filter(([id]) => !accepted.has(id));
+          if (!newly.length) {
+            console.log(`OK: inga nya high/critical advisories i produktionsberoenden (${accepted.size} accepterade i baseline).`);
+            process.exit(0);
+          }
+
+          for (const [id, info] of newly) {
+            console.log(`::error::Ny ${info.severity} advisory ${id} i '${info.module}' — ${info.url}`);
+          }
+          console.log(`::error::${newly.length} ny(a) advisory(er). Åtgärda, eller acceptera medvetet genom att lägga in dem i .security/audit-baseline.json med en motivering (se docs/guides/SECURITY.md).`);
+          process.exit(1);
+          NODE
