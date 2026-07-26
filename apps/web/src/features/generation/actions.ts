@@ -4,7 +4,6 @@
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { createJob, getProject, latestModelVersion, setProjectStatus } from "@/lib/data/store";
-import { runGenerationJob } from "./runner";
 
 export async function retryGenerationAction(projectId: string): Promise<{ error?: string }> {
   const { org } = await requireSession();
@@ -12,8 +11,8 @@ export async function retryGenerationAction(projectId: string): Promise<{ error?
   if (!project) return { error: "Project not found." };
   const mv = await latestModelVersion(projectId);
   if (!mv) return { error: "No interview submission found — complete the interview first." };
-  const job = await createJob(projectId, mv.id);
+  await createJob(projectId, mv.id);
   await setProjectStatus(projectId, "generating");
-  await runGenerationJob(job.id, mv.model);
+  // Left queued for the progress screen to start, exactly as a first run is.
   redirect(`/app/projects/${projectId}/generating`);
 }

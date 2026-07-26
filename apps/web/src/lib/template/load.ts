@@ -23,8 +23,22 @@ function findTemplateDir(): string {
   );
 }
 
+/**
+ * Read once per server, not once per request. The landing page reads the scaffold on every
+ * view (it shows the real file count and the real command descriptions), and doing that
+ * meant walking the tree and synchronously reading all 22 files before the page could
+ * render — the reason clicking the logo felt slow.
+ *
+ * The template ships inside the deployment and cannot change under a running server, so
+ * caching it is safe. Dev re-reads every time, so editing `template/**` still shows up on
+ * refresh.
+ */
+let cached: TemplateFile[] | null = null;
+
 /** Enumerate every template file, excluding the meta file, with repo-relative POSIX paths. */
 export function loadTemplate(): TemplateFile[] {
+  if (cached) return cached;
+
   const root = findTemplateDir();
   const files: TemplateFile[] = [];
 
@@ -42,5 +56,6 @@ export function loadTemplate(): TemplateFile[] {
   };
 
   walk(root);
+  if (process.env.NODE_ENV === "production") cached = files;
   return files;
 }
