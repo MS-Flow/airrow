@@ -93,7 +93,11 @@ export function Sidebar() {
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 flex flex-col border-r border-border bg-bg-subtle transition-[width,transform] duration-200 ease-out-quart",
-          collapsed ? "w-16" : "w-52",
+          // As a drawer the header also carries a close button, which `w-52` cannot fit
+          // beside a full-size lockup: the logo lost ~12px and the wordmark shrank with it.
+          // The drawer overlays the page (`--rail` is 0 below `md`), so widening it there
+          // costs no content width.
+          collapsed ? "w-16" : "w-60 md:w-52",
           drawerOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
@@ -113,7 +117,7 @@ export function Sidebar() {
             href="/"
             onClick={closeDrawer}
             aria-label="Airrow home"
-            className={cn("flex items-center px-2.5", collapsed && "px-0")}
+            className={cn("flex shrink-0 items-center px-2.5", collapsed && "px-0")}
           >
             {/* Both states render at h-10, the landing header's logo size. The mark spans
                 nearly the full height of the lockup artwork, so matching the CSS height keeps

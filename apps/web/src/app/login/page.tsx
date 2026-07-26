@@ -2,11 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { loginSchema } from "@airrow/schemas";
 import { AirrowLogo } from "@/components/brand/logo";
-import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { InlineError } from "@/components/ui/states";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { ProviderButtons } from "@/features/auth/ProviderButtons";
 import { signIn } from "@/lib/auth";
 
@@ -62,9 +62,9 @@ export default async function LoginPage({
                 <Label htmlFor="password">Password</Label>
                 <Input id="password" name="password" type="password" placeholder="••••••••" required />
               </div>
-              <Button type="submit" className="w-full">
+              <SubmitButton className="w-full" pendingLabel="Signing in…">
                 Sign in
-              </Button>
+              </SubmitButton>
             </form>
 
             <div className="my-6 flex items-center gap-3">
