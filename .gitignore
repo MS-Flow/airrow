@@ -8,3 +8,5 @@ dist/
 *.tsbuildinfo
 .DS_Store
 .vercel
+# Written by the audit step in ci.yml (and by anyone running it locally) — never committed.
+audit.json
