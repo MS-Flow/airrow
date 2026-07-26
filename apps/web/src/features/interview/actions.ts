@@ -58,6 +58,8 @@ export async function submitInterviewAction(projectId: string, raw: unknown): Pr
 
   const job = await createJob(projectId, modelVersion.id);
   await setProjectStatus(projectId, "generating");
-  void runGenerationJob(job.id, model); // fire-and-forget; progress via polling (ADR-0005)
+  // Awaited, not detached: a serverless invocation is frozen once it responds, so a
+  // fire-and-forget job never finishes. It records its own failure, so this never throws.
+  await runGenerationJob(job.id, model);
   redirect(`/app/projects/${projectId}/generating`);
 }

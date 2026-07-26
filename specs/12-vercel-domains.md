@@ -151,6 +151,13 @@ added — nothing here is application logic to unit test (see rationale above).
     request previously logged the 500.
   - **Not** verified end-to-end while authenticated — that check is the founder's, since it needs a
     real session against a project with a generated artifact.
+- **New tests** — `apps/web/src/features/generation/runner.test.ts` (4/4): the job has *finished*
+  writing its artifact by the time it resolves, every stage is recorded, store writes stay at one
+  per stage, and an engine failure marks the job failed rather than throwing. The first of these was
+  deliberately verified to fail against the bug: re-detaching the artifact write
+  (`void saveArtifact(...)`) turns it red, because the mock only flips its flag *after* awaiting.
+  Asserting on the call alone would have passed against the bug — a detached promise is still
+  called synchronously; what it never gets to do is finish.
 - `pnpm -r typecheck` ✓ · `pnpm -r lint` ✓ (no new issues) · `pnpm -r test` ✓ (78 total, 63 passed +
   15 skipped without local Supabase, 0 failed) · `pnpm build` ✓ clean.
 
@@ -254,6 +261,21 @@ deployment (`https://airrow-one.vercel.app`), reported by the founder:
    `apps/web/src/features/projects/DeleteProjectDialog.tsx`, a client component wrapping the
    existing `Dialog` primitive (constitution §III: reuse before create) around the same server
    action.
+4. **Generation never completed on Vercel** ("Generation stopped — nothing was written"). The
+   runner was started with `void runGenerationJob(...)` and the action then redirected
+   (`apps/web/src/features/interview/actions.ts`, `apps/web/src/features/generation/actions.ts`).
+   That is sound for the long-lived local process the comment referenced (ADR-0005), but a
+   serverless invocation is frozen the instant it responds, so the detached promise was killed
+   part-way and the job sat at `running` with no artifact — nothing was logged because nothing
+   threw. Now awaited. Two supporting changes made that affordable inside one request: the
+   artificial `sleep()` calls (~5.7s of fake latency, purely to animate the progress UI) are gone,
+   and the per-file progress loop — 20+ Postgres round-trips — collapses to one write per stage.
+   `generate()` itself is pure and takes milliseconds (`pnpm engine:smoke`: 0.76s for the entire
+   suite including startup and multiple fixtures).
+5. **Removed the sidebar's generating progress bar** (`apps/web/src/components/shell/sidebar.tsx`
+   plus the `latestJob` lookup feeding it in `apps/web/src/app/app/layout.tsx`) — founder request.
+   It is also dead weight now: with generation awaited, a project is no longer observably in the
+   `generating` state, so the rail had nothing live to show.
 
 All three are outside this spec's original scope (Vercel domain config only), but were blocking/
 breaking the app the founder was testing through this spec's Vercel setup, so fixed here rather
