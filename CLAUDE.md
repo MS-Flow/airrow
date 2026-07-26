@@ -42,6 +42,7 @@ pnpm workspaces monorepo (pnpm 9, Node ≥20). Run from the repo root:
 - `pnpm -r typecheck`    # TypeScript strict check across all packages (tsc --noEmit)
 - `pnpm -r lint`         # ESLint across all packages
 - `pnpm -r test`         # run all tests (Vitest)
+- `pnpm test:scripts`    # tests for the CI helpers in scripts/ (outside the workspace)
 - `pnpm --filter web test <file>`   # run a single test file
 - `pnpm engine:smoke`    # headless generation-engine smoke test (no install needed)
 

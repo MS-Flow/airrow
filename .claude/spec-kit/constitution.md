@@ -130,6 +130,7 @@ A change is not done until:
 - Typecheck is clean:  `pnpm -r typecheck`
 - Linter adds **no new** issues:  `pnpm -r lint`
 - Tests are green:  `pnpm -r test`  (single file while iterating: `pnpm --filter web test <file>`) —
-  noting known pre-existing failures.
+  noting known pre-existing failures — **and** `pnpm test:scripts` for the CI helpers in `scripts/`,
+  which live outside the workspace and are therefore out of `-r`'s reach (amended by spec 53).
 - Security addressed: every spec has a Security note; high-severity dependency advisories block a release.
 - The relevant acceptance criteria are demonstrably met (by a test or an explicit manual check).
