@@ -7,9 +7,12 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
 
 export const metadata: Metadata = {
-  title: { default: "Airrow — the engineering foundation for AI-native startups", template: "%s · Airrow" },
+  title: {
+    default: "Airrow · The engineering foundation for AI-native startups",
+    template: "%s · Airrow"
+  },
   description:
-    "Airrow generates the complete engineering foundation for your startup — architecture, specifications, standards, and AI context — so Claude Code builds it right."
+    "Airrow generates the complete engineering foundation for your startup: architecture, specifications, standards and AI context, so your AI agents build it right."
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

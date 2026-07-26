@@ -25,11 +25,11 @@ export function ThemeSwitch({ current, className }: { current: Theme; className?
         title={`Switch to ${option.label.toLowerCase()} theme`}
         aria-label={`Switch to ${option.label.toLowerCase()} theme`}
         className={cn(
-          "flex cursor-pointer items-center justify-center rounded-md p-1.5 text-fg-muted transition-colors",
+          "flex cursor-pointer items-center justify-center rounded-md p-2 text-fg-muted transition-colors",
           "hover:bg-surface hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         )}
       >
-        <Icon className="size-4" />
+        <Icon className="size-4.5" />
       </button>
     </form>
   );

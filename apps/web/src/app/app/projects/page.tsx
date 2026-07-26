@@ -1,6 +1,7 @@
 // Full project list (spec 19) — the dashboard shows the recent few, this shows all.
 import Link from "next/link";
 import { Plus } from "lucide-react";
+import { PageContainer } from "@/components/shell/page-container";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/states";
 import { ProjectRow } from "@/features/projects/ProjectCard";
@@ -14,10 +15,10 @@ export default async function ProjectsPage() {
   const projects = await listProjects(org.id);
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10 md:px-8">
+    <PageContainer>
       <div className="flex items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-fg">Projects</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-fg">Projects</h1>
           <p className="mt-1 text-base text-fg-muted">
             {projects.length} project{projects.length === 1 ? "" : "s"} in {org.name}
           </p>
@@ -48,6 +49,6 @@ export default async function ProjectsPage() {
           ))}
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

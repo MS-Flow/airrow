@@ -1,4 +1,5 @@
 // Create Project — step one of the wizard: the basics, then the interview.
+import { PageContainer } from "@/components/shell/page-container";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Input, Textarea } from "@/components/ui/input";
@@ -16,7 +17,8 @@ export default async function NewProject({
 }) {
   const { error } = await searchParams;
   return (
-    <div className="mx-auto max-w-xl animate-slide-up px-6 py-16 md:px-8">
+    // A wizard step keeps its narrow measure, centred on the viewport like every screen.
+    <PageContainer className="max-w-xl animate-slide-up py-16">
       <div className="flex items-center justify-between gap-4">
         <p className="font-mono text-xs text-fg-faint">Step 1 of 2 — the basics</p>
         <Progress value={50} aria-label="Setup progress" className="w-32" />
@@ -60,6 +62,6 @@ export default async function NewProject({
           </form>
         </CardBody>
       </Card>
-    </div>
+    </PageContainer>
   );
 }
