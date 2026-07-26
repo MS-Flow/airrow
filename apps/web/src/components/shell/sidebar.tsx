@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import { LayoutGrid, Menu, PanelLeftClose, PanelLeftOpen, Settings, X } from "lucide-react";
 import { AirrowLogo } from "@/components/brand/logo";
 import { AirrowMark } from "@/components/brand/mark";
-import { Progress } from "@/components/ui/progress";
 import { Tooltip } from "@/components/ui/tooltip";
 import { NAV_ITEMS, type NavItem } from "./nav-items";
 import { useRail } from "./rail";
@@ -16,12 +15,6 @@ const icons = {
   projects: LayoutGrid,
   settings: Settings
 } as const;
-
-export interface GeneratingProject {
-  id: string;
-  name: string;
-  percent: number;
-}
 
 function isActive(pathname: string, href: string): boolean {
   return href === "/app" ? pathname === "/app" || pathname.startsWith("/app/projects") : pathname.startsWith(href);
@@ -71,7 +64,7 @@ function NavLink({
  * as `--rail` by `RailProvider`, so the shell can decide what follows it and what stays
  * put.
  */
-export function Sidebar({ generating }: { generating: GeneratingProject | null }) {
+export function Sidebar() {
   const { collapsed, toggle } = useRail();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const closeDrawer = React.useCallback(() => setDrawerOpen(false), []);
@@ -100,7 +93,11 @@ export function Sidebar({ generating }: { generating: GeneratingProject | null }
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 flex flex-col border-r border-border bg-bg-subtle transition-[width,transform] duration-200 ease-out-quart",
-          collapsed ? "w-16" : "w-52",
+          // As a drawer the header also carries a close button, which `w-52` cannot fit
+          // beside a full-size lockup: the logo lost ~12px and the wordmark shrank with it.
+          // The drawer overlays the page (`--rail` is 0 below `md`), so widening it there
+          // costs no content width.
+          collapsed ? "w-16" : "w-60 md:w-52",
           drawerOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
@@ -120,7 +117,7 @@ export function Sidebar({ generating }: { generating: GeneratingProject | null }
             href="/"
             onClick={closeDrawer}
             aria-label="Airrow home"
-            className={cn("flex items-center px-2.5", collapsed && "px-0")}
+            className={cn("flex shrink-0 items-center px-2.5", collapsed && "px-0")}
           >
             {/* Both states render at h-10, the landing header's logo size. The mark spans
                 nearly the full height of the lockup artwork, so matching the CSS height keeps
@@ -143,24 +140,6 @@ export function Sidebar({ generating }: { generating: GeneratingProject | null }
             <NavLink key={item.href} item={item} collapsed={collapsed} onNavigate={closeDrawer} />
           ))}
         </nav>
-
-        {generating ? (
-          <Link
-            href={`/app/projects/${generating.id}/generating`}
-            onClick={closeDrawer}
-            className="mx-3 mb-3 block rounded-md border border-border bg-surface px-3 py-2.5 transition-colors hover:border-border-strong"
-          >
-            {collapsed ? (
-              <Progress value={generating.percent} aria-label={`Generating ${generating.name}`} />
-            ) : (
-              <>
-                <p className="truncate text-xs font-medium text-fg">{generating.name}</p>
-                <p className="mb-2 mt-0.5 text-2xs text-fg-faint">Generating…</p>
-                <Progress value={generating.percent} aria-label={`Generating ${generating.name}`} />
-              </>
-            )}
-          </Link>
-        ) : null}
 
         <button
           type="button"

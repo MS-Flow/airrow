@@ -13,6 +13,7 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
+    "test:scripts": "vitest run scripts",
     "engine:smoke": "node --experimental-strip-types scripts/engine-smoke.mjs",
     "migrate:data": "pnpm --filter web exec node ../../scripts/migrate-data-to-supabase.mjs"
   },
@@ -22,5 +23,11 @@
     "globals": "15.14.0",
     "typescript-eslint": "8.20.0",
     "vitest": "2.1.8"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": ">=8.5.18",
+      "sharp": ">=0.35.0"
+    }
   }
 }

@@ -7,7 +7,7 @@
 | -------------- | -------------------------------------------------------------------------------------- |
 | **Status**     | 🔄 In progress                                                                          |
 | **Issue**      | #16 — "Auto-set PR base branch according to branch hierarchy (issue → feature → develop → main)" |
-| **Branch**     | `16-pr-base-branch` (from `feature/ci-cd`)                                               |
+| **Branch**     | `16-pr-base-branch` (from `feature/ci-cd`), följdfix i `16-pr-base-feature` (from `feature/ci-cd`) |
 | **Feature**    | CI/CD                                                                                    |
 | **Depends on** | [`29-branch-policy.md`](29-branch-policy.md) (validate-source-branch), [`14-pr-ci-checks.md`](14-pr-ci-checks.md) (required checks på `develop`/`main`) |
 
@@ -62,13 +62,16 @@ täcker båda vägarna en PR kan skapas på — `gh` och GitHub-UI:t — och dä
 uppfyller acceptanskriteriet. Skript och gh-alias valdes bort eftersom de bara hjälper den som råkar
 använda dem, och `/pr-check` skriver redan ut rätt `--base`.
 
-Hela hierarkin täcks, av två mekanismer:
+Hela hierarkin täcks **av workflowen**, inte av repo-inställningar:
 
 | Head-gren        | Base          | Hur                                                    |
 | ---------------- | ------------- | ------------------------------------------------------ |
-| `feature/<name>` | `develop`     | repots default-gren — ingen kod                        |
+| `feature/<name>` | `develop`     | fast värde — aldrig direkt till `main`                 |
 | `<nr>-kort`      | dess `feature/<name>` | härledd ur specens Branch-rad                  |
 | `develop`        | `main`        | fast värde — `develop` är enda grenen som får in i `main` |
+
+Den första raden hanterades ursprungligen genom att repots default-gren sattes till `develop`. **Det var
+fel**, och rättades i följdfixen — se Implementation notes.
 
 **Parent härleds ur spec-headern.** Workflowen läser `specs/<nr>-*.md` och plockar
 `` (from `feature/<name>`) `` ur Branch-raden. Alla 14 specar följer mönstret idag och det är versionerat
@@ -78,6 +81,80 @@ i repot, så härledningen blir en `grep` — ingen API-slagning, inget nätverk
 `close-issue-on-merge.yml`. Inget nytt paket: `scripts/` ligger utanför pnpm-workspacet och en egen
 workspace-modul för en strängmatchning är mer ceremoni än värdet motiverar. Konsekvensen för
 testbarheten är utskriven under Verification.
+
+**Följdfix 2026-07-26 — `feature/*` täcktes inte (gren `16-pr-base-feature`).**
+
+Rapporterat av användaren: en PR från `feature/infrastructure` fick `main` som base och rättades inte.
+Bekräftat i körningen på PR #41:
+
+```
+HEAD: feature/infrastructure
+'feature/infrastructure' är varken 'develop' eller en issue-gren — rör inte basen.
+```
+
+**Rotorsaken var ett designfel, inte en bugg i koden.** Att låta `feature/*` → `develop` vila på att
+repots default-gren är `develop` fungerar inte: default-grenen styr bara vad PR-*formuläret* föreslår.
+Väljer någon `main` aktivt i dropdownen finns ingen rättning. Dessutom är default-grenen tillbaka på
+`main` (verifierat 2026-07-26) för att passa Vercel-produktionsdeployen — så antagandet gäller inte ens
+längre. Vercels Production Branch är en Vercel-inställning och oberoende av GitHubs default, men att ha
+`main` som default är ett rimligt val, och lösningen ska inte vara känslig för det.
+
+**Åtgärd:** `feature/*` → `develop` är nu ett eget fall i workflowen. Alla tre grentyperna hanteras i
+kod; ingen del av hierarkin vilar på en repo-inställning.
+
+**Verifierat lokalt mot verkliga specfiler, med `main` som base i samtliga fall:**
+
+| Head-gren                | Utfall                          |
+| ------------------------ | ------------------------------- |
+| `feature/infrastructure` | → `develop` ✅ (fallet som brast) |
+| `feature/ci-cd`          | → `develop` ✅                   |
+| `feature/ci-cd` (base redan `develop`) | no-op ✅           |
+| `develop`                | base redan `main`, no-op ✅       |
+| `33-security-scanning`   | → `feature/ci-cd` ✅             |
+| `11-ui-design-flaws`     | → `feature/ui` ✅                |
+| `hotfix-foo`             | rörs inte ✅                     |
+| `999-nope`               | kommentar, base orörd ✅         |
+
+Testet avslöjade dessutom att **den här fixens egen gren** (`16-pr-base-feature`) inte matchade någon
+spec, eftersom härledningen kräver att grennamnet står i specens Branch-rad. Raden listar nu båda
+grenarna — annars hade den här PR:en fått en "kunde inte härleda"-kommentar av sin egen fix.
+
+**Följdfix 2 — kapplöpningen mot `validate-source-branch` (samma gren).**
+
+Det skarpa testet på PR #42 lyckades: basen skrevs om från `main` till `feature/ci-cd`. Men
+`validate-source-branch` hade redan hunnit köra mot `main` och failade:
+
+```
+Error: Endast 'develop' får mergas in i 'main' (fick '16-pr-base-feature').
+```
+
+**Ingen omkörning skedde.** Jag antog först att base-bytet triggar ett `edited`-event så att
+branch-policy kör om och blir grön — det är fel. Åtgärder utförda med `GITHUB_TOKEN` triggar aldrig nya
+workflow-körningar (GitHubs rekursionsskydd). Den failade körningen förblir alltså den senaste.
+
+För PR #42 var det kosmetiskt, eftersom basen blev `feature/ci-cd` där ingen check är required. Men mot
+`develop` — där `validate-source-branch` **är** required — hade PR:en blivit permanent omöjlig att merga.
+Fixen förvandlade då en bekvämlighet till en blockering i precis det flöde den skulle förenkla.
+
+**Åtgärd:** `pr-base-branch.yml` är borttagen och dess logik flyttad in i `branch-policy.yml` som ett
+första steg i jobbet `validate-source-branch`. Basen sätts först, riktningen valideras efter, i samma
+jobb — kapplöpningen är omöjlig av konstruktion i stället för övertäckt. Valideringssteget läser
+`EFFECTIVE_BASE` via `$GITHUB_ENV` när basen skrevs om, eftersom `github.base_ref` är inaktuell då.
+
+Jobb-id:t behölls (`validate-source-branch`), och eftersom check-kontexten är jobb-id:t behövde
+**rulesetet inte röras** — till skillnad från vad jag först uppgav när alternativen vägdes.
+
+Verifierat lokalt genom att köra båda stegen i sekvens med `$GITHUB_ENV`-överföringen simulerad:
+
+| Head-gren | Base vid öppning | Utfall |
+| --------- | ---------------- | ------ |
+| `feature/infrastructure` | `main` | → `develop`, validering **exit 0** ✅ |
+| `feature/ci-cd` | `main` | → `develop`, exit 0 ✅ |
+| `33-security-scanning` | `main` | → `feature/ci-cd`, exit 0 ✅ |
+| `16-pr-base-feature` | `main` | → `feature/ci-cd`, exit 0 ✅ |
+| `develop` | `main` | no-op, exit 0 ✅ |
+| `hotfix-foo` | `main` | orörd, validering **exit 1** ✅ (legitimt fel riktning) |
+| `16-pr-base-feature` vid `synchronize` | `main` | base-steget hoppas över, exit 1 ✅ |
 
 **Efterjusteringar efter första skarpa användningen (2026-07-25).** Den ursprungliga leveransen
 hanterade bara issue-grenar och missade därmed issuens kriterium att *icke*-issue-grenar ska ha sitt
@@ -114,8 +191,8 @@ _What "done" means. Every line is something a reviewer can check._
 - [x] Parent härleds ur `specs/<nr>-*.md` Branch-rad och är deterministisk.
 - [x] Hittas ingen parent lämnas base orörd och en PR-kommentar förklarar varför — aldrig tyst `main`.
 - [x] Workflowen kör **bara** på `pull_request.opened`; en base som ändras senare rörs aldrig.
-- [x] Grenar som inte är issue-grenar får också rätt base: `feature/*` → `develop` via repots
-      default-gren, `develop` → `main` via workflowen.
+- [x] Grenar som inte är issue-grenar får också rätt base, båda via workflowen: `feature/*` → `develop`
+      och `develop` → `main`. Oberoende av vilken gren som är repots default.
 - [x] Beteendet dokumenteras i [`docs/architecture/BRANCHING.md`](docs/architecture/BRANCHING.md).
 - [x] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures).
 

@@ -1,11 +1,11 @@
 // Create Project — step one of the wizard: the basics, then the interview.
 import { PageContainer } from "@/components/shell/page-container";
-import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { InlineError } from "@/components/ui/states";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { createProjectAction } from "@/features/projects/actions";
 
 export const metadata = { title: "New project" };
@@ -55,9 +55,9 @@ export default async function NewProject({
               />
             </div>
             <div className="flex justify-end">
-              <Button type="submit" size="lg">
+              <SubmitButton size="lg" pendingLabel="Creating…">
                 Continue to interview
-              </Button>
+              </SubmitButton>
             </div>
           </form>
         </CardBody>

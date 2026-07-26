@@ -112,7 +112,7 @@ export function PreviewBrowser({
 }: {
   files: PreviewFile[];
   projectId: string;
-  /** Server-highlighted, already-sanitized HTML for the active code file. */
+  /** Server-highlighted HTML for the active code file; sanitized here before injection. */
   highlightedHtml: string | null;
   /** The path `highlightedHtml` belongs to — stale markup is never rendered. */
   highlightedFor: string | null;
@@ -160,6 +160,13 @@ export function PreviewBrowser({
   const content = byPath.get(active) ?? "";
   const isMarkdown = active.endsWith(".md");
   const [html, setHtml] = useState("");
+
+  // Shiki's markup is built from untrusted file content, so it is sanitized here rather
+  // than on the server — same point of injection, same sanitizer as the markdown above.
+  const safeHighlighted = useMemo(
+    () => (highlightedHtml ? DOMPurify.sanitize(highlightedHtml) : null),
+    [highlightedHtml]
+  );
 
   useEffect(() => {
     if (!isMarkdown) return;
@@ -236,10 +243,10 @@ export function PreviewBrowser({
             />
           ) : isMarkdown ? (
             <div className="prose-airrow" dangerouslySetInnerHTML={{ __html: html }} />
-          ) : highlightedFor === active && highlightedHtml ? (
+          ) : highlightedFor === active && safeHighlighted ? (
             <div
               className="overflow-x-auto rounded-lg border border-border text-sm leading-relaxed [&_pre]:p-4"
-              dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+              dangerouslySetInnerHTML={{ __html: safeHighlighted }}
             />
           ) : (
             <pre className="overflow-x-auto rounded-lg border border-border bg-bg-subtle p-4 font-mono text-sm leading-relaxed text-fg">
