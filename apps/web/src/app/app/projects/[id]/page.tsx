@@ -9,8 +9,7 @@ import {
   FileCode2,
   FolderTree,
   Github,
-  Map,
-  Trash2
+  Map
 } from "lucide-react";
 import { PageContainer } from "@/components/shell/page-container";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ComingSoon } from "@/components/ui/states";
+import { DeleteProjectDialog } from "@/features/projects/DeleteProjectDialog";
 import { STATUS_META } from "@/features/projects/ProjectCard";
 import { deleteProjectAction } from "@/features/projects/actions";
 import { requireSession } from "@/lib/auth";
@@ -161,13 +161,11 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
             Removes the interview, generated foundation and history. No undo.
           </p>
         </div>
-        <form action={deleteProjectAction}>
-          <input type="hidden" name="projectId" value={project.id} />
-          <Button variant="danger" size="sm" type="submit">
-            <Trash2 className="size-3.5" />
-            Delete
-          </Button>
-        </form>
+        <DeleteProjectDialog
+          projectId={project.id}
+          projectName={project.name}
+          action={deleteProjectAction}
+        />
       </div>
     </PageContainer>
   );
