@@ -41,17 +41,18 @@ pnpm workspaces. The engine and schemas packages must never import from apps.
 
 ## The generation engine (core asset)
 
-Pure function at heart: `generate(projectModel) → RepoTree + Manifest`.
+Pure function at heart: `generate(templateFiles, projectModel) → RepoTree + Manifest`. The generated repository has exactly one source: the canonical scaffold in [`template/`](../../template/), catalogued by `.airrow-template.json` (fixed-workflow vs. tailored paths, and every `{{TOKEN}}`). The app reads those files from disk and passes them in, so the engine keeps its no-I/O purity.
 
 Pipeline stages:
 
-1. **Resolve** — project model → repository blueprint (folder tree, file list, static content, variables).
-2. **Author** — for each AI-authored document: build a structured prompt from the project model + document contract, call Claude, validate output against the document contract (required sections present, links well-formed). Retry with feedback on validation failure.
-3. **Assemble** — merge static + authored files, render cross-references, produce the final tree.
-4. **Validate** — completeness check against the blueprint; no unresolved variables; internal links resolve.
-5. **Manifest** — record per file: source (static/authored), template id + version, prompt version, model, inputs hash. Stored in Postgres; enables future regeneration, diffing, and repo sync (Phase 4).
+1. **Resolve** — interview answers → `ProjectModel` (validated, with derived flags).
+2. **Render** — `renderScaffold` derives a value per `{{TOKEN}}` from the model and substitutes it in every template file. An answer the founder skipped renders `[NEEDS CLARIFICATION: TOKEN]`; nothing is invented to fill a gap.
+3. **Validate** — required files present, no unresolved token, no duplicate or empty file.
+4. **Manifest** — record per file: source, template id + version, bytes. Stored in Postgres; enables future regeneration, diffing, and repo sync (Phase 4).
 
-Design rules: deterministic where possible, LLM only where personalization adds value (a deliberate hybrid). Every LLM output passes schema validation before acceptance. Engine is fully testable offline via a mock authoring provider and snapshot fixtures.
+`renderScaffold` also returns a `ScaffoldPlan` — file tree, the derived decisions with their provenance, and the outstanding clarifications — which the founder approves before anything is written or provisioned (constitution §0).
+
+Design rules: deterministic where possible, LLM only where personalization adds value. Every LLM output passes schema validation before acceptance. The engine is fully testable offline — the renderer is pure, so fixtures cover the product-type × capability matrix without a network call.
 
 ## Generation jobs
 

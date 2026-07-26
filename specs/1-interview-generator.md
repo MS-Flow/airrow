@@ -4,7 +4,7 @@
 **Branch:** `1-interview-generator` (from `feature/interview-generator`)
 **Feature:** Generation
 **Depends on:** the canonical template in `template/` and the resolved `ProjectModel` (`packages/schemas`).
-**Status:** 🔄 In progress
+**Status:** ✅ Done
 
 <!-- Status legend: ⏳ Not started · 🔄 In progress · ✅ Done -->
 
@@ -75,8 +75,12 @@ constitution's data invariants (access control on new resources, idempotent migr
       approval before any write.
 - [x] Multi-tenant vs. single-tenant models produce different data invariants.
 - [x] Typecheck passes; lint adds no new issues; tests green.
-- [ ] App wiring: read `template/`, show the preview, require explicit approval, then write/provision. *(follow-up issue)*
-- [ ] Seed specs generated per selected initial feature. *(follow-up issue)*
+- [ ] App wiring: read `template/`, show the preview, require explicit approval, then write/provision.
+      *Reading `template/` landed in [10-foundation-reflects-answers.md](10-foundation-reflects-answers.md)
+      (`apps/web/src/lib/template/load.ts` → the generation runner); the preview + explicit-approval
+      gate is still a follow-up issue.*
+- [x] Seed specs generated per selected initial feature — as one brief per selected capability in the
+      generated `specs/README.md` ([10-foundation-reflects-answers.md](10-foundation-reflects-answers.md)).
 
 ### Verification
 - **New tests** — `packages/engine/src/scaffold.test.ts`: invariant skeleton always present; no

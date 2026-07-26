@@ -6,6 +6,7 @@ import type {
   Audience,
   AuthMethod,
   Database,
+  DataSensitivity,
   FeatureId,
   Framework,
   Hosting,
@@ -49,8 +50,11 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
   const needsAuth = productType !== "api" && !(authModel.length === 1 && authModel[0] === "public");
 
   // Project the capability list into the engine's FeatureId set: selected capabilities
-  // plus the identity-adjacent features derived from tenancy/auth.
-  const capabilities: FeatureId[] = [...(a.capabilities ?? [])];
+  // plus the identity-adjacent features derived from tenancy/auth. Answering "none" on the AI
+  // question backs the founder out of AI entirely, so the capability goes with it.
+  const selected = a.capabilities ?? [];
+  const capabilities: FeatureId[] =
+    a.aiUsage === "none" ? selected.filter((c) => c !== "ai") : [...selected];
   const features: FeatureId[] = [...capabilities];
   if (multiTenant && !features.includes("organizations")) features.unshift("organizations");
   if (needsAuth && !features.includes("auth")) features.unshift("auth");
@@ -63,9 +67,11 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
   const framework: Framework =
     a.framework ?? (productType === "mobile_app" || productType === "browser_extension" ? "vite" : "nextjs");
 
-  const security: SecurityLevel = (a.dataSensitivity ?? "standard") === "standard" ? "standard" : "elevated";
+  const dataSensitivity: DataSensitivity = a.dataSensitivity ?? "standard";
+  const security: SecurityLevel = dataSensitivity === "standard" ? "standard" : "elevated";
   const hasAi = capabilities.includes("ai");
-  const aiUsage: AiUsage | "none" = hasAi ? (a.aiUsage ?? "llm_calls") : "none";
+  // The kind of AI is only meaningful when AI is selected — and is never guessed when it was skipped.
+  const aiUsage: AiUsage | "none" = hasAi ? (a.aiUsage ?? "none") : "none";
 
   return {
     schemaVersion: "1",
@@ -95,6 +101,7 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
       ai: "claude-code"
     },
     team: a.team ?? "solo",
+    dataSensitivity,
     security,
     scale: a.scale ?? "validate",
     mvpFocus: (a.mvpFocus ?? "").trim(),
@@ -111,7 +118,7 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
   };
 }
 
-// ── Label helpers used across document authors ──────────────────────────────
+// ── Label helpers used by the scaffold renderer ─────────────────────────────
 
 export const productTypeLabel: Record<ProductType, string> = {
   saas: "SaaS product",
@@ -158,11 +165,6 @@ export function frameworkLabel(m: ProjectModel): string {
   return m.stack.framework === "nextjs" ? "Next.js (App Router)" : "Vite + React";
 }
 
-/** The Vite SPA is the only non-server-rendered web framework we generate. */
-export function isSpaFramework(m: ProjectModel): boolean {
-  return m.stack.framework === "vite";
-}
-
 export function repoLabel(m: ProjectModel): string {
   return m.stack.repoProvider === "github" ? "GitHub" : "Azure DevOps";
 }
@@ -181,10 +183,6 @@ export const authMethodLabel: Record<AuthMethod, string> = {
   sso: "enterprise SSO (SAML/OIDC)",
   public: "no accounts (public)"
 };
-
-export function authSummary(m: ProjectModel): string {
-  return m.authModel.map((a) => authMethodLabel[a]).join(", ");
-}
 
 export const aiUsageLabel: Record<AiUsage, string> = {
   llm_calls: "LLM calls (prompt-in, text-out)",
@@ -224,8 +222,4 @@ export function backendSummary(m: ProjectModel): string {
     return `Supabase (PostgreSQL${extras.length ? ", " + extras.join(", ") : ""})`;
   }
   return `${databaseLabel(m)} (PostgreSQL)${extras.length ? ` — wire ${extras.join(", ")} yourself` : ""}`;
-}
-
-export function featureList(m: ProjectModel): string {
-  return m.features.map((f) => featureLabel[f]).join(", ");
 }

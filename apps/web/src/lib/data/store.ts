@@ -6,6 +6,7 @@
 // The Supabase client uses the service-role key and therefore bypasses RLS — every query
 // here is additionally scoped by organization_id server-side (defense in depth, §II).
 import crypto from "node:crypto";
+import { cache } from "react";
 import type {
   InterviewAnswers,
   JobStage,
@@ -212,7 +213,12 @@ export async function setDisplayName(userId: string, name: string): Promise<void
 
 /* ── Projects (always org-scoped) ─────────────────────────────────────────── */
 
-export async function listProjects(orgId: string): Promise<ProjectRecord[]> {
+/**
+ * Memoised per request: the app shell and the dashboard each need the project list, and
+ * without this a single `/app` render queried it twice. `cache()` is scoped to one
+ * request, so a mutation followed by a fresh navigation still reads current data.
+ */
+export const listProjects = cache(async (orgId: string): Promise<ProjectRecord[]> => {
   const data = rows<ProjectRow>(
     await db()
       .from("projects")
@@ -221,7 +227,7 @@ export async function listProjects(orgId: string): Promise<ProjectRecord[]> {
       .order("updated_at", { ascending: false })
   );
   return data.map(toProject);
-}
+});
 
 export async function getProject(orgId: string, projectId: string): Promise<ProjectRecord | null> {
   const row = maybe<ProjectRow>(
@@ -404,6 +410,30 @@ export async function loadArtifact(jobId: string): Promise<GenerationResult | nu
     await db().from("artifacts").select("result").eq("generation_job_id", jobId).maybeSingle()
   );
   return row ? row.result : null;
+}
+
+/**
+ * Replace one file's content in a stored artifact (founder edits in the preview). The manifest entry
+ * is re-stamped so byte counts stay true and the file is marked as founder-edited — regeneration
+ * always produces a fresh artifact, so an edit never silently outlives the answers it came from.
+ */
+export async function updateArtifactFile(
+  jobId: string,
+  filePath: string,
+  content: string
+): Promise<boolean> {
+  const artifact = await loadArtifact(jobId);
+  if (!artifact) return false;
+  const file = artifact.files.find((f) => f.path === filePath);
+  const entry = artifact.manifest.files.find((f) => f.path === filePath);
+  if (!file || !entry) return false;
+
+  file.content = content;
+  file.source = "authored";
+  entry.source = "authored";
+  entry.bytes = new TextEncoder().encode(content).length;
+  await saveArtifact(jobId, artifact);
+  return true;
 }
 
 /* ── Deliveries ─────────────────────────────────────────────────────────── */

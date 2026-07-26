@@ -1,0 +1,29 @@
+name: Delete issue branch on feature merge
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - 'feature/**'
+
+permissions:
+  contents: write
+
+jobs:
+  delete-issue-branch:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete head branch for merged issue branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD: ${{ github.event.pull_request.head.ref }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          if ! echo "$HEAD" | grep -qE '^[0-9]+-'; then
+            echo "Gren '$HEAD' matchar inte issue-mönstret (^[0-9]+-) — hoppar över."
+            exit 0
+          fi
+          echo "Tar bort issue-gren '$HEAD' (mergad in i '$BASE')."
+          gh api -X DELETE "repos/$REPO/git/refs/heads/$HEAD" \
+            || echo "Kunde inte ta bort gren '$HEAD' (kan redan vara borttagen)."

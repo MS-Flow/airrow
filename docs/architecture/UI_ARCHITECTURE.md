@@ -2,62 +2,128 @@
 
 ## Design identity
 
-Premium developer-tool aesthetic: Linear's density and speed, Vercel's restraint, Stripe's polish. **Dark mode first** — dark is the default and design target; light mode derived. Minimal chrome, generous whitespace, fast transitions (no decorative animation), keyboard-friendly.
+Premium developer-tool aesthetic: Linear's density, Vercel's restraint, Apple's calm. **Dark mode is
+the design target**, light is derived from the same semantic tokens and ships alongside it. Minimal
+chrome, generous whitespace, fast transitions, keyboard-first.
 
-Design tokens (Tailwind CSS variables): near-black neutral background scale, one accent color, semantic tokens (`bg`, `bg-subtle`, `border`, `fg`, `fg-muted`, `accent`, `danger`...). Components exclusively from `apps/web/src/components/ui` (shadcn/ui based, tokenized). No raw hex values in app code.
+The brand mark is the strongest visual element on any screen. The **brushed-metal sheen belongs to the
+logo artwork and nowhere else** — UI chrome stays matte so it never competes with content.
+
+## Design tokens
+
+All raw values live in [`apps/web/src/app/globals.css`](../../apps/web/src/app/globals.css) and
+nowhere else; `src/components/design-tokens.test.ts` fails the build if a hex or an arbitrary `px`
+value appears in a component.
+
+Colors resolve through a second variable (`--color-bg` → `--a-bg`) so a theme swaps the value while
+the utility name stays put.
+
+| Token | Dark | Light |
+|-------|------|-------|
+| `bg` | `#09090b` | `#fbfbfc` |
+| `bg-subtle` | `#0d0d10` | `#f4f4f6` |
+| `surface` | `#111114` | `#ffffff` |
+| `surface-raised` | `#17171b` | `#ffffff` |
+| `border` | `#202026` | `#e5e5ea` |
+| `border-strong` | `#2c2c34` | `#d2d2d9` |
+| `fg` | `#fafafa` | `#0b0b0d` |
+| `fg-muted` | `#9ca3af` | `#52525b` |
+| `fg-faint` | `#7c8492` | `#71717a` |
+| `accent` (silver) | `#cbd1da` | `#3f3f46` |
+| `info` / `success` / `danger` | `#7aa2f7` / `#4ec99a` / `#f0564a` | `#2f5fd0` / `#17845a` / `#c33025` |
+
+**Contrast on `bg`** — dark: `fg` 19.4:1 · `fg-muted` 7.7:1 · `fg-faint` 5.3:1. Light: `fg` 19.0:1 ·
+`fg-muted` 7.5:1 · `fg-faint` 4.7:1. All clear the 4.5:1 AA bar at every size we use; `fg-faint` is
+the floor in both themes, so anything quieter must be decorative rather than informational.
+
+**Type scale:** `2xs` 11 · `xs` 12 · `sm` 13 · `base` 14 · `md` 15 · `lg` 17 · `xl` 21 · `2xl` 26 ·
+`3xl` 33 · `4xl` 42 · `5xl` 54 · `6xl` 68 px, each with a paired line-height. Fonts: Inter (sans),
+JetBrains Mono (labels, paths, code).
+
+**Spacing** is Tailwind's 4px scale. **Radii:** `sm` 6 · `md` 8 · `lg` 12 · `xl` 16 · `2xl` 20 px.
+**Elevation:** `shadow-e1/e2/e3`.
+
+**Motion:** `animate-fade-in`, `-scale-in`, `-slide-up`, `-slide-down`, `-blur-in`, `-shimmer` on
+`--ease-out-quart`. A global `prefers-reduced-motion` block collapses every animation and transition;
+the skeleton shimmer becomes a flat block.
+
+## Theming
+
+The choice lives in the `airrow-theme` cookie, read server-side in the root layout
+([`lib/theme.ts`](../../apps/web/src/lib/theme.ts)) and written by a server action from Settings — so
+the first paint is already correct and there is no flash. Anything unrecognised falls back to dark.
+No schema change; no `useEffect` theme flip.
 
 ## Stack
 
-Next.js App Router · React Server Components by default · Server Actions for mutations · client components only for interactivity (interview flow, preview tree, command palette) · Tailwind + shadcn/ui · Zod + react-hook-form for forms · Supabase Realtime for generation progress.
+Next.js App Router · RSC by default · Server Actions for mutations · client components only for
+interactivity · Tailwind v4 · **Radix primitives** for the behavior of dialog, dropdown, tooltip,
+tabs, select, checkbox/radio, progress, separator, label and toast (unstyled — every pixel is ours) ·
+`shiki` for server-side syntax highlighting · `marked` + DOMPurify for markdown.
+
+## Components
+
+One component per file in `apps/web/src/components/ui`, **no barrel** (constitution I). Import
+directly: `@/components/ui/button`.
+
+`button` · `card` (+ Header/Title/Description/Body/Footer) · `input` (Input, Textarea) · `label` ·
+`select` · `choice` (Checkbox, RadioGroup) · `dialog` · `dropdown` · `tooltip` · `tabs` ·
+`breadcrumbs` · `table` · `badge` · `progress` · `skeleton` · `spinner` · `separator` · `toast` ·
+`command-palette` · `states` (EmptyState, ErrorState, InlineError, LoadingState, **ComingSoon**).
+
+Brand lives in `components/brand`: `mark`, `logo` (the mark+wordmark lockup), `splash`. Both render
+**the approved artwork** from `public/brand/*.png` via `next/image` — not redrawn vectors, because no
+vector original exists and tracing changes the design. The metal is baked in; `.brand-asset` darkens
+it in the light theme. Size these by height (`h-*`), never `size-*` — neither asset is square.
+
+Shell lives in `components/shell`: `sidebar`, `top-bar`, `user-menu`, `chat-slot`, `nav-items`.
+
+**Rules.** Loading / error / empty are these components, never inline conditionals. A surface with no
+backend uses `<ComingSoon>` — visible so the product's shape is honest, disabled so nothing pretends
+to work. Below ~24px the mark drops the gradient for flat `currentColor`.
 
 ## Route map
 
 ```
-/                       Landing (static, marketing)
-/login                  Auth (magic link + GitHub)
-/app                    Dashboard: recent projects, quick actions
-/app/projects           Project list
-/app/projects/new       Create project → starts interview
-/app/projects/[slug]    Project overview (status, artifacts, deliveries)
-/app/projects/[slug]/interview     Adaptive interview
-/app/projects/[slug]/generating    Live generation progress
-/app/projects/[slug]/preview       Repo preview (tree + file viewer)
-/app/projects/[slug]/continue      "Continue Locally" handoff
-/app/templates          Templates gallery (M6)
-/app/prompts            Prompt library (M6)
-/app/settings           Profile, organization, connections
+/                                  Landing
+/start                             Signed-out interview — no account until "generate" (spec 11)
+/login  /signup                    Auth — email+password live; Google/GitHub/Email/magic-link disabled
+/app                               Dashboard: continue, recent projects, recent generations
+/app/projects                      Project list
+/app/projects/new                  Create project (step 1 of 2)
+/app/projects/[id]                 Project workspace
+/app/projects/[id]/interview       Adaptive interview
+/app/projects/[id]/generating      Live generation
+/app/projects/[id]/preview         Repo browser (tree + reader + editor) — the one view of the output
+/app/projects/[id]/continue        "Continue locally" handoff
+/app/settings                      Profile, theme, workspace, connections
 ```
 
-Layout: left sidebar nav (collapsible) + content area; command palette (⌘K) from M2 as stub, wired in M6.
+Shell: collapsible sidebar + sticky top bar with breadcrumbs derived from the URL + ⌘K command
+palette + a reserved `ChatSlot` column for the future repository-aware assistant. The sidebar logo
+links to `/`, not `/app` — the rail already has Projects. Theme switch and account menu sit top-right
+in both the app top bar and the landing header; the theme is a cookie, so the switch works signed out.
 
-## Feature-module structure (apps/web)
+## Responsive
 
-```
-src/
-  app/                  routes (thin: compose features)
-  features/
-    auth/
-    projects/
-    interview/          schema-driven renderer + question components
-    generation/         progress UI, job hooks
-    preview/            file tree, markdown viewer
-    delivery/           zip, github connect & push
-    settings/
-  lib/                  supabase clients, utils
-  ...each feature: components/ actions.ts queries.ts types.ts
-```
-
-Rules: routes never contain business logic; features never import other features' internals (shared code moves to `packages/`); data flows RSC → feature components via typed props.
+Desktop-first. **≥1280px** is the design target; **768–1280px** stays fully functional with the
+sidebar collapsed to icons; **<768px** is usable but not optimized — the sidebar becomes a drawer and
+the preview/docs trees hide. Content is max-width-capped so ultra-wide displays center rather than
+stretch.
 
 ## Key experiences
 
-- **Interview:** one question per screen, instant transitions, progress indicator, card-style options, back/edit at any time. Feels like Linear onboarding, not a form.
-- **Generation:** live stage/document progress (Realtime), streaming file-tree buildup — the "watching your foundation being built" moment.
-- **Preview:** two-pane repo browser; markdown rendered beautifully; this screen must sell the product on sight.
-- **Continue Locally:** checklist handoff (clone, open VS Code, run Claude Code, first prompt provided) — the bridge into month two.
+- **Interview:** one question per screen, each keyed so it animates in, progress bar, card options,
+  back/edit at any time.
+- **Generation:** the five stages the engine actually emits (`resolve · author · assemble · validate ·
+  manifest`) as a large animated visualisation with the authored-file ticker. A richer breakdown
+  requires the engine to emit more stages — never invented in the UI.
+- **Preview:** two-pane browser; markdown sanitized client-side, code highlighted server-side by
+  shiki and passed through DOMPurify before it reaches the DOM.
+- **Continue locally:** checklist handoff into month two.
 
 ## Quality bars
 
-- Lighthouse ≥ 95 on landing; instant (<100ms perceived) route transitions in app.
-- Full keyboard navigation; WCAG AA contrast in dark theme.
-- Every async surface has designed loading, empty, and error states — specified in each feature spec.
+- WCAG AA contrast in both themes; full keyboard navigation; visible focus rings everywhere.
+- Every async surface has a designed loading, empty and error state.
+- No raw hex or arbitrary px in components — enforced by test.

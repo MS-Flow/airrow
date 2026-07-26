@@ -10,7 +10,14 @@ export async function updateSession(
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return { response, userId: null };
+  // Missing config is a broken deployment, not a signed-out visitor. Returning
+  // `userId: null` here used to make every /app request bounce to /login with no
+  // error anywhere — an unconfigured app looked exactly like a wrong password.
+  if (!url || !key) {
+    throw new Error(
+      "Supabase Auth is not configured — set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in apps/web/.env.local."
+    );
+  }
 
   const supabase = createServerClient(url, key, {
     cookies: {
@@ -25,6 +32,16 @@ export async function updateSession(
     }
   });
 
-  const { data } = await supabase.auth.getUser();
-  return { response, userId: data.user?.id ?? null };
+  // `getClaims()` rather than `getUser()`: it verifies the JWT's signature locally when
+  // the project uses asymmetric signing keys, turning a network round-trip on every
+  // request into a local check. Where local verification isn't possible it falls back to
+  // asking the auth server, so this is never weaker than what it replaces.
+  //
+  // Safe *because this gate is coarse*. It only decides "app or /login"; the
+  // authoritative check is `getSession()`, which still calls `getUser()` once per request
+  // and is what every RSC and action scopes its data by. A locally-verified token stays
+  // valid until it expires, so revocation lands one short-lived token later here — and
+  // immediately in the layer that actually reads data.
+  const { data } = await supabase.auth.getClaims();
+  return { response, userId: data?.claims.sub ?? null };
 }

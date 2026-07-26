@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code when working with code in the {{PROJECT_NAME}} repository.
 
+## What we're building
+{{DOMAIN_OVERVIEW}}
+
+**Where this goes:** {{VISION}}
+
+**The MVP must, above all else:** {{MVP_FOCUS}}
+
+Build toward that, not just toward the current ticket. Full picture: `docs/VISION.md`.
+
 ## Communication style
 Be concise but clear. Short responses save tokens — avoid restating what was asked, keep summaries
 at the bare minimum, and omit filler. One clear sentence beats a paragraph.
@@ -14,7 +23,8 @@ eliminate it. Prefer clarity over cleverness: a reader should understand intent 
 1. **`.claude/spec-kit/constitution.md`** — the single source of truth for all rules. When any file
    disagrees with it, the constitution wins.
 2. The spec for your issue in `/specs` (`specs/NNN-kort.md`).
-3. `docs/architecture/SYSTEM_OVERVIEW.md` and `docs/guides/DEVELOPER_GUIDE.md`.
+3. `docs/VISION.md` — what this becomes if it wins.
+4. `docs/architecture/SYSTEM_OVERVIEW.md` and `docs/guides/DEVELOPER_GUIDE.md`.
 
 ## Before implementing anything
 1. Read the relevant spec file in `/specs` before writing code.

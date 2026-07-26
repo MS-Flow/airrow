@@ -8,7 +8,7 @@ export function CopyBlock({ text, mono = true }: { text: string; mono?: boolean 
   return (
     <div className="group relative mt-2 rounded-md border border-border bg-bg-subtle">
       <pre
-        className={`overflow-x-auto p-3 pr-10 text-[13px] leading-relaxed text-fg ${mono ? "font-mono" : ""}`}
+        className={`overflow-x-auto p-3 pr-10 text-sm leading-relaxed text-fg ${mono ? "font-mono" : ""}`}
       >
         {text}
       </pre>

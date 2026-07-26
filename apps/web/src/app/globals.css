@@ -1,30 +1,222 @@
 @import "tailwindcss";
 
-/* Airrow design tokens — dark mode first (F-201). Single source of truth. */
+/* ─────────────────────────────────────────────────────────────────────────────
+   Airrow design tokens (spec 19). The single source of truth — raw color values
+   appear here and nowhere else in apps/web.
+
+   Colors resolve through a second variable (`--a-*`) so a theme can swap the
+   value while the Tailwind utility name stays the same. Dark is the design
+   target; light is derived from the same semantic names.
+   ───────────────────────────────────────────────────────────────────────────── */
+
 @theme {
-  --color-bg: #0a0a0b;
-  --color-bg-subtle: #101013;
-  --color-surface: #141417;
-  --color-surface-raised: #1a1a1f;
-  --color-border: #232329;
-  --color-border-strong: #33333b;
-  --color-fg: #ececef;
-  --color-fg-muted: #8f8f98;
-  --color-fg-faint: #5c5c66;
-  --color-accent: #ff6b3d;
-  --color-accent-muted: #ff6b3d26;
-  --color-success: #4ade80;
-  --color-danger: #f0564a;
+  --color-bg: var(--a-bg);
+  --color-bg-subtle: var(--a-bg-subtle);
+  --color-surface: var(--a-surface);
+  --color-surface-raised: var(--a-surface-raised);
+  --color-border: var(--a-border);
+  --color-border-strong: var(--a-border-strong);
+  --color-fg: var(--a-fg);
+  --color-fg-muted: var(--a-fg-muted);
+  --color-fg-faint: var(--a-fg-faint);
+  --color-accent: var(--a-accent);
+  --color-accent-soft: var(--a-accent-soft);
+  --color-info: var(--a-info);
+  --color-success: var(--a-success);
+  --color-danger: var(--a-danger);
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", monospace;
 
-  --radius-md: 0.625rem;
-  --radius-lg: 0.875rem;
+  /* Type scale — deliberate steps, so no component needs an arbitrary size. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.375rem;
+  --text-md: 0.9375rem;
+  --text-md--line-height: 1.5rem;
+  --text-lg: 1.0625rem;
+  --text-lg--line-height: 1.625rem;
+  --text-xl: 1.3125rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.625rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl: 2.0625rem;
+  --text-3xl--line-height: 2.375rem;
+  --text-4xl: 2.625rem;
+  --text-4xl--line-height: 2.875rem;
+  --text-5xl: 3.375rem;
+  --text-5xl--line-height: 3.625rem;
+  --text-6xl: 4.25rem;
+  --text-6xl--line-height: 4.5rem;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+
+  /* Elevation — barely-there in dark, softer in light (overridden below). */
+  --shadow-e1: var(--a-shadow-e1);
+  --shadow-e2: var(--a-shadow-e2);
+  --shadow-e3: var(--a-shadow-e3);
+
+  --ease-out-quart: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-quart: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --animate-fade-in: fade-in 200ms var(--ease-out-quart) both;
+  --animate-scale-in: scale-in 160ms var(--ease-out-quart) both;
+  --animate-slide-up: slide-up 260ms var(--ease-out-quart) both;
+  --animate-slide-down: slide-down 160ms var(--ease-out-quart) both;
+  --animate-blur-in: blur-in 320ms var(--ease-out-quart) both;
+  --animate-shimmer: shimmer 1.6s linear infinite;
 }
 
-html {
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+}
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-0.25rem);
+  }
+}
+@keyframes blur-in {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+  }
+}
+@keyframes shimmer {
+  to {
+    background-position: 200% 0;
+  }
+}
+
+/* ── Themes ───────────────────────────────────────────────────────────────── */
+
+:root,
+:root[data-theme="dark"] {
   color-scheme: dark;
+
+  --a-bg: #09090b;
+  --a-bg-subtle: #0d0d10;
+  --a-surface: #111114;
+  --a-surface-raised: #17171b;
+  --a-border: #202026;
+  --a-border-strong: #2c2c34;
+  --a-fg: #fafafa;
+  --a-fg-muted: #9ca3af;
+  --a-fg-faint: #7c8492;
+  --a-accent: #cbd1da;
+  --a-accent-soft: #cbd1da1f;
+  --a-info: #7aa2f7;
+  --a-success: #4ec99a;
+  --a-danger: #f0564a;
+
+  --a-shadow-e1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --a-shadow-e2: 0 4px 16px -4px rgb(0 0 0 / 0.55);
+  --a-shadow-e3: 0 16px 48px -12px rgb(0 0 0 / 0.7);
+
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --a-bg: #fbfbfc;
+  --a-bg-subtle: #f4f4f6;
+  --a-surface: #ffffff;
+  --a-surface-raised: #ffffff;
+  --a-border: #e5e5ea;
+  --a-border-strong: #d2d2d9;
+  --a-fg: #0b0b0d;
+  --a-fg-muted: #52525b;
+  --a-fg-faint: #71717a;
+  --a-accent: #3f3f46;
+  --a-accent-soft: #3f3f4614;
+  --a-info: #2f5fd0;
+  --a-success: #17845a;
+  --a-danger: #c33025;
+
+  --a-shadow-e1: 0 1px 2px rgb(9 9 11 / 0.06);
+  --a-shadow-e2: 0 4px 16px -4px rgb(9 9 11 / 0.1);
+  --a-shadow-e3: 0 16px 48px -12px rgb(9 9 11 / 0.16);
+
+}
+
+/* In-page anchors glide instead of snapping; the reduced-motion block below opts out. */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ── App rail ─────────────────────────────────────────────────────────────────
+   `--rail` is the space the app's left rail claims: zero by default, because outside the
+   app shell there is no rail and below `md` it is an overlay drawer that reserves nothing.
+   Registering it makes the variable itself animatable, so everything derived from it (the
+   shell's offset, the preview reader's inset, the centring correction) moves as one value.
+   Animating those properties separately is what made content jump and settle back. */
+@property --rail {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+:root {
+  --rail: 0px;
+}
+
+.app-shell {
+  transition: --rail 200ms var(--ease-out-quart);
+}
+
+@media (min-width: 48rem) {
+  .app-shell {
+    --rail: var(--rail-width, 0px);
+  }
+}
+
+/* Content that must not move with the rail: step back out of the shell's offset and centre
+   on the viewport instead, so collapsing the rail widens the margins rather than sliding
+   the page. A no-op outside the shell, where `--rail` is 0. */
+.viewport-column {
+  margin-left: calc(var(--rail) * -1);
+  width: calc(100% + var(--rail));
+}
+
+/* The preview reader keeps its text column in the same place while the rail and the file
+   tree move beside it, and stops short rather than sliding under the tree when the
+   viewport is too narrow to centre. */
+.preview-reader {
+  --tree: 0rem;
+  --measure: 48rem;
+  /* content-box, so the measure stays 48rem however large the centring inset grows. */
+  box-sizing: content-box;
+  max-width: var(--measure);
+  padding-left: max(2.5rem, calc((100vw - var(--measure)) / 2 - var(--rail) - var(--tree)));
+  padding-right: 2.5rem;
+}
+@media (min-width: 48rem) {
+  .preview-reader {
+    --tree: 18rem;
+  }
 }
 
 body {
@@ -35,7 +227,7 @@ body {
 }
 
 ::selection {
-  background: var(--color-accent-muted);
+  background: var(--color-accent-soft);
 }
 
 /* Quiet scrollbars */
@@ -44,14 +236,57 @@ body {
   scrollbar-color: var(--color-border-strong) transparent;
 }
 
-/* Rendered markdown (preview pane) */
+/* Motion is a courtesy, never a requirement. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Brand ────────────────────────────────────────────────────────────────── */
+
+/*
+ * The logo artwork is the approved raster asset, so its metallic sheen is baked in —
+ * which is also why the sheen appears only where the logo does. On a light background
+ * near-white silver would vanish, so the asset is darkened to graphite there.
+ */
+:root[data-theme="light"] .brand-asset {
+  filter: brightness(0.42) contrast(1.15);
+}
+
+/* ── Skeleton shimmer ─────────────────────────────────────────────────────── */
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface) 0%,
+    var(--color-surface-raised) 40%,
+    var(--color-surface) 80%
+  );
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer {
+    background: var(--color-surface-raised);
+    animation: none;
+  }
+}
+
+/* ── Rendered markdown (preview + docs reader) ────────────────────────────── */
 .prose-airrow {
-  font-size: 0.9375rem;
+  font-size: var(--text-md);
   line-height: 1.75;
   color: var(--color-fg);
 }
 .prose-airrow h1 {
-  font-size: 1.5rem;
+  font-size: var(--text-2xl);
   font-weight: 600;
   letter-spacing: -0.02em;
   margin: 0 0 1rem;
@@ -59,13 +294,13 @@ body {
   border-bottom: 1px solid var(--color-border);
 }
 .prose-airrow h2 {
-  font-size: 1.125rem;
+  font-size: var(--text-lg);
   font-weight: 600;
   letter-spacing: -0.01em;
   margin: 2rem 0 0.75rem;
 }
 .prose-airrow h3 {
-  font-size: 1rem;
+  font-size: var(--text-md);
   font-weight: 600;
   margin: 1.5rem 0 0.5rem;
 }
@@ -88,10 +323,10 @@ body {
 }
 .prose-airrow code {
   font-family: var(--font-mono);
-  font-size: 0.8125rem;
+  font-size: var(--text-xs);
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
-  border-radius: 0.375rem;
+  border-radius: var(--radius-sm);
   padding: 0.125rem 0.375rem;
 }
 .prose-airrow pre {
@@ -108,7 +343,7 @@ body {
   padding: 0;
 }
 .prose-airrow blockquote {
-  border-left: 2px solid var(--color-accent);
+  border-left: 2px solid var(--color-border-strong);
   padding-left: 1rem;
   color: var(--color-fg-muted);
   margin: 1rem 0;
@@ -117,7 +352,7 @@ body {
   width: 100%;
   border-collapse: collapse;
   margin: 1rem 0;
-  font-size: 0.875rem;
+  font-size: var(--text-base);
 }
 .prose-airrow th,
 .prose-airrow td {
@@ -130,14 +365,22 @@ body {
   font-weight: 600;
 }
 .prose-airrow a {
-  color: var(--color-accent);
-  text-decoration: none;
+  color: var(--color-fg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--color-border-strong);
 }
 .prose-airrow a:hover {
-  text-decoration: underline;
+  text-decoration-color: var(--color-fg);
 }
 .prose-airrow hr {
   border: none;
   border-top: 1px solid var(--color-border);
   margin: 2rem 0;
+}
+
+/* Shiki emits inline styles for its own theme; we pin it to our surface instead. */
+.prose-airrow pre.shiki,
+pre.shiki {
+  background: var(--color-bg-subtle) !important;
 }

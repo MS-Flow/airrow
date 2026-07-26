@@ -6,7 +6,7 @@
 // bridge the cutover still reads); all org-scoped data goes to Supabase.
 //
 // Run:  pnpm migrate:data      (needs NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY;
-//                               read from the environment or repo-root .env.local)
+//                               read from the environment or apps/web/.env.local)
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,9 +18,13 @@ const DB_PATH = path.join(DATA_DIR, "db.json");
 const ARTIFACTS_DIR = path.join(DATA_DIR, "artifacts");
 const BRIDGE_PATH = path.join(DATA_DIR, "bridge.json");
 
-/** Load repo-root .env.local into process.env for keys not already set (node won't do it). */
+/**
+ * Load apps/web/.env.local into process.env for keys not already set (node won't do
+ * it). The file lives beside the Next app because that is the only place Next itself
+ * reads env from — a copy at the repo root would be silently ignored by the app.
+ */
 function loadEnvLocal() {
-  const p = path.join(ROOT, ".env.local");
+  const p = path.join(ROOT, "apps", "web", ".env.local");
   if (!fs.existsSync(p)) return;
   for (const line of fs.readFileSync(p, "utf8").split(/\r?\n/)) {
     const m = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim());

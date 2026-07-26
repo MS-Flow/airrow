@@ -1,5 +1,5 @@
 ---
-description: Pre-PR safety check — fetch, detect merge conflicts and overlapping files against the target branch, then surface the PR command.
+description: Pre-PR safety check: fetch, detect merge conflicts and overlapping files against the target branch, then surface the PR command.
 argument-hint: [target branch — defaults to this branch's parent per the branch hierarchy]
 allowed-tools: Bash, Read, Grep, Glob
 ---
