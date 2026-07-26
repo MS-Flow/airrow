@@ -6,6 +6,12 @@
 
 import type { FeatureId, GeneratedFile, ProjectModel } from "../../schemas/src/types.ts";
 import {
+  isAuthoredDocument,
+  isProseSlot,
+  type AuthoredDocuments,
+  type AuthoredSlots
+} from "../../schemas/src/authoring.ts";
+import {
   aiUsageLabel,
   audienceLabel,
   authMethodLabel,
@@ -144,8 +150,20 @@ function rolesText(model: ProjectModel): string {
   return "Organization membership with owner / admin / member roles.";
 }
 
-/** Derive the interview-variable values + their provenance from a resolved ProjectModel. */
-export function deriveScaffoldValues(model: ProjectModel): {
+/**
+ * Derive the interview-variable values + their provenance from a resolved ProjectModel.
+ *
+ * `authored` is optional LLM-written prose (spec 65). It is merged **only** over the slots in
+ * `PROSE_SLOTS`; anything else in it is ignored. That is the point rather than a detail: the
+ * excluded slots are commands and setup steps a founder will run, and interview answers — the
+ * authoring input — can come from an unauthenticated visitor. A `null` or empty value means the
+ * interview didn't support one, so the derived value stands and the founder gets a
+ * `[NEEDS CLARIFICATION]` marker instead of an invention.
+ */
+export function deriveScaffoldValues(
+  model: ProjectModel,
+  authored?: AuthoredSlots
+): {
   values: Record<string, string>;
   decisions: ScaffoldDecision[];
 } {
@@ -188,6 +206,14 @@ export function deriveScaffoldValues(model: ProjectModel): {
     KEY_CONVENTIONS: keyConventions(model),
     ...command
   };
+
+  for (const [token, prose] of Object.entries(authored ?? {})) {
+    if (!isProseSlot(token)) continue;
+    if (typeof prose !== "string") continue;
+    const trimmed = prose.trim();
+    if (trimmed === "") continue;
+    values[token] = trimmed;
+  }
 
   const decisions: ScaffoldDecision[] = [
     dec("PROJECT_NAME", model.name, "interview", "Product name from the interview."),
@@ -443,14 +469,33 @@ function substitute(
  * Returns the files plus a ScaffoldPlan for the founder to approve before provisioning.
  * `EXCLUDED` meta files (e.g. .airrow-template.json) are dropped by the caller before passing in.
  */
-export function renderScaffold(template: TemplateFile[], model: ProjectModel): RenderedScaffold {
-  const { values, decisions } = deriveScaffoldValues(model);
+export function renderScaffold(
+  template: TemplateFile[],
+  model: ProjectModel,
+  authored?: AuthoredSlots,
+  authoredDocuments?: AuthoredDocuments
+): RenderedScaffold {
+  const { values, decisions } = deriveScaffoldValues(model, authored);
   const missing = new Set<string>();
+
+  /**
+   * A narrative document the model wrote end to end replaces the template's scaffolding, so the
+   * headings and transitions belong to this project rather than being the same in every one. Only
+   * the paths in `AUTHORED_DOCUMENTS` are eligible — everything else, including every file carrying
+   * a command, renders from the template exactly as before. Substitution still runs over the result:
+   * the contract rejects unrendered tokens, so it is a no-op, and if one ever slipped through the
+   * founder gets a `[NEEDS CLARIFICATION]` marker rather than a literal `{{TOKEN}}`.
+   */
+  const bodyFor = (tf: TemplateFile): string => {
+    if (!isAuthoredDocument(tf.path)) return tf.content;
+    const written = authoredDocuments?.[tf.path];
+    return typeof written === "string" && written.trim() !== "" ? written : tf.content;
+  };
 
   const files: GeneratedFile[] = template
     .map((tf) => ({
       path: tf.path,
-      content: substitute(tf.content, values, missing),
+      content: substitute(bodyFor(tf), values, missing),
       source: "static" as const,
       templateId: `template/${tf.path}`
     }))

@@ -26,7 +26,25 @@ export interface Question {
   placeholder?: string;
   required: boolean;
   showIf?: Condition[];
+  /** Character ceiling for a `text` answer — see `ANSWER_MAX_CHARS`. */
+  maxChars?: number;
 }
+
+/**
+ * How long a free-text answer may be, per question (spec 65). One source for three consumers: the
+ * textarea's `maxLength`, the Zod schema at the write boundary, and the authoring prompt's budget.
+ *
+ * Sized to what each question asks for rather than one blanket number. Two reasons they are this
+ * tight: these answers are forwarded to an LLM, so their length is a cost the founder neither pays
+ * nor sees; and the interview can be answered without an account, so the input is not necessarily
+ * the founder's own.
+ */
+export const ANSWER_MAX_CHARS = {
+  vision: 300,
+  mvpFocus: 300,
+  coreEntities: 600,
+  integrations: 300
+} as const;
 
 const WEB_PRODUCT_TYPES = ["saas", "marketplace", "ai_agent", "mobile_app", "api", "browser_extension"];
 
@@ -54,6 +72,7 @@ export const interviewQuestions: Question[] = [
     help: "One sentence on what it becomes if it succeeds. Your AI assistants build toward this.",
     type: "text",
     required: true,
+    maxChars: ANSWER_MAX_CHARS.vision,
     placeholder: "e.g. The default operating system for independent property managers."
   },
   {
@@ -62,6 +81,7 @@ export const interviewQuestions: Question[] = [
     help: "The one core action of the MVP — this drives your roadmap and first specs. One sentence.",
     type: "text",
     required: true,
+    maxChars: ANSWER_MAX_CHARS.mvpFocus,
     placeholder: "e.g. Let a property manager create a listing and receive tenant applications online."
   },
   {
@@ -83,6 +103,7 @@ export const interviewQuestions: Question[] = [
     help: "The 3–7 most important things and how they relate. Skip it if you're not sure yet — you can fill it in later.",
     type: "text",
     required: false,
+    maxChars: ANSWER_MAX_CHARS.coreEntities,
     placeholder: "e.g. Landlords own Properties; a Property has many Listings; a Listing receives Applications from Tenants."
   },
   {
@@ -165,6 +186,7 @@ export const interviewQuestions: Question[] = [
     type: "text",
     required: false,
     showIf: [{ questionId: "capabilities", in: ["payments", "email", "notifications", "analytics", "ai"] }],
+    maxChars: ANSWER_MAX_CHARS.integrations,
     placeholder: "e.g. Stripe for billing, Resend for email, Slack for alerts, HubSpot for CRM."
   },
   {

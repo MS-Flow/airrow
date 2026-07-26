@@ -16,6 +16,7 @@ import { generate } from "@airrow/engine";
 import type { JobStage, ProjectModel } from "@airrow/schemas";
 import { saveArtifact, setProjectStatus, updateJob, getJob } from "@/lib/data/store";
 import { loadTemplate } from "@/lib/template/load";
+import { authorFoundation } from "./author";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -35,13 +36,20 @@ export async function runGenerationJob(jobId: string, model: ProjectModel): Prom
     done.push("resolve");
 
     await updateJob(jobId, { stagesDone: [...done], stage: "author" });
+    // The one network call in generation. It returns null rather than throwing — no key, a timeout,
+    // a contract violation — and the engine then derives everything, so a founder without an
+    // integration still gets a foundation and a ZIP.
+    const authored = await authorFoundation(model);
     let totalFiles = 0;
     const result = generate(loadTemplate(), model, {
+      authored: authored?.slots,
+      authoredDocuments: authored?.documents,
       onFile: (_path, index, total) => {
         if (index === 1) totalFiles = total;
       }
     });
-    await sleep(BEAT * 2); // the stage that does the real work reads as the longest
+    // The authoring call is the real work of this stage; it no longer needs padding to be legible.
+    if (!authored) await sleep(BEAT * 2);
     done.push("author");
 
     await updateJob(jobId, {
