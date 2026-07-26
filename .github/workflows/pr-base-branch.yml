@@ -4,7 +4,12 @@ name: Set PR base branch
 #
 #   <nr>-kort  -> sin feature/<name>   (härledd ur specens Branch-rad)
 #   develop    -> main                 (release-PR:en; enda vägen in i main)
-#   feature/*  -> develop              (behöver ingen kod — repots default-gren ÄR develop)
+#   feature/*  -> develop              (aldrig main)
+#
+# Att repots default-gren är `develop` räcker INTE för feature/*-fallet: default-grenen styr
+# bara vad PR-formuläret föreslår. Väljer någon `main` aktivt i dropdownen fanns tidigare
+# ingen rättning, och en feature-mot-main-PR gick rakt igenom. Därför är alla tre fallen
+# hanterade här i stället för att ett av dem vilar på en repo-inställning.
 #
 # Bara `opened` — med flit. En base som ändras i efterhand rörs aldrig, så automatiken kan
 # inte hamna i en dragkamp med en människa; ett medvetet undantag görs genom att byta base
@@ -41,10 +46,13 @@ jobs:
             # Release-PR. `develop` är den enda grenen som får mergas in i `main`, så målet
             # är entydigt och behöver ingen härledning.
             TARGET="main"
+          elif case "$HEAD" in feature/*) true ;; *) false ;; esac; then
+            # En färdig feature går ett steg upp, till `develop` — aldrig direkt till `main`.
+            TARGET="develop"
           else
             NUM=$(echo "$HEAD" | grep -oE '^[0-9]+' || true)
             if [ -z "$NUM" ]; then
-              echo "'$HEAD' är varken 'develop' eller en issue-gren — rör inte basen."
+              echo "'$HEAD' matchar ingen gren i hierarkin (develop, feature/*, <nr>-kort) — rör inte basen."
               exit 0
             fi
 
