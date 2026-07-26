@@ -1,17 +1,122 @@
 name: Branch policy
+# Sätter rätt base-gren, validerar merge-riktningen OCH begär en reviewer — i den ordningen,
+# i ett jobb.
+#
+#   <nr>-kort  -> sin feature/<name>   (härledd ur specens Branch-rad)
+#   feature/*  -> develop              (aldrig main)
+#   develop    -> main                 (release-PR:en; enda vägen in i main)
+#
+# Varför ett jobb och inte två workflows: som separata körningar kapplöpte de. En PR som
+# öppnades mot `main` (GitHub föreslår default-grenen) hann bli validerad och FAILA innan
+# basen rättades — och eftersom åtgärder med `GITHUB_TOKEN` aldrig triggar nya
+# workflow-körningar körde ingenting om den failade checken. Mot en skyddad base blev PR:en
+# därmed permanent omöjlig att merga. Ordningen här gör kapplöpningen omöjlig.
+#
+# Jobb-id:t `validate-source-branch` är den required status check som
+# scripts/setup-branch-protection.sh registrerar på main/develop — byt inte namn på det
+# utan att uppdatera skriptet och applicera rulesetet om.
+#
+# `pull_request` (inte `pull_request_target`): skrivtoken får aldrig köra kod från en fork.
 on:
   pull_request:
-    types: [opened, reopened, synchronize, edited]
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   validate-source-branch:
     runs-on: ubuntu-latest
     steps:
+      # Head-ref:en, inte merge-ref:en — specen skapas normalt i samma PR och finns
+      # därför bara på head när det här körs.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      # Bara vid `opened`. En base som ändras i efterhand rörs aldrig, så automatiken kan
+      # inte hamna i en dragkamp med en människa; ett medvetet undantag görs genom att byta
+      # base EFTER att PR:en öppnats.
+      - name: Set base branch
+        if: github.event.action == 'opened'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD: ${{ github.head_ref }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          if [ "$HEAD" = "develop" ]; then
+            # Release-PR. `develop` är enda grenen som får mergas in i `main`, så målet är
+            # entydigt och behöver ingen härledning.
+            TARGET="main"
+          elif case "$HEAD" in feature/*) true ;; *) false ;; esac; then
+            # En färdig feature går ett steg upp, till `develop`.
+            TARGET="develop"
+          else
+            NUM=$(echo "$HEAD" | grep -oE '^[0-9]+' || true)
+            if [ -z "$NUM" ]; then
+              echo "'$HEAD' matchar ingen gren i hierarkin (develop, feature/*, <nr>-kort) — rör inte basen."
+              exit 0
+            fi
+
+            # Numret ensamt räcker inte: `specs/14-*.md` matchar två specar från olika
+            # features. Rätt spec är den vars Branch-rad nämner just den här grenen.
+            TICK='`'
+            SPEC=""
+            for f in specs/"$NUM"-*.md; do
+              [ -f "$f" ] || continue
+              if grep -qF "$TICK$HEAD$TICK" "$f"; then
+                SPEC="$f"
+                break
+              fi
+            done
+
+            if [ -z "$SPEC" ]; then
+              MSG="Kunde inte härleda base-gren: ingen spec i \`specs/\` vars Branch-rad nämner \`$HEAD\`. Basen lämnas som \`$BASE\` — sätt rätt \`feature/*\` manuellt (se docs/architecture/BRANCHING.md)."
+              echo "::warning::$MSG"
+              gh pr comment "$PR" --repo "$REPO" --body "$MSG"
+              exit 0
+            fi
+
+            # Branch-raden ser ut som: `<nr>-kort` (from `feature/<name>`)
+            TARGET=$(grep -oE "from ${TICK}feature/[A-Za-z0-9._-]+${TICK}" "$SPEC" \
+              | head -1 | tr -d "$TICK" | sed 's/^from //')
+
+            if [ -z "$TARGET" ]; then
+              MSG="Kunde inte härleda base-gren: \`$SPEC\` saknar \`(from feature/…)\` i sin Branch-rad. Basen lämnas som \`$BASE\`."
+              echo "::warning::$MSG"
+              gh pr comment "$PR" --repo "$REPO" --body "$MSG"
+              exit 0
+            fi
+          fi
+
+          if ! git ls-remote --exit-code --heads origin "$TARGET" > /dev/null 2>&1; then
+            MSG="Kunde inte sätta base-gren: \`$TARGET\` finns inte på origin — troligen redan mergad och raderad. Basen lämnas som \`$BASE\`."
+            echo "::warning::$MSG"
+            gh pr comment "$PR" --repo "$REPO" --body "$MSG"
+            exit 0
+          fi
+
+          if [ "$TARGET" = "$BASE" ]; then
+            echo "Basen är redan '$TARGET' — inget att göra."
+            exit 0
+          fi
+
+          echo "Sätter base '$BASE' -> '$TARGET'."
+          gh pr edit "$PR" --repo "$REPO" --base "$TARGET"
+          # Valideringen nedan måste se den NYA basen; `github.base_ref` är inaktuell efter
+          # en `gh pr edit`, och en ny körning kommer inte (GITHUB_TOKEN triggar inga event).
+          echo "EFFECTIVE_BASE=$TARGET" >> "$GITHUB_ENV"
+
       - name: Enforce merge rules
         env:
-          BASE: ${{ github.base_ref }}
+          EVENT_BASE: ${{ github.base_ref }}
           HEAD: ${{ github.head_ref }}
         run: |
+          # EFFECTIVE_BASE sätts av steget ovan när basen skrevs om; annars gäller eventets.
+          BASE="${EFFECTIVE_BASE:-$EVENT_BASE}"
           echo "Källgren: $HEAD -> Målgren: $BASE"
           case "$BASE" in
             main)
@@ -41,3 +146,114 @@ jobs:
               ;;
           esac
           echo "OK: $HEAD -> $BASE"
+
+      # En tom PR-beskrivning flyttar hela kontextbördan till granskaren, trots att svaret
+      # redan står i specen. Formen väljs av hur många specar PR:en rör: en spec ger den
+      # utförliga formen, flera ger en sammanfattningslista (`feature/* -> develop` och
+      # release-PR:en `develop -> main`). Underlaget kommer från `gh`, formatteringen från
+      # scripts/pr-description.mjs — som har egna tester, till skillnad från inbäddad awk.
+      #
+      # Bara vid `opened`, av samma skäl som base-sättningen: texten skrivs en gång och kan
+      # aldrig slåss med något du själv redigerat efteråt.
+      #
+      # `continue-on-error`: jobbet är en required status check, så en misslyckad beskrivning
+      # får aldrig göra PR:en omergbar.
+      - name: Write PR description
+        if: github.event.action == 'opened'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD: ${{ github.head_ref }}
+          SPEC_URL_BASE: ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ -n "$(gh pr view "$PR" --repo "$REPO" --json body --jq '.body')" ]; then
+            echo "PR:en har redan en beskrivning — rör den inte."
+            exit 0
+          fi
+
+          ARGS=""
+          for SPEC in $(gh pr view "$PR" --repo "$REPO" --json files --jq '.files[].path' \
+            | grep -E '^specs/[0-9]+-.*\.md$' || true); do
+            # Filen kan vara raderad i PR:en; då finns den inte på head att läsa.
+            if [ -f "$SPEC" ]; then
+              ARGS="$ARGS --spec $SPEC"
+            fi
+          done
+
+          NUM=$(echo "$HEAD" | grep -oE '^[0-9]+' || true)
+          if [ -n "$NUM" ]; then
+            ARGS="$ARGS --issue $NUM"
+          fi
+
+          # Ordelning av $ARGS är avsiktlig — det är en färdigbyggd argumentlista.
+          gh pr view "$PR" --repo "$REPO" --json commits --jq '.commits[].messageHeadline' \
+            | node scripts/pr-description.mjs $ARGS --spec-url-base "$SPEC_URL_BASE" \
+            | gh pr edit "$PR" --repo "$REPO" --body-file -
+          echo "Beskrivning skriven."
+
+      # `develop` och `main` kräver en godkänd review (scripts/setup-branch-protection.sh),
+      # men GitHub pekar inte ut någon — utan tilldelning står PR:en blockerad utan att någon
+      # fått en notis. Körs sist: en PR med fel riktning har redan stoppat jobbet ovan och
+      # ska inte dra in en granskare.
+      #
+      # `continue-on-error`: jobbet är en required status check, så en misslyckad tilldelning
+      # (t.ex. en granskare som inte längre är collaborator) får aldrig göra PR:en omergbar.
+      - name: Request reviewer
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          EVENT_BASE: ${{ github.base_ref }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+          # Teamet som granskar. Lägg till nya medlemmar här.
+          TEAM: sebastianbreuker MelvinEdlund
+        run: |
+          BASE="${EFFECTIVE_BASE:-$EVENT_BASE}"
+          case "$BASE" in
+            main|develop) : ;;
+            *)
+              echo "Målgren '$BASE' kräver ingen review — ingen tilldelning."
+              exit 0
+              ;;
+          esac
+
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "Draft-PR — väntar tills den markeras 'ready for review'."
+            exit 0
+          fi
+
+          if [ "$AUTHOR_TYPE" = "Bot" ]; then
+            echo "PR:en är skapad av boten '$AUTHOR' — ingen reviewer tilldelas."
+            exit 0
+          fi
+
+          # Idempotens: `edited` och `synchronize` kan komma många gånger per PR, och en
+          # manuellt vald granskare ska aldrig kompletteras eller skrivas över. Inskickade
+          # reviews räknas med — GitHub tar bort review-requesten när någon har granskat, så
+          # utan dem skulle varje push efter ett godkännande be om review på nytt.
+          EXISTING=$(gh pr view "$PR" --repo "$REPO" --json reviewRequests,reviews \
+            --jq '(.reviewRequests | length) + (.reviews | length)')
+          if [ "$EXISTING" != "0" ]; then
+            echo "PR:en har redan granskare eller inskickade reviews — rör dem inte."
+            exit 0
+          fi
+
+          REVIEWERS=""
+          for U in $TEAM; do
+            if [ "$U" != "$AUTHOR" ]; then
+              REVIEWERS="${REVIEWERS:+$REVIEWERS,}$U"
+            fi
+          done
+
+          if [ -z "$REVIEWERS" ]; then
+            echo "::warning::Ingen granskare kvar när författaren '$AUTHOR' räknats bort — tilldela manuellt."
+            exit 0
+          fi
+
+          echo "Begär review av: $REVIEWERS"
+          gh pr edit "$PR" --repo "$REPO" --add-reviewer "$REVIEWERS"

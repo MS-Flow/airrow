@@ -30,19 +30,20 @@ Issue branches are named `<nr>-<short>` (issue number + short name), **without**
 
 ## The base branch is set for you
 
-GitHub proposes the repository's **default branch** as base for every new PR. That default is
-`develop`, not `main` — deliberately, so a `feature/<name>` PR already points one step up the
-hierarchy instead of at production. (`main` only ever receives `develop`, which is a handful of PRs a
-release; every other PR in the repo goes to `develop` or a feature branch.)
-
-The two branch types the default gets wrong are fixed by
-`.github/workflows/pr-base-branch.yml`, which rewrites the base when a PR is **opened**:
+GitHub's new-PR form proposes the repository's **default branch** (`main`, kept there so Vercel deploys
+production from it) as base. That is the wrong direction for everything except a release, so
+`.github/workflows/branch-policy.yml` rewrites the base when a PR is **opened**, and validates the
+direction afterwards — in that order, in one job:
 
 | Head branch     | Base you get | How it is decided                                      |
 | --------------- | ------------ | ------------------------------------------------------ |
-| `feature/<name>`| `develop`    | the repository default — no code involved              |
+| `feature/<name>`| `develop`    | fixed: a feature never goes straight to `main`          |
 | `<nr>-<short>`  | its `feature/<name>` | read from the spec's **Branch** row            |
 | `develop`       | `main`       | fixed: `develop` is the only branch that may enter `main` |
+
+All three live in the workflow on purpose — none of it depends on which branch is the repository default.
+An earlier version left `feature/*` to the default branch instead; that failed, because the default only
+controls what the *form* suggests. Pick `main` in the dropdown and nothing corrected it.
 
 The parent of an issue branch is read from the spec, not guessed: the workflow finds the
 `specs/<nr>-*.md` whose **Branch** row names this branch, and takes the `` (from `feature/<name>`) ``
@@ -57,11 +58,61 @@ It never silently points at `main`.
 > That is also the sanctioned escape hatch: to target something other than the parent feature, open
 > the PR and then change the base.
 
+Setting the base and validating the direction are **one job**, in that order, and that ordering is
+load-bearing. As two separate workflows they raced: a PR opened against `main` got validated and failed
+before the base was rewritten, and because actions taken with `GITHUB_TOKEN` never trigger new workflow
+runs, nothing re-ran the failed check. Against a protected base that left the PR unmergeable with no way
+back except a manual re-run.
+
+## The reviewer is requested for you
+
+A PR into `develop` or `main` needs **1 approving review** (see [Push protection](#push-protection)),
+but GitHub does not nominate anyone — so an unassigned PR sits blocked while nobody is notified. The
+same workflow therefore requests a review as its last step: everyone on the team list in
+`branch-policy.yml`, minus the PR author. With today's two-person team that is always "the other one",
+with no rotation state to keep. Add new members to the `TEAM` list in that step.
+
+| Situation                              | What happens                                            |
+| -------------------------------------- | ------------------------------------------------------- |
+| PR into `develop` / `main`             | a reviewer is requested (author excluded)                |
+| PR into `feature/*`                    | nothing — no review is required there                    |
+| Draft PR                               | waits until it is marked **ready for review**             |
+| Dependabot / Renovate                  | skipped — bots do not generate review pings              |
+| A reviewer is already requested        | left alone; never overwritten, never duplicated          |
+| Wrong-direction PR                     | never gets that far — the direction check fails first    |
+
+The step is `continue-on-error` on purpose. `validate-source-branch` is a **required** check, so a
+failed assignment (a reviewer who is no longer a collaborator, say) must never be what makes a PR
+unmergeable — it warns in the log and the PR stays mergeable once approved manually.
+
+## The description is written for you
+
+An empty PR body hands the reviewer the whole job of working out *why* a change exists, when the spec
+already answers it. So when a PR is **opened** with no description, the workflow writes one from what
+is already true about the change — the spec it touches, the commit subjects and the linked issue.
+
+The shape follows how many specs the PR touches:
+
+| PR touches            | What you get                                                             |
+| --------------------- | ------------------------------------------------------------------------ |
+| One spec              | its one-liner, its acceptance criteria as a review checklist, the commits |
+| Several specs         | one line per spec — this is what `feature/* → develop` and the `develop → main` release look like |
+| No spec               | the commit list plus the issue link                                       |
+| Already has a body    | nothing — a description you wrote is never touched                        |
+
+A spec written before the current template has no one-liner; its H1 heading is used instead, so a line
+is never blank. Written **only on `opened`**, so it can never fight an edit you make afterwards.
+
+The formatting lives in [`scripts/pr-description.mjs`](../../scripts/pr-description.mjs) rather than in
+the workflow, because parsing a one-liner that wraps across several blockquote lines is exactly the
+kind of thing that breaks silently in `awk`. It has unit tests — and since `pnpm -r test` only reaches
+the workspace projects, CI runs them separately via `pnpm test:scripts`.
+
 ## Merge Direction Enforcement
 
 The merge direction above is not just a convention — it is enforced by CI:
 
-- `.github/workflows/branch-policy.yml` runs on every pull request and **fails** if the `head → base` branch relationship violates the hierarchy (`issue/*` → `feature/*`, `feature/*` → `develop`, `develop` → `main`). The error message specifies the correct target branch.
+- `.github/workflows/branch-policy.yml` runs on every pull request and **fails** if the `head → base` branch relationship violates the hierarchy (`<nr>-<short>` → `feature/*`, `feature/*` → `develop`, `develop` → `main`). The error message specifies the correct target branch. It validates the base *after* correcting it, so an auto-corrected PR is judged on the base it ends up with.
 - The `validate-source-branch` check is configured as a **required status check** through a repository ruleset that applies to `main` and `develop`. A wrongly targeted PR into an integration branch therefore cannot be merged. The ruleset is configured (idempotently) by a repository administrator using `scripts/setup-branch-protection.sh`.
 - On `feature/*` the check is a **soft gate**: the workflow still runs on every PR and marks a wrong-direction PR red, but it is not required. That is deliberate — a ruleset evaluates a required check on *every* ref update, not just on merge, and `validate-source-branch` only runs on `pull_request` events. Requiring it on `feature/**` would make every direct push to a feature branch unsatisfiable, including creating the branch in the first place.
 
