@@ -38,6 +38,7 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Auto-set PR base branch per the hierarchy | [16-pr-base-branch.md](16-pr-base-branch.md) | 🔄 In progress |
 | Blocking advisories + secret scanning | [33-security-scanning.md](33-security-scanning.md) | ✅ Done |
 | Auto-request a reviewer on PRs into `develop` / `main` | [46-auto-assign-reviewer.md](46-auto-assign-reviewer.md) | ✅ Done |
+| Import an existing project into Airrow | [63-import-existing-projects.md](63-import-existing-projects.md) | ✅ Done |
 | Auto-generate the PR description when a PR is opened | [53-pr-description.md](53-pr-description.md) | ✅ Done |
 | Redesign interview into architecture-first question set | [6-fix-interview-template.md](6-fix-interview-template.md) | ✅ Done |
 | Fix UI design flaws — shell corrections + anonymous interview | [11-ui-design-flaws.md](11-ui-design-flaws.md) | ✅ Done |

@@ -18,6 +18,19 @@ export type { ResolveInput };
 export { renderScaffold, deriveScaffoldValues } from "./scaffold.ts";
 export type { TemplateFile, ScaffoldDecision, ScaffoldPlan, RenderedScaffold } from "./scaffold.ts";
 
+export {
+  analyzeImport,
+  applyResolutions,
+  checkImportLimits,
+  diffAgainstExisting,
+  digestImported,
+  isIgnoredImportPath,
+  stripCommonRoot,
+  IGNORED_IMPORT_DIRECTORIES,
+  IMPORT_LIMITS
+} from "./import.ts";
+export type { ImportLimitCheck } from "./import.ts";
+
 export class GenerationError extends Error {
   readonly issues: string[];
 

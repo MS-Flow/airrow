@@ -45,6 +45,27 @@ content) → Validate (required files present, no unresolved token) → Manifest
 id + version, bytes → Postgres). `renderScaffold` also returns a `ScaffoldPlan` for the founder to
 approve before anything is written.
 
+## Importing an existing project (spec 63)
+A founder with a codebase already in flight enters at `/app/projects/import` instead of
+`/app/projects/new`. The archive is read server-side, then:
+
+1. **Read** — `features/import/archive.ts` unzips the upload, refusing anything over 50 MB or 5,000
+   files (checked before *and* during decompression) and any entry whose path escapes the tree.
+   `node_modules`, `.git`, `dist` and `.next` are skipped without being decompressed.
+2. **Analyse** — `analyzeImport` (in `packages/engine`, pure and LLM-free) derives what the manifests
+   prove: framework, database, capabilities, hosting, repo provider, tenancy. Each derived answer
+   carries the evidence behind it. Anything it cannot prove is left for the founder — never guessed.
+3. **Prefill** — the derived answers seed the interview, which then runs exactly as it always does,
+   into the same `generate(templateFiles, projectModel)`. There is no second generation path.
+4. **Diff** — `diffAgainstExisting` sorts generated output into new / already-identical / conflicting.
+   A conflict is only ever written when the founder picks it on `/app/projects/[id]/import`;
+   an undecided conflict keeps their file.
+
+**Only digests are stored.** `import_files` holds path, size and a SHA-256 of each imported file —
+enough to diff, while the founder's source never outlives the request that analysed it (§II).
+Importing from a repository, and delivering back as a pull request, wait on the GitHub App
+integration; ZIP delivery covers the import flow end to end today.
+
 ## Roles & tenancy
 Supabase Auth (email magic link + GitHub OAuth). Every user gets a personal **organization** at
 signup; all resources hang off `organization_id`, and RLS enforces tenancy on every table.
