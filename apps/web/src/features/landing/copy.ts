@@ -119,8 +119,7 @@ export const WHY_SDD = [
   "The spec is the source of truth. Code is reviewed against it, not the other way round.",
   "An AI agent with a written architecture stops inventing one per session.",
   "Decisions made once, in writing, survive the context window.",
-  "Re-explaining the same architecture at the start of every session is where your tokens quietly go. Written down once, it gets read instead of rediscovered.",
-  "Agents that already know the structure stop exploring the codebase to guess it, and stop producing work you pay for twice: once to generate, once to throw away."
+  "Re-explaining the architecture every session is where the tokens go. Written once, it is read, not rediscovered."
 ];
 
 /* Everything is free for now. No invented tiers and no "TBD" — if a price isn't decided,
