@@ -1,5 +1,6 @@
 name: Branch policy
-# Sätter rätt base-gren OCH validerar merge-riktningen — i den ordningen, i ett jobb.
+# Sätter rätt base-gren, validerar merge-riktningen OCH begär en reviewer — i den ordningen,
+# i ett jobb.
 #
 #   <nr>-kort  -> sin feature/<name>   (härledd ur specens Branch-rad)
 #   feature/*  -> develop              (aldrig main)
@@ -18,7 +19,7 @@ name: Branch policy
 # `pull_request` (inte `pull_request_target`): skrivtoken får aldrig köra kod från en fork.
 on:
   pull_request:
-    types: [opened, reopened, synchronize, edited]
+    types: [opened, reopened, synchronize, edited, ready_for_review]
 
 permissions:
   contents: read
@@ -145,3 +146,68 @@ jobs:
               ;;
           esac
           echo "OK: $HEAD -> $BASE"
+
+      # `develop` och `main` kräver en godkänd review (scripts/setup-branch-protection.sh),
+      # men GitHub pekar inte ut någon — utan tilldelning står PR:en blockerad utan att någon
+      # fått en notis. Körs sist: en PR med fel riktning har redan stoppat jobbet ovan och
+      # ska inte dra in en granskare.
+      #
+      # `continue-on-error`: jobbet är en required status check, så en misslyckad tilldelning
+      # (t.ex. en granskare som inte längre är collaborator) får aldrig göra PR:en omergbar.
+      - name: Request reviewer
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          EVENT_BASE: ${{ github.base_ref }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+          # Teamet som granskar. Lägg till nya medlemmar här.
+          TEAM: sebastianbreuker MelvinEdlund
+        run: |
+          BASE="${EFFECTIVE_BASE:-$EVENT_BASE}"
+          case "$BASE" in
+            main|develop) : ;;
+            *)
+              echo "Målgren '$BASE' kräver ingen review — ingen tilldelning."
+              exit 0
+              ;;
+          esac
+
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "Draft-PR — väntar tills den markeras 'ready for review'."
+            exit 0
+          fi
+
+          if [ "$AUTHOR_TYPE" = "Bot" ]; then
+            echo "PR:en är skapad av boten '$AUTHOR' — ingen reviewer tilldelas."
+            exit 0
+          fi
+
+          # Idempotens: `edited` och `synchronize` kan komma många gånger per PR, och en
+          # manuellt vald granskare ska aldrig kompletteras eller skrivas över. Inskickade
+          # reviews räknas med — GitHub tar bort review-requesten när någon har granskat, så
+          # utan dem skulle varje push efter ett godkännande be om review på nytt.
+          EXISTING=$(gh pr view "$PR" --repo "$REPO" --json reviewRequests,reviews \
+            --jq '(.reviewRequests | length) + (.reviews | length)')
+          if [ "$EXISTING" != "0" ]; then
+            echo "PR:en har redan granskare eller inskickade reviews — rör dem inte."
+            exit 0
+          fi
+
+          REVIEWERS=""
+          for U in $TEAM; do
+            if [ "$U" != "$AUTHOR" ]; then
+              REVIEWERS="${REVIEWERS:+$REVIEWERS,}$U"
+            fi
+          done
+
+          if [ -z "$REVIEWERS" ]; then
+            echo "::warning::Ingen granskare kvar när författaren '$AUTHOR' räknats bort — tilldela manuellt."
+            exit 0
+          fi
+
+          echo "Begär review av: $REVIEWERS"
+          gh pr edit "$PR" --repo "$REPO" --add-reviewer "$REVIEWERS"
