@@ -96,12 +96,14 @@ Both are configured by the same ruleset (`branch-policy-required-check`, set ide
 | Check                    | Workflow            | Blocks a merge when                                        |
 | ------------------------ | ------------------- | ---------------------------------------------------------- |
 | `validate-source-branch` | `branch-policy.yml` | the PR targets the wrong branch for the hierarchy above     |
-| `verify`                 | `ci.yml`            | typecheck, lint, tests **or** `pnpm build` fails            |
+| `verify`                 | `ci.yml`            | typecheck, lint, tests, `pnpm build` **or** the dependency audit fails |
 
 `verify` is one job on purpose — one install, and one context to keep in sync with the ruleset. It
 ends with `pnpm build`, which is what catches the crashes unit tests cannot see: bad server/client
 boundaries, RSC-only imports, failed prerenders. A render smoke test (`apps/web/src/app/smoke.test.tsx`)
-covers the public pages `/`, `/login` and `/signup`.
+covers the public pages `/`, `/login` and `/signup`. Its last step fails on a **new** high/critical
+advisory in a production dependency — routines, the accepted-advisory baseline and what to do when push
+protection blocks you are in [`../guides/SECURITY.md`](../guides/SECURITY.md).
 
 On `feature/*` and `<nr>-<short>` neither check is required — both still run on every PR and mark it
 red, but the ruleset does not apply. Full reasoning under _Merge Direction Enforcement_ above; `verify`
