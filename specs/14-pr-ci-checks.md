@@ -184,10 +184,11 @@ Skulle ett byggsteg någon gång kräva en nyckel ska den komma från GitHub Sec
 
 _Unusual inputs or states, and what should happen._
 
-- **PR från en fork** — kan inte inträffa idag: repot är privat med `allow_forking: false` (0 forks),
-  verifierat via `gh api repos/MS-Flow/airrow`. Skulle forkar öppnas senare är bygget ändå oberoende av
-  secrets, så checken fungerar — men `pull_request_target` får aldrig införas utan att secrets-exponering
-  omprövas.
+- **PR från en fork** — **numera möjligt.** När specen skrevs var repot privat med `allow_forking: false`;
+  sedan 2026-07-26 är det `visibility: public` med forkar tillåtna (verifierat via
+  `gh api repos/MS-Flow/airrow`). `verify` påverkas inte: bygget behöver inga secrets, så checken kan bli
+  grön även för en fork-PR. Det som gäller framåt är att `pull_request_target` aldrig får införas i något
+  workflow — det vore att ge en fork-PR en skrivtoken.
 - **Integrationstester som kräver lokal Supabase** (`*.rls.test.ts`, `store.cutover.test.ts`) — de
   skippas tyst när databasen är onåbar ([schema.rls.test.ts:33](apps/web/src/lib/data/schema.rls.test.ts#L33)),
   så checken blir grön utan att RLS testats. **Beslut: skip-beteendet accepteras i den här specen** och
