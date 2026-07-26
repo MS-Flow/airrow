@@ -40,6 +40,18 @@ export function GenerationProgress({
   const [retryError, setRetryError] = useState<string | null>(null);
   const done = useRef(false);
 
+  // Start the queued job once, from here, so its stages are written while this screen is
+  // showing them. The endpoint ignores anything not queued, so a refresh or a second tab
+  // cannot start it twice.
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    void fetch(`/api/projects/${projectId}/generate`, { method: "POST" }).catch(() => {
+      /* the poll below reports the job's real state either way */
+    });
+  }, [projectId]);
+
   useEffect(() => {
     let active = true;
     const poll = async () => {
@@ -60,7 +72,8 @@ export function GenerationProgress({
       }
     };
     void poll();
-    const t = setInterval(poll, 1000);
+    // Faster than the runner's beat, so no stage lands and clears between two polls.
+    const t = setInterval(poll, 400);
     return () => {
       active = false;
       clearInterval(t);
