@@ -30,19 +30,20 @@ Issue branches are named `<nr>-<short>` (issue number + short name), **without**
 
 ## The base branch is set for you
 
-GitHub proposes the repository's **default branch** as base for every new PR. That default is
-`develop`, not `main` — deliberately, so a `feature/<name>` PR already points one step up the
-hierarchy instead of at production. (`main` only ever receives `develop`, which is a handful of PRs a
-release; every other PR in the repo goes to `develop` or a feature branch.)
-
-The two branch types the default gets wrong are fixed by
-`.github/workflows/pr-base-branch.yml`, which rewrites the base when a PR is **opened**:
+GitHub's new-PR form proposes the repository's **default branch** (`main`, kept there so Vercel deploys
+production from it) as base. That is the wrong direction for everything except a release, so
+`.github/workflows/branch-policy.yml` rewrites the base when a PR is **opened**, and validates the
+direction afterwards — in that order, in one job:
 
 | Head branch     | Base you get | How it is decided                                      |
 | --------------- | ------------ | ------------------------------------------------------ |
-| `feature/<name>`| `develop`    | the repository default — no code involved              |
+| `feature/<name>`| `develop`    | fixed: a feature never goes straight to `main`          |
 | `<nr>-<short>`  | its `feature/<name>` | read from the spec's **Branch** row            |
 | `develop`       | `main`       | fixed: `develop` is the only branch that may enter `main` |
+
+All three live in the workflow on purpose — none of it depends on which branch is the repository default.
+An earlier version left `feature/*` to the default branch instead; that failed, because the default only
+controls what the *form* suggests. Pick `main` in the dropdown and nothing corrected it.
 
 The parent of an issue branch is read from the spec, not guessed: the workflow finds the
 `specs/<nr>-*.md` whose **Branch** row names this branch, and takes the `` (from `feature/<name>`) ``
@@ -57,11 +58,17 @@ It never silently points at `main`.
 > That is also the sanctioned escape hatch: to target something other than the parent feature, open
 > the PR and then change the base.
 
+Setting the base and validating the direction are **one job**, in that order, and that ordering is
+load-bearing. As two separate workflows they raced: a PR opened against `main` got validated and failed
+before the base was rewritten, and because actions taken with `GITHUB_TOKEN` never trigger new workflow
+runs, nothing re-ran the failed check. Against a protected base that left the PR unmergeable with no way
+back except a manual re-run.
+
 ## Merge Direction Enforcement
 
 The merge direction above is not just a convention — it is enforced by CI:
 
-- `.github/workflows/branch-policy.yml` runs on every pull request and **fails** if the `head → base` branch relationship violates the hierarchy (`issue/*` → `feature/*`, `feature/*` → `develop`, `develop` → `main`). The error message specifies the correct target branch.
+- `.github/workflows/branch-policy.yml` runs on every pull request and **fails** if the `head → base` branch relationship violates the hierarchy (`<nr>-<short>` → `feature/*`, `feature/*` → `develop`, `develop` → `main`). The error message specifies the correct target branch. It validates the base *after* correcting it, so an auto-corrected PR is judged on the base it ends up with.
 - The `validate-source-branch` check is configured as a **required status check** through a repository ruleset that applies to `main` and `develop`. A wrongly targeted PR into an integration branch therefore cannot be merged. The ruleset is configured (idempotently) by a repository administrator using `scripts/setup-branch-protection.sh`.
 - On `feature/*` the check is a **soft gate**: the workflow still runs on every PR and marks a wrong-direction PR red, but it is not required. That is deliberate — a ruleset evaluates a required check on *every* ref update, not just on merge, and `validate-source-branch` only runs on `pull_request` events. Requiring it on `feature/**` would make every direct push to a feature branch unsatisfiable, including creating the branch in the first place.
 
