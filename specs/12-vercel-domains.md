@@ -136,15 +136,28 @@ added — nothing here is application logic to unit test (see rationale above).
 - **New tests** — `apps/web/src/features/projects/DeleteProjectDialog.test.tsx`: opens a confirmation
   dialog rather than deleting immediately, cancels without calling the action, and calls the delete
   action with the right `projectId` once confirmed (3/3 green).
-- The `postcss`/`sharp` override and the `serverExternalPackages` fix have **no** Vitest-level
-  regression test — both are Next.js production-bundler behaviors that only manifest through
-  `next build`'s real webpack tracing, which Vitest doesn't exercise (confirmed: a plain
-  `node -e "require('isomorphic-dompurify')"` succeeds fine outside Next's bundler, proving the bug
-  is bundler-specific, not in the package itself). Verified instead by: `pnpm audit --prod
-  --audit-level=high` → 0 high/critical (was 1); and inspecting the built
-  `.next/server/app/app/projects/[id]/preview/page.js` — no `exodus` string present (was previously
-  inlined and crashing), and its `.nft.json` lists 637 real `jsdom` files as external file-traced
-  dependencies rather than bundled inline.
+- The `postcss`/`sharp` override and the preview-route fix have **no** Vitest-level regression test:
+  both are runtime/packaging behaviors that only manifest in a real deployment, which Vitest does
+  not exercise. The lesson from the failed first attempt is recorded above — a local `node` repro is
+  *not* valid evidence here, because local Node supports `require(esm)` and Vercel's runtime does
+  not. Verified instead by:
+  - `pnpm audit --prod --audit-level=high` → 0 high/critical (was 1).
+  - Build-artifact inspection: `.next/server/app/app/projects/[id]/preview/page.js` contains no
+    `exodus` string, and its `.nft.json` traces **zero** `jsdom` / `html-encoding-sniffer` /
+    `exodus` files (the previous, still-broken build traced 637 jsdom files). The module that threw
+    `ERR_REQUIRE_ESM` is no longer shipped at all, so it cannot be required.
+  - A real `vercel deploy --force` of the fix: the route returns 302 (redirect to login for an
+    unauthenticated request) with **zero** entries in the deployment's error log, where the same
+    request previously logged the 500.
+  - **Not** verified end-to-end while authenticated — that check is the founder's, since it needs a
+    real session against a project with a generated artifact.
+- **New tests** — `apps/web/src/features/generation/runner.test.ts` (4/4): the job has *finished*
+  writing its artifact by the time it resolves, every stage is recorded, store writes stay at one
+  per stage, and an engine failure marks the job failed rather than throwing. The first of these was
+  deliberately verified to fail against the bug: re-detaching the artifact write
+  (`void saveArtifact(...)`) turns it red, because the mock only flips its flag *after* awaiting.
+  Asserting on the call alone would have passed against the bug — a detached promise is still
+  called synchronously; what it never gets to do is finish.
 - `pnpm -r typecheck` ✓ · `pnpm -r lint` ✓ (no new issues) · `pnpm -r test` ✓ (78 total, 63 passed +
   15 skipped without local Supabase, 0 failed) · `pnpm build` ✓ clean.
 
@@ -226,17 +239,43 @@ deployment (`https://airrow-one.vercel.app`), reported by the founder:
    generation pipeline itself never errors). `ERR_REQUIRE_ESM`: `require() of ES Module
    .../@exodus/bytes/encoding-lite.js` from `html-encoding-sniffer`, a transitive dep of `jsdom`
    pulled in by `isomorphic-dompurify` (used server-side in
-   `apps/web/src/features/preview/highlight.ts` to sanitize syntax-highlighted code). Next's
-   production bundler can't `require()` that nested ESM-only package — confirmed by reproducing
-   with a plain `node -e "require('isomorphic-dompurify')…"`, which works fine outside Next's
-   bundler. Fixed by adding `serverExternalPackages: ["isomorphic-dompurify", "jsdom"]` to
-   `apps/web/next.config.ts`, so Next leaves the package external and Node resolves it natively at
-   runtime instead of bundling it.
+   `apps/web/src/features/preview/highlight.ts` to sanitize syntax-highlighted code).
+
+   **First attempt was wrong and shipped broken.** Adding
+   `serverExternalPackages: ["isomorphic-dompurify", "jsdom"]` was based on a local repro
+   (`node -e "require('isomorphic-dompurify')"`) that *passed* — but only because the local Node
+   is v25, which supports `require(esm)`. Vercel's serverless runtime does not, so externalizing
+   the package changed nothing: the CJS→ESM boundary still had to be crossed at runtime. The
+   deployed `develop` build failed identically.
+
+   **Actual fix:** drop the server-side DOM entirely. `highlight.ts` now returns shiki's markup
+   unsanitized and `PreviewBrowser.tsx` sanitizes it with plain `dompurify` immediately before
+   injection — exactly the pattern the rendered-markdown path in the same component already used
+   (`marked` parses, `DOMPurify.sanitize` runs client-side). Sanitization still happens at the
+   point of injection, satisfying constitution §III; it just no longer needs jsdom on the server.
+   `isomorphic-dompurify` is removed from `apps/web` dependencies, which removes `jsdom` from the
+   production tree altogether (it stays a devDependency for Vitest's test environment, which never
+   ships to the serverless runtime). `serverExternalPackages` reverted — no longer needed.
 3. **No confirmation before deleting a project** — `apps/web/src/app/app/projects/[id]/page.tsx`
    submitted `deleteProjectAction` straight from a bare button, no undo. Added
    `apps/web/src/features/projects/DeleteProjectDialog.tsx`, a client component wrapping the
    existing `Dialog` primitive (constitution §III: reuse before create) around the same server
    action.
+4. **Generation never completed on Vercel** ("Generation stopped — nothing was written"). The
+   runner was started with `void runGenerationJob(...)` and the action then redirected
+   (`apps/web/src/features/interview/actions.ts`, `apps/web/src/features/generation/actions.ts`).
+   That is sound for the long-lived local process the comment referenced (ADR-0005), but a
+   serverless invocation is frozen the instant it responds, so the detached promise was killed
+   part-way and the job sat at `running` with no artifact — nothing was logged because nothing
+   threw. Now awaited. Two supporting changes made that affordable inside one request: the
+   artificial `sleep()` calls (~5.7s of fake latency, purely to animate the progress UI) are gone,
+   and the per-file progress loop — 20+ Postgres round-trips — collapses to one write per stage.
+   `generate()` itself is pure and takes milliseconds (`pnpm engine:smoke`: 0.76s for the entire
+   suite including startup and multiple fixtures).
+5. **Removed the sidebar's generating progress bar** (`apps/web/src/components/shell/sidebar.tsx`
+   plus the `latestJob` lookup feeding it in `apps/web/src/app/app/layout.tsx`) — founder request.
+   It is also dead weight now: with generation awaited, a project is no longer observably in the
+   `generating` state, so the rail had nothing live to show.
 
 All three are outside this spec's original scope (Vercel domain config only), but were blocking/
 breaking the app the founder was testing through this spec's Vercel setup, so fixed here rather

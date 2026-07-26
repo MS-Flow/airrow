@@ -1,11 +1,16 @@
-// Generation job runner (F-401 FR-2). Local mode: in-process async with staged
-// progress written to the store; the UI polls. Supabase mode swaps polling for Realtime.
+// Generation job runner (F-401 FR-2). Runs to completion inside the caller's request:
+// awaited, never fire-and-forget. A serverless invocation is frozen the moment it
+// responds, so a detached promise here is killed mid-flight and the job is left
+// "running" forever — which is exactly what "Generation was interrupted" was.
+//
+// That constraint also rules out per-file progress writes: 20+ round-trips to Postgres
+// (previously each padded with an artificial sleep) bought a nicer animation at the cost
+// of the request budget. Progress is now written once per stage; `generate()` itself is
+// pure and takes milliseconds.
 import { generate } from "@airrow/engine";
 import type { JobStage, ProjectModel } from "@airrow/schemas";
 import { saveArtifact, setProjectStatus, updateJob, getJob } from "@/lib/data/store";
 import { loadTemplate } from "@/lib/template/load";
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const STAGES: JobStage[] = ["resolve", "author", "assemble", "validate", "manifest"];
 
@@ -16,41 +21,31 @@ export async function runGenerationJob(jobId: string, model: ProjectModel): Prom
 
   try {
     await updateJob(jobId, { status: "running", startedAt: new Date().toISOString(), stage: "resolve" });
-    await sleep(700);
     done.push("resolve");
 
-    // Author: render the canonical template through the engine, collecting per-file paths;
-    // progress is written after the synchronous generate() call so store writes stay ordered.
     await updateJob(jobId, { stagesDone: [...done], stage: "author" });
-    const authoredPaths: string[] = [];
     let totalFiles = 0;
     const result = generate(loadTemplate(), model, {
-      onFile: (path, index, total) => {
-        authoredPaths.push(path);
+      onFile: (_path, index, total) => {
         if (index === 1) totalFiles = total;
       }
     });
-    if (totalFiles > 0) await updateJob(jobId, { totalFiles });
-    for (let i = 0; i < authoredPaths.length; i++) {
-      await updateJob(jobId, {
-        filesAuthored: i + 1,
-        currentPath: authoredPaths[i] ?? null
-      });
-      await sleep(90);
-    }
     done.push("author");
 
-    await updateJob(jobId, { stagesDone: [...done], stage: "assemble", currentPath: null });
-    await sleep(500);
+    await updateJob(jobId, {
+      stagesDone: [...done],
+      stage: "assemble",
+      totalFiles,
+      filesAuthored: result.files.length,
+      currentPath: null
+    });
     done.push("assemble");
 
     await updateJob(jobId, { stagesDone: [...done], stage: "validate" });
-    await sleep(500);
     done.push("validate");
 
     await updateJob(jobId, { stagesDone: [...done], stage: "manifest" });
     await saveArtifact(jobId, result);
-    await sleep(400);
     done.push("manifest");
 
     await updateJob(jobId, {
