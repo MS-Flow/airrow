@@ -1,5 +1,4 @@
 import { codeToHtml } from "shiki";
-import DOMPurify from "isomorphic-dompurify";
 
 const LANGUAGES: Record<string, string> = {
   ts: "typescript",
@@ -24,13 +23,14 @@ export function languageFor(path: string): string | null {
 }
 
 /**
- * Server-side syntax highlighting. Generated files are untrusted text, so the
- * highlighter's HTML goes through the same sanitizer as rendered markdown —
- * shiki must never become an injection route.
+ * Server-side syntax highlighting. The markup is deliberately returned unsanitized:
+ * generated files are untrusted, so it is sanitized at the point of injection in
+ * PreviewBrowser — the same place, and the same way, rendered markdown is. Sanitizing
+ * here as well would mean a server-side DOM (jsdom), which cannot load in Vercel's
+ * serverless runtime (a CommonJS -> ESM require deep in its dependency tree).
  */
 export async function highlight(code: string, path: string): Promise<string | null> {
   const lang = languageFor(path);
   if (!lang) return null;
-  const html = await codeToHtml(code, { lang, theme: "github-dark-default" });
-  return DOMPurify.sanitize(html);
+  return codeToHtml(code, { lang, theme: "github-dark-default" });
 }

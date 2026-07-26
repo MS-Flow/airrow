@@ -30,7 +30,6 @@
     "@supabase/supabase-js": "^2.110.8",
     "clsx": "2.1.1",
     "dompurify": "3.2.3",
-    "isomorphic-dompurify": "^3.19.0",
     "jszip": "3.10.1",
     "lucide-react": "0.469.0",
     "marked": "15.0.6",

@@ -14,6 +14,6 @@ export async function retryGenerationAction(projectId: string): Promise<{ error?
   if (!mv) return { error: "No interview submission found — complete the interview first." };
   const job = await createJob(projectId, mv.id);
   await setProjectStatus(projectId, "generating");
-  void runGenerationJob(job.id, mv.model);
+  await runGenerationJob(job.id, mv.model);
   redirect(`/app/projects/${projectId}/generating`);
 }

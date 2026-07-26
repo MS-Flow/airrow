@@ -22,64 +22,68 @@ export const HERO = {
     " generates the architecture, specifications, standards and AI context your project needs, so your AI agents build like a senior team instead of guessing.",
   primaryCta: "Generate your foundation",
   secondaryCta: "See how it works",
-  strapline: "Idea → Airrow → Code → Company"
+  strapline: "Idea → Airrow → Code → Company",
 };
 
 export const HEADER = {
   signIn: "Sign in",
   getStarted: "Get started",
-  openDashboard: "Open dashboard"
+  openDashboard: "Open dashboard",
 };
 
 export const STEPS = [
   {
     n: "01",
     title: "Answer the CTO interview",
-    body: "An adaptive interview captures your product, audience, capabilities and technical decisions. Only questions whose answers change the output."
+    body: "An adaptive interview captures your product, audience, capabilities and technical decisions. Only questions whose answers change the output.",
   },
   {
     n: "02",
     title: "Airrow generates your foundation",
-    body: "Architecture, specifications, standards, roadmap, prompt library and an AI context system, personalised to your product instead of filled in from a template."
+    body: "Architecture, specifications, standards, roadmap, prompt library and an AI context system, personalised to your product instead of filled in from a template.",
   },
   {
     n: "03",
     title: "Build with your AI agents",
-    body: "Download your repository, open it in your editor and start implementing. Your agents finally have the context of a senior engineering team."
-  }
+    body: "Download your repository, open it in your editor and start implementing. Your agents finally have the context of a senior engineering team.",
+  },
 ];
 
-export const DELIVERABLES: { icon: DeliverableIcon; title: string; body: string }[] = [
+export const DELIVERABLES: {
+  icon: DeliverableIcon;
+  title: string;
+  body: string;
+}[] = [
   {
     icon: "architecture",
     title: "Architecture",
-    body: "System design, database schema with RLS, tech-stack decisions"
+    body: "System design, database schema with RLS, tech-stack decisions",
   },
   {
     icon: "specifications",
     title: "Specifications",
-    body: "One real spec per capability, covering requirements, edge cases and security"
+    body: "One real spec per capability, covering requirements, edge cases and security",
   },
   {
     icon: "context",
     title: "AI context system",
-    body: "CLAUDE.md and context files so your agents never guess"
+    body: "CLAUDE.md and context files so your agents never guess",
   },
   {
     icon: "pipeline",
     title: "CI/CD pipeline",
-    body: "GitHub Actions that lint, typecheck, test and deploy from your first commit"
+    body: "GitHub Actions that lint, typecheck, test and deploy from your first commit",
   },
   {
     icon: "standards",
     title: "Standards",
-    body: "Coding, testing, security and git, decided rather than debated"
+    body: "Coding, testing, security and git, decided rather than debated",
   },
   {
     icon: "prompts",
     title: "Prompt library",
-    body: "Proven prompts for every stage of the workflow"
-  }
+    body: "Proven prompts for every stage of the workflow",
+  },
 ];
 
 /**
@@ -95,30 +99,36 @@ export const SPEC_LOOP = ["createspec", "clarify", "implement", "analyze"];
 export const FOUNDATION_HIGHLIGHTS = [
   {
     path: ".claude/spec-kit/constitution.md",
-    reason: "The rules your agents cannot drift from, written once and enforced in review."
+    reason:
+      "The rules your agents cannot drift from, written once and enforced in review.",
   },
   {
     path: "CLAUDE.md",
-    reason: "The first file an agent opens: stack, architecture and conventions, no guessing."
+    reason:
+      "The first file an agent opens: stack, architecture and conventions, no guessing.",
   },
   {
     path: "specs/README.md",
-    reason: "One spec per issue, so a decision is made once instead of re-argued per session."
+    reason:
+      "One spec per issue, so a decision is made once instead of re-argued per session.",
   },
   {
     path: "docs/architecture/SYSTEM_OVERVIEW.md",
-    reason: "How the system fits together, decided before there is code to contradict it."
+    reason:
+      "How the system fits together, decided before there is code to contradict it.",
   },
   {
     path: ".github/workflows/ci.yml",
-    reason: "Lint, typecheck and tests running from commit one, so drift fails loudly."
-  }
+    reason:
+      "Lint, typecheck and tests running from commit one, so drift fails loudly.",
+  },
 ];
 
 export const WHY_SDD = [
   "The spec is the source of truth. Code is reviewed against it, not the other way round.",
   "An AI agent with a written architecture stops inventing one per session.",
-  "Decisions made once, in writing, survive the context window."
+  "Decisions made once, in writing, survive the context window.",
+  "You spend far fewer tokens when the agent knows exactly what to build. Guessing, exploring and undoing the wrong thing is the expensive part.",
 ];
 
 /* Everything is free for now. No invented tiers and no "TBD" — if a price isn't decided,
@@ -129,32 +139,33 @@ export const INCLUDED = [
   "The complete generated foundation",
   "ZIP delivery of your repository",
   "Regenerate whenever your answers change",
-  "Every document type Airrow produces"
+  "Every document type Airrow produces",
 ];
 
 export const SECTIONS = {
   how: { title: "How it works" },
   features: {
     title: "Everything before the first line of code",
-    body: "Airrow doesn't build your app. It builds the foundation that makes AI-assisted development consistent, correct and fast."
+    body: "Airrow doesn't build your app. It builds the foundation that makes AI-assisted development consistent, correct and fast.",
   },
   specDriven: {
     title: "Why spec-driven development",
     body: "AI writes code faster than any team can review it. The bottleneck moved: it is no longer typing, it is deciding. Specs are how decisions survive.",
     loopTitle: "The loop your agents run",
-    loopNote: "Every issue goes round this loop. The commands ship in your repository, ready to run.",
+    loopNote:
+      "Every issue goes round this loop. The commands ship in your repository, ready to run.",
     structureTitle: "A few files that make it work",
-    moreSuffix: "more files waiting in your repository"
+    moreSuffix: "more files waiting in your repository",
   },
   pricing: {
     title: "Pricing",
     body: "Airrow is free while it's in early access. Every feature, no project limit, no card.",
     amount: "$0",
-    note: "Everything included."
+    note: "Everything included.",
   },
   cta: {
     title: "Start with the foundation.",
-    body: "Ten minutes of questions. A complete engineering foundation. Yours.",
-    action: "Create your project"
-  }
+    body: "Five minutes of questions. A complete engineering foundation. Yours.",
+    action: "Create your project",
+  },
 };

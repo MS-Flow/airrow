@@ -10,11 +10,7 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: repoRoot,
   outputFileTracingIncludes: {
     "/**": ["../../template/**"]
-  },
-  // isomorphic-dompurify pulls in jsdom, which pulls in an ESM-only transitive dep
-  // (@exodus/bytes via html-encoding-sniffer). Next's bundler can't require() that;
-  // leaving the package external lets Node's own resolver load it at runtime instead.
-  serverExternalPackages: ["isomorphic-dompurify", "jsdom"]
+  }
 };
 
 export default nextConfig;
