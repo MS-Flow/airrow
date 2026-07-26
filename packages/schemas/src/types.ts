@@ -143,6 +143,74 @@ export interface GenerationResult {
   manifest: Manifest;
 }
 
+/* ── Importing an existing project (spec 63) ──────────────────────────────── */
+
+/** One file read out of an imported project. `path` is repo-relative with `/` separators. */
+export interface ImportedFile {
+  path: string;
+  content: string;
+}
+
+/** Ceilings on what may be imported; the values live with the engine (`IMPORT_LIMITS`). */
+export interface ImportLimits {
+  /** Total decompressed bytes of the files actually analyzed. */
+  maxBytes: number;
+  maxFiles: number;
+}
+
+/** Why the analysis prefilled an answer — shown beside it so the founder can judge the guess. */
+export interface ImportEvidence {
+  field: keyof InterviewAnswers;
+  /** Human-readable form of the derived value. */
+  value: string;
+  /** Where it came from, e.g. `package.json → dependencies.next`. */
+  source: string;
+}
+
+export interface ImportAnalysis {
+  /** Prefill for the interview. Only questions the analysis could answer are present. */
+  answers: InterviewAnswers;
+  evidence: ImportEvidence[];
+  /** Detected but not mappable onto the current model — surfaced, never silently dropped. */
+  notes: string[];
+  filesAnalyzed: number;
+  filesIgnored: number;
+}
+
+export type ImportSourceKind = "zip" | "repo";
+export type ImportSourceStatus = "analyzed" | "failed";
+
+/**
+ * What Airrow keeps about an imported file once analysis is done: its path and a content digest,
+ * never the content itself. Enough to diff generated output against the project; nothing of the
+ * customer's source survives the request (constitution §II, customer IP).
+ */
+export interface ImportedFileDigest {
+  path: string;
+  bytes: number;
+  digest: string;
+}
+
+/** What the founder chose for a file that already exists with different content. */
+export type ConflictResolution = "keep_existing" | "use_generated";
+
+export interface ImportDiffEntry {
+  path: string;
+  generatedBytes: number;
+  /** `null` when the imported project has no file at this path. */
+  existingBytes: number | null;
+}
+
+/**
+ * Generated output measured against the imported project. `conflicts` is the only bucket that
+ * needs a decision — nothing in it is written until the founder picks (spec 63).
+ */
+export interface ImportDiff {
+  added: ImportDiffEntry[];
+  identical: ImportDiffEntry[];
+  conflicts: ImportDiffEntry[];
+}
+
 export type JobStage = "resolve" | "author" | "assemble" | "validate" | "manifest";
 export type JobStatus = "queued" | "running" | "completed" | "failed";
 

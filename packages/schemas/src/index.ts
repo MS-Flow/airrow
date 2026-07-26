@@ -68,6 +68,28 @@ export const projectCreateSchema = z.object({
   description: z.string().trim().min(10).max(TEXT_MAX)
 });
 
+/** One file read out of an imported archive — untrusted content, validated at the boundary. */
+export const importedFileSchema = z.object({
+  path: z.string().min(1).max(400),
+  content: z.string()
+});
+
+export const conflictResolutionSchema = z.enum(["keep_existing", "use_generated"]);
+
+/**
+ * Importing an existing project: the basics, same bar as creating one from scratch. `source` only
+ * admits `zip` — the repo path waits on the GitHub App integration (spec 63, deferred).
+ */
+export const importCreateSchema = projectCreateSchema.extend({
+  source: z.literal("zip")
+});
+
+/** A single conflict decision posted back from the review screen. */
+export const conflictDecisionSchema = z.object({
+  path: z.string().min(1).max(400),
+  resolution: conflictResolutionSchema
+});
+
 export const profileUpdateSchema = z.object({
   name: z.string().trim().min(1).max(80)
 });
