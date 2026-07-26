@@ -64,6 +64,27 @@ before the base was rewritten, and because actions taken with `GITHUB_TOKEN` nev
 runs, nothing re-ran the failed check. Against a protected base that left the PR unmergeable with no way
 back except a manual re-run.
 
+## The reviewer is requested for you
+
+A PR into `develop` or `main` needs **1 approving review** (see [Push protection](#push-protection)),
+but GitHub does not nominate anyone — so an unassigned PR sits blocked while nobody is notified. The
+same workflow therefore requests a review as its last step: everyone on the team list in
+`branch-policy.yml`, minus the PR author. With today's two-person team that is always "the other one",
+with no rotation state to keep. Add new members to the `TEAM` list in that step.
+
+| Situation                              | What happens                                            |
+| -------------------------------------- | ------------------------------------------------------- |
+| PR into `develop` / `main`             | a reviewer is requested (author excluded)                |
+| PR into `feature/*`                    | nothing — no review is required there                    |
+| Draft PR                               | waits until it is marked **ready for review**             |
+| Dependabot / Renovate                  | skipped — bots do not generate review pings              |
+| A reviewer is already requested        | left alone; never overwritten, never duplicated          |
+| Wrong-direction PR                     | never gets that far — the direction check fails first    |
+
+The step is `continue-on-error` on purpose. `validate-source-branch` is a **required** check, so a
+failed assignment (a reviewer who is no longer a collaborator, say) must never be what makes a PR
+unmergeable — it warns in the log and the PR stays mergeable once approved manually.
+
 ## Merge Direction Enforcement
 
 The merge direction above is not just a convention — it is enforced by CI:
