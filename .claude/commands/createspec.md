@@ -32,11 +32,16 @@ Steps:
    - If already on `NNN-<kort>` matching this issue, keep it.
    - Otherwise, for a real issue number, create AND link in one step:
      `git checkout feature/<name> && git pull && gh issue develop <n> --base feature/<name>
-     --branch-name NNN-<kort> --checkout` (registers the branch in the issue's Development section so
+     --name NNN-<kort> --checkout` (registers the branch in the issue's Development section so
      it closes automatically on merge — see `.github/workflows/close-issue-on-merge.yml`). If
      `gh issue develop` is unavailable, fall back to `git checkout -b NNN-<kort>` and note it wasn't linked.
    - For a description-based spec (no issue yet): `git checkout -b NNN-<kort>`.
    - Respect the constitution's PR-direction rule; issue branches never target `main`/`develop`.
+   - **Don't merge `develop` into the new issue branch.** After `git pull` on `feature/<name>`, check
+     `git log feature/<name>..origin/develop --oneline`; if non-empty, tell the user the feature branch
+     is behind `develop` by that many commits and that they may want a separate `git merge develop`
+     into `feature/<name>` first. Merging `develop` straight into an issue branch drags unrelated
+     history into its eventual PR to `feature/<name>` — sync at the feature level instead.
 4. **Scaffold `specs/NNN-<kort>.md`** from the template. Fill the header, User story, and an initial
    Acceptance criteria list. Leave Background/Exact changes for `/implement`. Mark every unknown with
    `[NEEDS CLARIFICATION: …]`.

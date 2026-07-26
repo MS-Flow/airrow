@@ -36,6 +36,11 @@ import { readFoundation } from "@/features/landing/foundation";
 import { getSession, signOut } from "@/lib/auth";
 import { readTheme } from "@/lib/theme";
 
+// getSession() hits Supabase over the network; forcing dynamic skips Next's build-time
+// static-generation probe (which would otherwise make that call during every build) rather
+// than relying on cookies() usage to trigger the same bailout implicitly.
+export const dynamic = "force-dynamic";
+
 const deliverableIcons: Record<DeliverableIcon, LucideIcon> = {
   architecture: Boxes,
   specifications: FileCode2,
