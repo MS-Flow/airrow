@@ -19,8 +19,8 @@ import { loadTemplate } from "@/lib/template/load";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Long enough to read a stage, short enough to stay well inside a function's budget. */
-const BEAT = 700;
+/** Long enough to see a stage land, short enough that the screen never feels like a wait. */
+const BEAT = 260;
 
 const STAGES: JobStage[] = ["resolve", "author", "assemble", "validate", "manifest"];
 

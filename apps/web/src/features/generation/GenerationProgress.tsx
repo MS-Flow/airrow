@@ -65,15 +65,16 @@ export function GenerationProgress({
           done.current = true;
           // The project page, not the file browser: it frames what was generated before
           // dropping the founder into a tree of files.
-          setTimeout(() => router.push(`/app/projects/${projectId}`), 900);
+          // Just long enough for the last tick to register as finished, not a pause.
+          setTimeout(() => router.push(`/app/projects/${projectId}`), 400);
         }
       } catch {
         /* transient poll failure — next tick retries */
       }
     };
     void poll();
-    // Faster than the runner's beat, so no stage lands and clears between two polls.
-    const t = setInterval(poll, 400);
+    // Comfortably faster than the runner's beat, so no stage lands and clears between polls.
+    const t = setInterval(poll, 150);
     return () => {
       active = false;
       clearInterval(t);
