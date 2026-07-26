@@ -119,6 +119,43 @@ Testet avslöjade dessutom att **den här fixens egen gren** (`16-pr-base-featur
 spec, eftersom härledningen kräver att grennamnet står i specens Branch-rad. Raden listar nu båda
 grenarna — annars hade den här PR:en fått en "kunde inte härleda"-kommentar av sin egen fix.
 
+**Följdfix 2 — kapplöpningen mot `validate-source-branch` (samma gren).**
+
+Det skarpa testet på PR #42 lyckades: basen skrevs om från `main` till `feature/ci-cd`. Men
+`validate-source-branch` hade redan hunnit köra mot `main` och failade:
+
+```
+Error: Endast 'develop' får mergas in i 'main' (fick '16-pr-base-feature').
+```
+
+**Ingen omkörning skedde.** Jag antog först att base-bytet triggar ett `edited`-event så att
+branch-policy kör om och blir grön — det är fel. Åtgärder utförda med `GITHUB_TOKEN` triggar aldrig nya
+workflow-körningar (GitHubs rekursionsskydd). Den failade körningen förblir alltså den senaste.
+
+För PR #42 var det kosmetiskt, eftersom basen blev `feature/ci-cd` där ingen check är required. Men mot
+`develop` — där `validate-source-branch` **är** required — hade PR:en blivit permanent omöjlig att merga.
+Fixen förvandlade då en bekvämlighet till en blockering i precis det flöde den skulle förenkla.
+
+**Åtgärd:** `pr-base-branch.yml` är borttagen och dess logik flyttad in i `branch-policy.yml` som ett
+första steg i jobbet `validate-source-branch`. Basen sätts först, riktningen valideras efter, i samma
+jobb — kapplöpningen är omöjlig av konstruktion i stället för övertäckt. Valideringssteget läser
+`EFFECTIVE_BASE` via `$GITHUB_ENV` när basen skrevs om, eftersom `github.base_ref` är inaktuell då.
+
+Jobb-id:t behölls (`validate-source-branch`), och eftersom check-kontexten är jobb-id:t behövde
+**rulesetet inte röras** — till skillnad från vad jag först uppgav när alternativen vägdes.
+
+Verifierat lokalt genom att köra båda stegen i sekvens med `$GITHUB_ENV`-överföringen simulerad:
+
+| Head-gren | Base vid öppning | Utfall |
+| --------- | ---------------- | ------ |
+| `feature/infrastructure` | `main` | → `develop`, validering **exit 0** ✅ |
+| `feature/ci-cd` | `main` | → `develop`, exit 0 ✅ |
+| `33-security-scanning` | `main` | → `feature/ci-cd`, exit 0 ✅ |
+| `16-pr-base-feature` | `main` | → `feature/ci-cd`, exit 0 ✅ |
+| `develop` | `main` | no-op, exit 0 ✅ |
+| `hotfix-foo` | `main` | orörd, validering **exit 1** ✅ (legitimt fel riktning) |
+| `16-pr-base-feature` vid `synchronize` | `main` | base-steget hoppas över, exit 1 ✅ |
+
 **Efterjusteringar efter första skarpa användningen (2026-07-25).** Den ursprungliga leveransen
 hanterade bara issue-grenar och missade därmed issuens kriterium att *icke*-issue-grenar ska ha sitt
 korrekta default. Det syntes direkt: en `feature/ci-cd`-PR föreslogs mot `main`. Två tillägg:
