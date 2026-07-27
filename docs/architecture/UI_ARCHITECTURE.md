@@ -67,9 +67,14 @@ One component per file in `apps/web/src/components/ui`, **no barrel** (constitut
 directly: `@/components/ui/button`.
 
 `button` · `card` (+ Header/Title/Description/Body/Footer) · `input` (Input, Textarea) · `label` ·
-`select` · `choice` (Checkbox, RadioGroup) · `dialog` · `dropdown` · `tooltip` · `tabs` ·
-`breadcrumbs` · `table` · `badge` · `progress` · `skeleton` · `spinner` · `separator` · `toast` ·
-`command-palette` · `states` (EmptyState, ErrorState, InlineError, LoadingState, **ComingSoon**).
+`file-dropzone` · `select` · `choice` (Checkbox, RadioGroup) · `dialog` · `dropdown` · `tooltip` ·
+`tabs` · `breadcrumbs` · `table` · `badge` · `progress` · `skeleton` · `spinner` · `separator` ·
+`toast` · `command-palette` · `states` (EmptyState, ErrorState, InlineError, LoadingState,
+**ComingSoon**).
+
+`file-dropzone` is the file field: click or drop, with the chosen file named back. It keeps a real
+`<input type="file">` — visually hidden, still `required`, still submitted — so a form gets the same
+`FormData` a bare input would give it.
 
 Brand lives in `components/brand`: `mark`, `logo` (the mark+wordmark lockup), `splash`. Both render
 **the approved artwork** from `public/brand/*.png` via `next/image` — not redrawn vectors, because no
