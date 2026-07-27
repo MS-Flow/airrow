@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { generateFromInput } from "../packages/engine/src/index.ts";
+import { generateFromInput, shipsPath } from "../packages/engine/src/index.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TEMPLATE_DIR = path.join(REPO_ROOT, "template");
@@ -136,7 +136,10 @@ for (const fx of fixtures) {
   const paths = new Set(files.map((f) => f.path));
   const text = files.map((f) => f.content).join("\n");
 
-  if (files.length !== TEMPLATE.length) fail(`expected ${TEMPLATE.length} files, got ${files.length}`);
+  // Not every template file ships in every project: GitHub Actions and Azure Pipelines are
+  // alternatives, so each project gets one set and never the other.
+  const expected = TEMPLATE.filter((f) => shipsPath(model, f.path)).length;
+  if (files.length !== expected) fail(`expected ${expected} files, got ${files.length}`);
   if (manifest.fileCount !== files.length) fail("manifest count mismatch");
 
   for (const f of files) {
@@ -155,6 +158,31 @@ for (const fx of fixtures) {
   const vision = files.find((f) => f.path === "docs/VISION.md");
   if (!vision?.content.includes(fx.answers.vision)) fail("VISION.md missing the long-term vision");
   if (!vision?.content.includes(fx.answers.mvpFocus)) fail("VISION.md missing the MVP focus");
+
+  // Spec 66: the commands the documents tell the founder to run have to be the ones `/start` sets
+  // up. A foundation whose START_HERE names `pnpm test` while `/start` wires `npm test` is the same
+  // broken first experience as having no commands at all, just harder to spot.
+  const start = files.find((f) => f.path === ".claude/commands/start.md")?.content ?? "";
+  if (!start) fail("missing /start command");
+  const run = fx.answers.framework === "vite" ? "npm run" : "pnpm";
+  const here = files.find((f) => f.path === "START_HERE.md")?.content ?? "";
+  const azure = fx.answers.repoProvider === "azure_devops";
+  const ciPath = azure ? "azure-pipelines.yml" : ".github/workflows/ci.yml";
+  const ci = files.find((f) => f.path === ciPath)?.content ?? "";
+  if (!ci) fail(`missing CI definition: ${ciPath}`);
+  for (const script of ["dev", "typecheck", "lint", "test"]) {
+    const command = `${run} ${script}`;
+    if (!start.includes(command)) fail(`/start does not set up \`${command}\``);
+    if (!here.includes(command)) fail(`START_HERE.md does not name \`${command}\``);
+  }
+  for (const script of ["typecheck", "lint", "test"]) {
+    if (!ci.includes(`${run} ${script}`)) fail(`${ciPath} does not run \`${run} ${script}\``);
+  }
+  const gate = azure ? "dependencies.detect.outputs" : "needs.detect.outputs.ready";
+  if (!ci.includes(gate)) fail(`${ciPath} is not gated on /start having run`);
+  // A foundation must never describe someone else's tooling.
+  if (azure && text.includes("GitHub")) fail("GitHub named in an Azure DevOps project");
+  if (!azure && text.includes("Azure DevOps")) fail("Azure DevOps named in a GitHub project");
 
   // No ADR leftovers, and no stack contradictions.
   if (text.includes("ADR")) fail("ADR reference in generated output");

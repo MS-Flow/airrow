@@ -98,6 +98,11 @@ export const SPEC_LOOP = ["createspec", "clarify", "implement", "analyze"];
  */
 export const FOUNDATION_HIGHLIGHTS = [
   {
+    path: "START_HERE.md",
+    reason:
+      "A clear guide to how it all works: how to get started, and how to carry it to a finished product.",
+  },
+  {
     path: ".claude/spec-kit/constitution.md",
     reason:
       "The rules your agents cannot drift from, written once and enforced in review.",
@@ -125,9 +130,10 @@ export const FOUNDATION_HIGHLIGHTS = [
 ];
 
 export const WHY_SDD = [
+  "Without a spec, an agent optimises for looking finished. It invents requirements you never gave it and quietly reopens decisions you made last week.",
   "The spec is the source of truth. Code is reviewed against it, not the other way round.",
-  "An AI agent with a written architecture stops inventing one per session.",
-  "Decisions made once, in writing, survive the context window.",
+  "It replaces “does this look right?” with “does this match what we agreed?”, which is a question you can actually answer.",
+  "Decisions made once, in writing, survive the context window and the three months after it.",
   "You spend far fewer tokens when the agent knows exactly what to build. Guessing, exploring and undoing the wrong thing is the expensive part.",
 ];
 
@@ -159,7 +165,7 @@ export const SECTIONS = {
   },
   specDriven: {
     title: "Why spec-driven development",
-    body: "AI writes code faster than any team can review it. The bottleneck moved: it is no longer typing, it is deciding. Specs are how decisions survive.",
+    body: "AI writes code faster than any team can review it. The bottleneck moved: it is no longer typing, it is deciding. Specs are how decisions survive, and how you stay the one making them.",
     loopTitle: "The loop your agents run",
     loopNote:
       "Every issue goes round this loop. The commands ship in your repository, ready to run.",
