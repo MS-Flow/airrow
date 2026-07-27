@@ -16,6 +16,7 @@ import type {
   SecurityLevel,
   Tenancy
 } from "../../schemas/src/types.ts";
+import { STANDARD_STACK } from "../../schemas/src/questions.ts";
 
 export const ENGINE_VERSION = "0.1.0";
 
@@ -64,8 +65,11 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
       ? "internal"
       : (a.audience ?? (productType === "hobby" ? "b2c" : "b2b"));
 
-  const framework: Framework =
-    a.framework ?? (productType === "mobile_app" || productType === "browser_extension" ? "vite" : "nextjs");
+  // Unanswered only for a draft saved before the stack question was asked of every product type.
+  // The fallback is the same table the interview recommends from, so an old draft resolves to what
+  // the founder would have been shown — never to a web SPA because nothing better was reachable.
+  const standard = STANDARD_STACK[productType];
+  const framework: Framework = a.framework ?? standard.framework;
 
   const dataSensitivity: DataSensitivity = a.dataSensitivity ?? "standard";
   const security: SecurityLevel = dataSensitivity === "standard" ? "standard" : "elevated";
@@ -90,7 +94,8 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
     hosting: a.hosting ?? "vercel",
     stack: {
       framework,
-      customFramework: framework === "custom" ? (a.frameworkOther ?? "").trim() : "",
+      customFramework:
+        framework === "custom" ? (a.frameworkOther ?? "").trim() || (standard.describe ?? "") : "",
       language: "typescript",
       styling: "tailwind",
       ui: "shadcn/ui",
@@ -178,6 +183,18 @@ export function isCustomStack(m: ProjectModel): boolean {
 
 export function repoLabel(m: ProjectModel): string {
   return m.stack.repoProvider === "github" ? "GitHub" : "Azure DevOps";
+}
+
+/**
+ * True when the founder's code, work items and pipelines live in Azure DevOps.
+ *
+ * This decides more than a label. The whole spec workflow is expressed in a provider's own
+ * vocabulary and CLI — issues vs work items, `gh` vs `az repos`, Actions vs Pipelines — and a
+ * foundation that ships GitHub Actions to an Azure DevOps team is documentation about someone
+ * else's project.
+ */
+export function usesAzureRepos(m: ProjectModel): boolean {
+  return m.stack.repoProvider === "azure_devops";
 }
 
 export const tenancyLabel: Record<Tenancy, string> = {

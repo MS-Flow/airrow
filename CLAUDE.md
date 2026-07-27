@@ -73,5 +73,8 @@ passes it in.
 - **Security:** secrets never in code, client bundles, logs, or generated output. Generated/authored
   files are untrusted text — rendered sanitized, never executed. Repo access via GitHub App
   installations only, never user PATs.
-- **Product:** Airrow generates engineering *foundations* only — never application implementation
-  code. ZIP delivery must always work with no integration connected.
+- **Product:** Airrow generates engineering *foundations* — never application code from our servers.
+  The one exception is the `/start` command shipped **inside** a generated repo: the founder runs it
+  on their own machine, and it takes their project to the bare minimum that runs — that minimum is a
+  ceiling, and everything past it goes through the spec loop (spec 66). ZIP delivery must always work
+  with no integration connected.

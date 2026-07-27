@@ -80,6 +80,42 @@ describe("resolveProjectModel — capability & identity projection", () => {
     expect(m.audience).toBe("b2c");
   });
 
+  // A mobile app used to resolve to Vite + React, which is a web SPA — the founder downloaded a
+  // foundation for a product they were not building and only found out from `npm run dev`.
+  it("resolves an unanswered stack to the standard one for that product type, never a web SPA", () => {
+    const mobile = resolveProjectModel({
+      ...base,
+      answers: { ...base.answers, productType: "mobile_app", framework: undefined }
+    });
+    expect(mobile.stack.framework).toBe("custom");
+    expect(mobile.stack.customFramework).toMatch(/Expo/);
+
+    const saas = resolveProjectModel({ ...base, answers: { ...base.answers, framework: undefined } });
+    expect(saas.stack.framework).toBe("nextjs");
+    expect(saas.stack.customFramework).toBe("");
+  });
+
+  it("keeps the stack the founder chose over the one their product type suggests", () => {
+    const m = resolveProjectModel({
+      ...base,
+      answers: { ...base.answers, productType: "mobile_app", framework: "nextjs" }
+    });
+    expect(m.stack.framework).toBe("nextjs");
+  });
+
+  it("keeps a described stack the founder wrote themselves", () => {
+    const m = resolveProjectModel({
+      ...base,
+      answers: {
+        ...base.answers,
+        productType: "mobile_app",
+        framework: "custom",
+        frameworkOther: "Flutter with Dart 3 and melos."
+      }
+    });
+    expect(m.stack.customFramework).toBe("Flutter with Dart 3 and melos.");
+  });
+
   it("treats a public-only authModel as no accounts", () => {
     const m = resolveProjectModel({
       ...base,

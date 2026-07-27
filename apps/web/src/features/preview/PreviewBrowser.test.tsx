@@ -11,7 +11,10 @@ vi.mock("next/navigation", () => ({
   // No `?file=`, so the reader falls back to README.md exactly as it does in the app.
   useSearchParams: () => new URLSearchParams()
 }));
-vi.mock("./actions", () => ({ saveGeneratedFileAction: vi.fn() }));
+vi.mock("./actions", () => ({
+  saveGeneratedFileAction: vi.fn(),
+  highlightFileAction: vi.fn().mockResolvedValue({ html: null })
+}));
 
 import { PreviewBrowser } from "./PreviewBrowser";
 
@@ -67,7 +70,11 @@ describe("PreviewBrowser rail", () => {
 
     await user.click(screen.getByRole("button", { name: /CLAUDE\.md/ }));
 
-    expect(replace).toHaveBeenCalledWith("?file=CLAUDE.md", { scroll: false });
+    // Selection is client state now, not a navigation: the file is on screen without the router
+    // being asked, and the URL still carries it so the link keeps working.
+    expect(await screen.findByText("Context")).toBeInTheDocument();
+    expect(window.location.search).toContain("file=CLAUDE.md");
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("filters the founder's files out when 'Show my project' is switched off", async () => {
