@@ -2,7 +2,7 @@
 // output would do to the founder's project. Nothing here writes files; it records decisions.
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { buildFileTree, diffAgainstExisting } from "@airrow/engine";
+import { diffAgainstExisting } from "@airrow/engine";
 import type { GeneratedFile } from "@airrow/schemas";
 import { PageContainer } from "@/components/shell/page-container";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,6 @@ import {
 } from "@/lib/data/store";
 import { digestFor } from "@/features/import/digest";
 import { ConflictRow } from "@/features/import/ConflictRow";
-import { ProjectTree } from "@/features/import/ProjectTree";
 
 export const metadata = { title: "Import review" };
 
@@ -45,15 +44,6 @@ export default async function ImportReview({ params }: { params: Promise<{ id: s
       </p>
 
       <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Your project</CardTitle>
-        </CardHeader>
-        <CardBody className="p-0">
-          <ProjectTree nodes={buildFileTree(await listImportFiles(source.id))} />
-        </CardBody>
-      </Card>
-
-      <Card className="mt-4">
         <CardHeader>
           <CardTitle>What Airrow could work out</CardTitle>
         </CardHeader>
@@ -184,7 +174,11 @@ async function ImportDiffSection({
 
       <p className="mt-6 text-sm text-fg-faint">
         The download contains the new files plus any conflict you chose to take from Airrow.
-        Undecided conflicts keep your version.
+        Undecided conflicts keep your version. Your project&rsquo;s structure sits in the{" "}
+        <Link href={`/app/projects/${projectId}/preview`} className="text-fg underline-offset-4 hover:underline">
+          preview
+        </Link>
+        , in one tree with Airrow&rsquo;s files.
       </p>
     </>
   );
