@@ -452,6 +452,8 @@ export interface ImportSourceRecord {
   filesAnalyzed: number;
   filesIgnored: number;
   analysis: ImportAnalysis;
+  /** Which pepper version the digests were hashed with; 0 = raw SHA-256 (spec 68). */
+  digestVersion: number;
   createdAt: string;
 }
 
@@ -464,6 +466,7 @@ interface ImportSourceRow {
   files_analyzed: number;
   files_ignored: number;
   analysis: ImportAnalysis;
+  digest_version: number;
   created_at: string;
 }
 const toImportSource = (r: ImportSourceRow): ImportSourceRecord => ({
@@ -475,6 +478,7 @@ const toImportSource = (r: ImportSourceRow): ImportSourceRecord => ({
   filesAnalyzed: r.files_analyzed,
   filesIgnored: r.files_ignored,
   analysis: r.analysis,
+  digestVersion: r.digest_version,
   createdAt: r.created_at
 });
 
@@ -487,7 +491,8 @@ export async function createImportSource(
   kind: ImportSourceKind,
   originalName: string,
   analysis: ImportAnalysis,
-  files: ImportedFileDigest[]
+  files: ImportedFileDigest[],
+  digestVersion: number
 ): Promise<ImportSourceRecord> {
   const row = single<ImportSourceRow>(
     await db()
@@ -499,7 +504,8 @@ export async function createImportSource(
         original_name: originalName,
         files_analyzed: analysis.filesAnalyzed,
         files_ignored: analysis.filesIgnored,
-        analysis
+        analysis,
+        digest_version: digestVersion
       })
       .select("*")
       .single()

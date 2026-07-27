@@ -46,13 +46,13 @@ function analyzable(files: ImportedFile[]): ImportedFile[] {
  * An archive exported from GitHub wraps everything in one top-level folder. Strip it so imported
  * paths line up with the repo-relative paths the engine generates.
  */
-export function stripCommonRoot(files: ImportedFile[]): ImportedFile[] {
+export function stripCommonRoot<T extends { path: string }>(files: ReadonlyArray<T>): T[] {
   const first = files[0];
-  if (first === undefined) return files;
+  if (first === undefined) return [...files];
   const root = first.path.split("/")[0];
-  if (root === undefined || root === "") return files;
+  if (root === undefined || root === "") return [...files];
   const shared = files.every((f) => f.path.startsWith(`${root}/`));
-  return shared ? files.map((f) => ({ ...f, path: f.path.slice(root.length + 1) })) : files;
+  return shared ? files.map((f) => ({ ...f, path: f.path.slice(root.length + 1) })) : [...files];
 }
 
 export type ImportLimitCheck =
@@ -297,6 +297,103 @@ export function diffAgainstExisting(
   diff.identical.sort(byPath);
   diff.conflicts.sort(byPath);
   return diff;
+}
+
+/* ── File tree ────────────────────────────────────────────────────────────── */
+
+/**
+ * A node in the imported project's structure. Directories carry the rolled-up size of everything
+ * beneath them; files carry their own. No content — the tree describes shape only (spec 68).
+ */
+export interface FileTreeNode {
+  name: string;
+  path: string;
+  bytes: number;
+  /** Absent on files. Directories always have one, even when empty. */
+  children?: FileTreeNode[];
+}
+
+/** Directories before files, then alphabetical — a stable order the UI can render as-is. */
+function sortTree(nodes: FileTreeNode[]): FileTreeNode[] {
+  nodes.sort((a, b) => {
+    const aDir = a.children !== undefined;
+    const bDir = b.children !== undefined;
+    if (aDir !== bDir) return aDir ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  for (const node of nodes) if (node.children) sortTree(node.children);
+  return nodes;
+}
+
+/**
+ * Build the directory tree an imported project's paths describe. Pure: paths and sizes in, sorted
+ * tree out — everything the structure view needs, and nothing the founder didn't already give us.
+ */
+export function buildFileTree(files: ReadonlyArray<{ path: string; bytes: number }>): FileTreeNode[] {
+  const roots: FileTreeNode[] = [];
+  const directories = new Map<string, FileTreeNode>();
+
+  /** The directory node for a path, creating it and its ancestors on the way down. */
+  function directoryAt(segments: string[]): FileTreeNode[] {
+    let siblings = roots;
+    let prefix = "";
+    for (const segment of segments) {
+      prefix = prefix === "" ? segment : `${prefix}/${segment}`;
+      let node = directories.get(prefix);
+      if (node === undefined) {
+        node = { name: segment, path: prefix, bytes: 0, children: [] };
+        directories.set(prefix, node);
+        siblings.push(node);
+      }
+      // `children` is always set for directory nodes, above.
+      siblings = node.children ?? [];
+    }
+    return siblings;
+  }
+
+  for (const file of files) {
+    const segments = file.path.split("/").filter((s) => s !== "");
+    const name = segments.pop();
+    if (name === undefined) continue;
+
+    directoryAt(segments).push({ name, path: file.path, bytes: file.bytes });
+
+    // Roll the size up every ancestor so a collapsed directory still says how big it is.
+    let prefix = "";
+    for (const segment of segments) {
+      prefix = prefix === "" ? segment : `${prefix}/${segment}`;
+      const directory = directories.get(prefix);
+      if (directory) directory.bytes += file.bytes;
+    }
+  }
+
+  return sortTree(roots);
+}
+
+/**
+ * The merged delivery: the founder's own files with Airrow's laid over the top. `ours` is whatever
+ * the server deemed safe to write (`applyResolutions`), so overlaying is exactly right — an
+ * undecided conflict never reaches this function and the founder's file survives untouched.
+ */
+export function mergeOverlay<T extends { path: string }>(
+  theirs: ReadonlyArray<T>,
+  ours: ReadonlyArray<T>
+): T[] {
+  const overlaid = new Set(ours.map((f) => f.path));
+  return [...theirs.filter((f) => !overlaid.has(f.path)), ...ours].sort((a, b) =>
+    a.path.localeCompare(b.path)
+  );
+}
+
+/**
+ * How much of the imported project a re-picked archive still accounts for, 0–1. Used to catch the
+ * founder choosing the wrong folder at download time; paths only, because the stored digests are
+ * peppered server-side and cannot be recomputed in a browser (spec 68).
+ */
+export function pathOverlap(expected: ReadonlyArray<string>, actual: ReadonlyArray<string>): number {
+  if (expected.length === 0) return 1;
+  const present = new Set(actual);
+  return expected.filter((p) => present.has(p)).length / expected.length;
 }
 
 /**

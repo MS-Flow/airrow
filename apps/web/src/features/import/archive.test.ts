@@ -3,7 +3,7 @@
 import { describe, it, expect } from "vitest";
 import JSZip from "jszip";
 import { IMPORT_LIMITS } from "@airrow/engine";
-import { normalizePath, readArchive, sha256 } from "./archive";
+import { normalizePath, readArchive } from "./archive";
 
 async function archiveOf(entries: Record<string, string>): Promise<ArrayBuffer> {
   const zip = new JSZip();
@@ -116,9 +116,3 @@ describe("normalizePath", () => {
   });
 });
 
-describe("sha256", () => {
-  it("is stable for the same content and different for different content", () => {
-    expect(sha256("hello")).toBe(sha256("hello"));
-    expect(sha256("hello")).not.toBe(sha256("hello "));
-  });
-});

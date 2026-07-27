@@ -4,7 +4,6 @@
 //
 // The analysis runs in this request and nothing but paths, sizes and digests is persisted, so the
 // founder's source never lands in Airrow's database (§II, customer IP).
-import { redirect } from "next/navigation";
 import { analyzeImport, digestImported, slugify } from "@airrow/engine";
 import {
   conflictDecisionSchema,
@@ -23,10 +22,17 @@ import {
   saveConflictResolution,
   saveInterviewAnswers
 } from "@/lib/data/store";
-import { readArchive, sha256 } from "./archive";
+import { readArchive } from "./archive";
+import { currentDigestVersion, digestFor } from "./digest";
 
 export interface ImportFormState {
   error?: string;
+  /**
+   * Set once the import succeeded. The action returns instead of redirecting so the browser can
+   * cache the founder's archive against this id first — it is the only copy that will exist, since
+   * Airrow stores no content (spec 68).
+   */
+  projectId?: string;
 }
 
 export async function importProjectAction(
@@ -60,17 +66,19 @@ export async function importProjectAction(
   if (!validated.success) return { error: "The project could not be analysed." };
   const prefill = pruneHiddenAnswers(validated.data as InterviewAnswers);
 
+  const digestVersion = currentDigestVersion();
   const project = await createProject(org.id, parsed.data.name, parsed.data.description, slugify);
   await createImportSource(
     project.id,
     parsed.data.source,
     upload.name,
     analysis,
-    digestImported(archive.files, sha256)
+    digestImported(archive.files, digestFor(digestVersion)),
+    digestVersion
   );
   await saveInterviewAnswers(project.id, prefill);
 
-  redirect(`/app/projects/${project.id}/interview`);
+  return { projectId: project.id };
 }
 
 /**

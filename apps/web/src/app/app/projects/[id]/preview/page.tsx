@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
-import { ArrowRight, Download, Undo2 } from "lucide-react";
+import { ArrowRight, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DownloadProject } from "@/features/import/DownloadProject";
 import { LoadingState } from "@/components/ui/states";
 import { requireSession } from "@/lib/auth";
 import { getProject, latestJob, loadArtifact } from "@/lib/data/store";
@@ -59,12 +60,7 @@ export default async function PreviewPage({
               Change answers
             </Link>
           </Button>
-          <Button size="sm" asChild>
-            <a href={`/api/projects/${id}/zip`}>
-              <Download className="size-3.5" />
-              Download ZIP
-            </a>
-          </Button>
+          <DownloadProject projectId={id} slug={project.slug} />
           <Button variant="secondary" size="sm" asChild>
             <Link href={`/app/projects/${id}/continue`}>
               Continue locally

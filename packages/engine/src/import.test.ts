@@ -4,7 +4,10 @@ import type { GeneratedFile, ImportedFile } from "../../schemas/src/types.ts";
 import {
   analyzeImport,
   applyResolutions,
+  buildFileTree,
   checkImportLimits,
+  mergeOverlay,
+  pathOverlap,
   diffAgainstExisting,
   digestImported,
   isIgnoredImportPath,
@@ -135,6 +138,86 @@ describe("analyzeImport", () => {
     const analysis = analyzeImport([pkg({ next: "15.0.0" }), file("node_modules/next/package.json")]);
     expect(analysis.filesAnalyzed).toBe(1);
     expect(analysis.filesIgnored).toBe(1);
+  });
+});
+
+describe("buildFileTree", () => {
+  const tree = () =>
+    buildFileTree([
+      { path: "src/components/ui/button.tsx", bytes: 100 },
+      { path: "src/app.ts", bytes: 20 },
+      { path: "package.json", bytes: 10 },
+      { path: "src/components/Card.tsx", bytes: 50 }
+    ]);
+
+  it("nests files under the directories their paths describe", () => {
+    const [src, pkg] = tree();
+    expect(pkg?.name).toBe("package.json");
+    expect(src?.name).toBe("src");
+    expect(src?.children?.map((n) => n.name)).toEqual(["components", "app.ts"]);
+  });
+
+  it("puts directories before files, then alphabetical", () => {
+    const components = tree()[0]?.children?.[0];
+    expect(components?.children?.map((n) => n.name)).toEqual(["ui", "Card.tsx"]);
+  });
+
+  it("rolls sizes up so a collapsed directory still says how big it is", () => {
+    const src = tree()[0];
+    expect(src?.bytes).toBe(170);
+    expect(src?.children?.find((n) => n.name === "components")?.bytes).toBe(150);
+  });
+
+  it("carries the full path on every node, for stable React keys", () => {
+    const ui = tree()[0]?.children?.[0]?.children?.[0];
+    expect(ui?.path).toBe("src/components/ui");
+  });
+
+  it("describes shape only — no node carries file content", () => {
+    expect(JSON.stringify(tree())).not.toContain("content");
+  });
+
+  it("handles an empty project", () => {
+    expect(buildFileTree([])).toEqual([]);
+  });
+});
+
+describe("mergeOverlay", () => {
+  const f = (path: string, tag: string) => ({ path, tag });
+
+  it("keeps the founder's files and lays Airrow's over the top", () => {
+    const merged = mergeOverlay(
+      [f("README.md", "theirs"), f("src/app.ts", "theirs")],
+      [f("README.md", "ours"), f("CLAUDE.md", "ours")]
+    );
+    expect(merged.map((x) => `${x.path}:${x.tag}`)).toEqual([
+      "CLAUDE.md:ours",
+      "README.md:ours",
+      "src/app.ts:theirs"
+    ]);
+  });
+
+  it("leaves the founder's file alone when Airrow sends nothing for that path", () => {
+    const merged = mergeOverlay([f("README.md", "theirs")], []);
+    expect(merged).toEqual([f("README.md", "theirs")]);
+  });
+});
+
+describe("pathOverlap", () => {
+  it("is 1 when the same project is re-picked", () => {
+    expect(pathOverlap(["a.ts", "b.ts"], ["a.ts", "b.ts", "c.ts"])).toBe(1);
+  });
+
+  it("is near zero for a different project, which is what the warning keys off", () => {
+    expect(pathOverlap(["a.ts", "b.ts", "c.ts", "d.ts"], ["x.ts", "y.ts"])).toBe(0);
+  });
+
+  it("tolerates the founder having edited some files since importing", () => {
+    expect(pathOverlap(["a.ts", "b.ts", "c.ts", "d.ts"], ["a.ts", "b.ts", "c.ts"])).toBe(0.75);
+  });
+
+  it("treats an empty expectation as a match rather than dividing by zero", () => {
+    expect(pathOverlap([], ["a.ts"])).toBe(1);
   });
 });
 
