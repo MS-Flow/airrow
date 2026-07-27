@@ -265,3 +265,70 @@ describe("problem and non-goals reach the documents", () => {
     expect(claude).not.toContain("[NEEDS CLARIFICATION: NON_GOALS]");
   });
 });
+
+// A founder on Django cannot be served derived commands — nothing here knows `manage.py` exists —
+// so for a stack they described themselves the five commands come from the model instead. This is
+// the one deliberate hole in "the model never writes anything the founder runs", and these assert
+// where its edges are.
+describe("a stack the founder described", () => {
+  const django = resolveProjectModel({
+    name: "Klinikjournal",
+    description: "Records for small clinics.",
+    answers: {
+      productType: "saas",
+      framework: "custom",
+      frameworkOther: "Django 5 on Python 3.12, uv for dependencies, pytest for tests",
+      hosting: "vercel",
+      database: "postgres"
+    }
+  });
+
+  const commands = { CMD_DEV: "python manage.py runserver", CMD_TEST: "pytest" };
+
+  it("runs on the commands the model wrote for it", () => {
+    const { values } = deriveScaffoldValues(django, undefined, commands);
+
+    expect(values.CMD_DEV).toBe("python manage.py runserver");
+    expect(values.CMD_TEST).toBe("pytest");
+  });
+
+  it("falls back for the commands the model left out, rather than inventing them", () => {
+    const { values } = deriveScaffoldValues(django, undefined, commands);
+
+    expect(values.CMD_LINT).toBe("pnpm lint");
+  });
+
+  it("ignores authored commands on a golden-path stack", () => {
+    // Next.js commands are knowable, so nothing the model says about them is consulted. The gap
+    // exists because deriving is impossible, not because the model is trusted.
+    const { values } = deriveScaffoldValues(model, undefined, { CMD_DEV: "python manage.py runserver" });
+
+    expect(values.CMD_DEV).toBe(deterministic.CMD_DEV);
+  });
+
+  it("names their stack in the docs instead of claiming a stack they did not choose", () => {
+    const { values } = deriveScaffoldValues(django);
+
+    expect(values.STACK_SUMMARY).toContain("Django 5");
+    // The golden path's TypeScript/Tailwind/shadcn is asserted nowhere for them — it would be false.
+    expect(values.STACK_SUMMARY).not.toContain("Tailwind");
+  });
+
+  it("ships CI as a marked placeholder rather than a Node toolchain that cannot work", () => {
+    const { values } = deriveScaffoldValues(django);
+
+    expect(values.CI_SETUP_STEPS).toContain("::warning::");
+    expect(values.CI_SETUP_STEPS).not.toContain("actions/setup-node");
+  });
+
+  it("reports the authored commands as authored in the manifest", () => {
+    const { manifest } = generate(TEMPLATE, django, {
+      authoredToolchain: commands,
+      authoring: { promptVersion: "7", model: "claude-haiku-4-5" }
+    });
+
+    const authored = manifest.files.filter((f) => f.source === "authored").map((f) => f.path);
+    expect(authored).toContain("START_HERE.md");
+    expect(manifest.authoring).not.toBeNull();
+  });
+});

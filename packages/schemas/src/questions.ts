@@ -45,6 +45,7 @@ export const ANSWER_MAX_CHARS = {
   mvpFocus: 300,
   coreEntities: 600,
   nonGoals: 400,
+  frameworkOther: 300,
   integrations: 300
 } as const;
 
@@ -260,8 +261,27 @@ export const interviewQuestions: Question[] = [
         value: "vite",
         label: "Vite + React",
         description: "A pure single-page app with no server of its own — all data goes through Supabase from the browser. Uses npm, so your docs say `npm run dev`."
+      },
+      {
+        value: "custom",
+        label: "Something else — describe it",
+        description: "Django, Rails, SvelteKit, Go, Laravel — anything. Your docs are written for the stack you name, commands included."
       }
     ]
+  },
+  {
+    // Only the two golden-path frameworks have commands anyone here can derive; for everything else
+    // the toolchain is authored from this answer (see TOOLCHAIN_SLOTS). Naming the language and
+    // package manager matters more than the framework: it is what decides `pnpm dev` from
+    // `python manage.py runserver`.
+    id: "frameworkOther",
+    title: "Describe your stack",
+    help: "Language, framework and package manager at minimum. Everything generated for you — setup steps, the commands in START_HERE.md, the architecture docs — is written for what you put here.",
+    type: "text",
+    required: true,
+    showIf: [{ questionId: "framework", in: ["custom"] }],
+    maxChars: ANSWER_MAX_CHARS.frameworkOther,
+    placeholder: "e.g. Django 5 with Python 3.12 and uv for dependencies, HTMX and Tailwind on the front end, pytest for tests."
   },
   {
     id: "database",

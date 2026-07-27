@@ -6,10 +6,12 @@
 
 import type { FeatureId, GeneratedFile, ProjectModel } from "../../schemas/src/types.ts";
 import {
+  TOOLCHAIN_SLOTS,
   isAuthoredDocument,
   isProseSlot,
   type AuthoredDocuments,
-  type AuthoredSlots
+  type AuthoredSlots,
+  type AuthoredToolchain
 } from "../../schemas/src/authoring.ts";
 import {
   aiUsageLabel,
@@ -20,6 +22,7 @@ import {
   featureLabel,
   frameworkLabel,
   hostingLabel,
+  isCustomStack,
   productTypeLabel,
   repoLabel,
   tenancyLabel,
@@ -83,16 +86,39 @@ function packageManager(model: ProjectModel): "pnpm" | "npm" {
   return model.stack.framework === "vite" ? "npm" : "pnpm";
 }
 
-function cmds(model: ProjectModel): Commands {
+/**
+ * The five commands the founder actually runs.
+ *
+ * Derived for the two golden-path frameworks, where the answer is knowable. For a stack the founder
+ * described themselves it cannot be — nothing here knows whether the test command is `pytest`,
+ * `go test ./...` or `bin/rails test` — so those come from `authoredToolchain`, each one having
+ * already passed the command contract in `@airrow/schemas`. A command that failed that contract is
+ * simply absent here, and the npm fallback below stands: wrong for their stack, but honest and
+ * harmless, and the founder can see it is wrong.
+ */
+function cmds(
+  model: ProjectModel,
+  authoredToolchain?: AuthoredToolchain
+): { commands: Commands; fromModel: Set<string> } {
   // Customer projects are single-app repos, so every script runs from the repo root.
   const run = packageManager(model) === "npm" ? "npm run" : "pnpm";
-  return {
+  const commands: Commands = {
     CMD_DEV: `${run} dev`,
     CMD_BUILD: `${run} build`,
     CMD_TYPECHECK: `${run} typecheck`,
     CMD_LINT: `${run} lint`,
     CMD_TEST: `${run} test`
   };
+  const fromModel = new Set<string>();
+  if (!isCustomStack(model)) return { commands, fromModel };
+
+  for (const slot of TOOLCHAIN_SLOTS) {
+    const written = authoredToolchain?.[slot];
+    if (typeof written !== "string" || written.trim() === "") continue;
+    commands[slot] = written.trim();
+    fromModel.add(slot);
+  }
+  return { commands, fromModel };
 }
 
 /** `install` for the chosen package manager — the reproducible, lockfile-respecting form. */
@@ -102,6 +128,17 @@ function installCommand(model: ProjectModel, ci: boolean): string {
 }
 
 function ciSetupSteps(model: ProjectModel): string {
+  // A custom stack gets an honest placeholder rather than a Node toolchain that would be wrong for
+  // it. This is the same treatment a non-Vercel deploy target already gets: CI that fails loudly on
+  // the first run is worse than CI that says what is missing and stops.
+  if (isCustomStack(model)) {
+    return [
+      "      - name: Set up the toolchain",
+      "        run: |",
+      `          echo "::warning::Add the setup and install steps for ${frameworkLabel(model)} here, then remove this guard."`,
+      "          exit 0"
+    ].join("\n");
+  }
   // Indented to sit under `steps:` in the workflow YAML.
   const setupNode = [
     "      - uses: actions/setup-node@v4",
@@ -162,16 +199,20 @@ function rolesText(model: ProjectModel): string {
  */
 export function deriveScaffoldValues(
   model: ProjectModel,
-  authored?: AuthoredSlots
+  authored?: AuthoredSlots,
+  authoredToolchain?: AuthoredToolchain
 ): {
   values: Record<string, string>;
   decisions: ScaffoldDecision[];
   /** Tokens whose value came from the model rather than being derived — the manifest reports them. */
   authoredTokens: Set<string>;
 } {
-  const command = cmds(model);
+  const { commands: command, fromModel: authoredCommands } = cmds(model, authoredToolchain);
   const hosting = hostingLabel[model.hosting];
-  const summary = `${frameworkLabel(model)} · TypeScript · Tailwind + shadcn/ui · ${databaseLabel(model)} (Postgres) · ${hosting} · ${repoLabel(model)}`;
+  // TypeScript, Tailwind and shadcn/ui are the golden path's fixed choices — asserting them over a
+  // founder who told us they are on Django would make the first line of their docs a falsehood.
+  const frontend = isCustomStack(model) ? "" : "TypeScript · Tailwind + shadcn/ui · ";
+  const summary = `${frameworkLabel(model)} · ${frontend}${databaseLabel(model)} (Postgres) · ${hosting} · ${repoLabel(model)}`;
   const roles = rolesText(model);
 
   const values: Record<string, string> = {
@@ -194,7 +235,7 @@ export function deriveScaffoldValues(
     SCALE_POSTURE: scalePosture(model),
     ROLES: roles,
     STACK_SUMMARY: summary,
-    STACK_DETAIL: `${frameworkLabel(model)} · TypeScript · Tailwind + shadcn/ui · ${backendSummary(model)} · deployed to ${hosting} · code on ${repoLabel(model)}`,
+    STACK_DETAIL: `${frameworkLabel(model)} · ${frontend}${backendSummary(model)} · deployed to ${hosting} · code on ${repoLabel(model)}`,
     REPO_PROVIDER: repoLabel(model),
     SETUP_STEPS: setupSteps(model),
     FIRST_SPEC_HINT: firstSpecHint(model),
@@ -211,7 +252,9 @@ export function deriveScaffoldValues(
     ...command
   };
 
-  const authoredTokens = new Set<string>();
+  // Commands the model wrote count as authored too: the manifest has to say which files a prompt
+  // change can move, and for a custom stack that includes every file carrying a command.
+  const authoredTokens = new Set<string>(authoredCommands);
   for (const [token, prose] of Object.entries(authored ?? {})) {
     if (!isProseSlot(token)) continue;
     if (typeof prose !== "string") continue;
@@ -368,8 +411,14 @@ function scalePosture(model: ProjectModel): string {
 
 /** The ordered first-hour setup, specific to the chosen database and host. */
 function setupSteps(model: ProjectModel): string {
-  const steps =
-    packageManager(model) === "pnpm"
+  const steps = isCustomStack(model)
+    ? [
+        // Their words, not an invented install procedure. Getting this wrong for an unknown stack
+        // costs a founder an afternoon; saying plainly that it is theirs to fill in costs a minute.
+        `1. Install the runtime and package manager for **${frameworkLabel(model)}**.`,
+        "2. Install dependencies with your package manager, then commit the lockfile."
+      ]
+    : packageManager(model) === "pnpm"
       ? [
           "1. Install **Node 20+** and **pnpm 9** (`corepack enable && corepack prepare pnpm@9 --activate`).",
           "2. Install dependencies: `pnpm install`."
@@ -488,9 +537,14 @@ export function renderScaffold(
   template: TemplateFile[],
   model: ProjectModel,
   authored?: AuthoredSlots,
-  authoredDocuments?: AuthoredDocuments
+  authoredDocuments?: AuthoredDocuments,
+  authoredToolchain?: AuthoredToolchain
 ): RenderedScaffold {
-  const { values, decisions, authoredTokens } = deriveScaffoldValues(model, authored);
+  const { values, decisions, authoredTokens } = deriveScaffoldValues(
+    model,
+    authored,
+    authoredToolchain
+  );
   const missing = new Set<string>();
 
   /**

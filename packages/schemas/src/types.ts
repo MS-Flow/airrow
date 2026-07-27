@@ -27,7 +27,8 @@ export type FeatureId =
   | "admin"
   | "audit_logs";
 
-export type Framework = "nextjs" | "vite";
+/** `custom` means the founder described their own stack in `frameworkOther`. */
+export type Framework = "nextjs" | "vite" | "custom";
 export type RepoProvider = "github" | "azure_devops";
 export type TeamShape = "solo" | "small_team" | "startup" | "agency";
 export type SecurityLevel = "standard" | "elevated";
@@ -65,6 +66,8 @@ export interface InterviewAnswers {
   dataSensitivity?: DataSensitivity;
   scale?: ScaleExpectation;
   framework?: Framework;
+  /** Free-text stack, when `framework` is `custom`. */
+  frameworkOther?: string;
   database?: Database;
   hosting?: Hosting;
   repoProvider?: RepoProvider;
@@ -90,6 +93,12 @@ export interface ProjectModel {
   hosting: Hosting;
   stack: {
     framework: Framework;
+    /**
+     * The founder's own words for their stack, when `framework` is `custom`; empty otherwise.
+     * Nothing derives commands or setup steps from it — those are authored (`TOOLCHAIN_SLOTS`),
+     * because no amount of string matching knows what `manage.py` is.
+     */
+    customFramework: string;
     language: "typescript";
     styling: "tailwind";
     ui: "shadcn/ui";

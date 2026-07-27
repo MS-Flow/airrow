@@ -5,7 +5,12 @@
 // nothing that the prose depends on. This is what makes "nothing changed" answerable without
 // calling out.
 import { createHash } from "node:crypto";
-import { pickValidDocuments, pickValidSlots, type ProjectModel } from "@airrow/schemas";
+import {
+  pickValidDocuments,
+  pickValidSlots,
+  pickValidToolchain,
+  type ProjectModel
+} from "@airrow/schemas";
 import type { AuthoredFoundation } from "./author";
 
 /**
@@ -34,15 +39,22 @@ export function inputsHash(model: ProjectModel, promptVersion: string, authoring
  */
 export function reviveAuthored(stored: unknown): AuthoredFoundation | null {
   if (typeof stored !== "object" || stored === null) return null;
-  // Reading two properties off a value already narrowed to a non-null object, as `unknown`. The cast
-  // claims nothing about their contents — `pickValid*` below decides what is real — it only lets the
-  // two names be read at all, which `object` does not permit.
-  const { slots: rawSlots, documents: rawDocuments } = stored as {
-    slots?: unknown;
-    documents?: unknown;
-  };
+  // Reading three properties off a value already narrowed to a non-null object, as `unknown`. The
+  // cast claims nothing about their contents — `pickValid*` below decides what is real — it only
+  // lets the names be read at all, which `object` does not permit.
+  const {
+    slots: rawSlots,
+    documents: rawDocuments,
+    toolchain: rawToolchain
+  } = stored as { slots?: unknown; documents?: unknown; toolchain?: unknown };
   const slots = pickValidSlots(rawSlots);
   const documents = pickValidDocuments(rawDocuments);
-  if (Object.keys(slots).length === 0 && Object.keys(documents).length === 0) return null;
-  return { slots, documents };
+  const toolchain = pickValidToolchain(rawToolchain);
+  if (
+    Object.keys(slots).length === 0 &&
+    Object.keys(documents).length === 0 &&
+    Object.keys(toolchain).length === 0
+  )
+    return null;
+  return { slots, documents, toolchain };
 }

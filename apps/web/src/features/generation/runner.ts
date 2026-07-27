@@ -73,6 +73,7 @@ export async function runGenerationJob(jobId: string, model: ProjectModel): Prom
     const result = generate(loadTemplate(), model, {
       authored: authored?.slots,
       authoredDocuments: authored?.documents,
+      authoredToolchain: authored?.toolchain,
       authoring: { promptVersion: PROMPT_VERSION, model: AUTHORING_MODEL },
       onFile: (_path, index, total) => {
         if (index === 1) totalFiles = total;
