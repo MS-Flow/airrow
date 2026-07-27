@@ -21,18 +21,24 @@ export type { TemplateFile, ScaffoldDecision, ScaffoldPlan, RenderedScaffold } f
 export {
   analyzeImport,
   applyResolutions,
-  buildFileTree,
+  buildPreviewTree,
   checkImportLimits,
   diffAgainstExisting,
   digestImported,
   isIgnoredImportPath,
   mergeOverlay,
+  mergePreviewFiles,
   pathOverlap,
   stripCommonRoot,
   IGNORED_IMPORT_DIRECTORIES,
   IMPORT_LIMITS
 } from "./import.ts";
-export type { FileTreeNode, ImportLimitCheck } from "./import.ts";
+export type {
+  ImportLimitCheck,
+  PreviewFileEntry,
+  PreviewFileSource,
+  PreviewTreeNode
+} from "./import.ts";
 
 export class GenerationError extends Error {
   readonly issues: string[];

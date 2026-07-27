@@ -14,6 +14,12 @@
 **Short on time?** Read _User story_ and _Acceptance criteria_ — that's the whole point of the change and
 how you'll know it's done. Everything after those is detail for whoever implements and reviews it.
 
+> **Delvis ersatt av [spec 75](75-preview-full-tree.md).** Strukturvyn flyttade från importsidan till
+> preview-trädet, där founderns filer nu ligger i samma träd som Airrows — och den visar **inte**
+> längre filstorlekar. `buildFileTree` och `ProjectTree` finns inte kvar; `buildPreviewTree` gör
+> jobbet. Kriterierna nedan om "katalogstruktur med filstorlekar" var uppfyllda när #68 stängdes, men
+> beskriver inte koden idag. Peppringen och den sammanslagna nedladdningen gäller oförändrat.
+
 <!--
 Status legend: ⏳ Not started · 🔄 In progress · ✅ Done
 [NEEDS CLARIFICATION: …] markers are resolved by /clarify.

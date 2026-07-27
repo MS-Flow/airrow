@@ -52,6 +52,23 @@ export async function cacheArchive(projectId: string, archive: Blob): Promise<Ca
   }
 }
 
+/**
+ * Whether this browser still holds the archive, without reading it back. The blob can be 50 MB, and
+ * the download button only needs to know which of its two jobs it has before it is clicked.
+ */
+export async function hasCachedArchive(projectId: string): Promise<boolean> {
+  try {
+    const db = await openDatabase();
+    const transaction = db.transaction(STORE, "readonly");
+    const store = transaction.objectStore(STORE);
+    const count = await run<number>(store, store.count(projectId));
+    db.close();
+    return count > 0;
+  } catch {
+    return false;
+  }
+}
+
 /** The cached archive, or null when this browser never held it (another device, cleared storage). */
 export async function readCachedArchive(projectId: string): Promise<Blob | null> {
   try {

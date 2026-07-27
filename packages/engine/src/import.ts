@@ -299,74 +299,126 @@ export function diffAgainstExisting(
   return diff;
 }
 
-/* ── File tree ────────────────────────────────────────────────────────────── */
+/* ── Preview tree ─────────────────────────────────────────────────────────── */
 
 /**
- * A node in the imported project's structure. Directories carry the rolled-up size of everything
- * beneath them; files carry their own. No content — the tree describes shape only (spec 68).
+ * Where a file in the preview comes from, and — when both sides have it — which version the
+ * download will contain. The two conflict states carry the founder's decision, so the UI needs no
+ * second lookup and cannot get the two out of step (spec 75).
  */
-export interface FileTreeNode {
-  name: string;
+export type PreviewFileSource =
+  | "yours"
+  | "airrow"
+  | "conflict_keeps_yours"
+  | "conflict_takes_airrow";
+
+export interface PreviewFileEntry {
   path: string;
-  bytes: number;
-  /** Absent on files. Directories always have one, even when empty. */
-  children?: FileTreeNode[];
+  source: PreviewFileSource;
+}
+
+/**
+ * A node in the preview tree. No sizes and no content: the founder's half is described by path
+ * alone, which is all Airrow ever stores of it.
+ */
+export type PreviewTreeNode =
+  | { kind: "file"; name: string; path: string; source: PreviewFileSource }
+  | {
+      kind: "directory";
+      name: string;
+      path: string;
+      /** True when nothing beneath can be opened, so the whole branch reads as the founder's. */
+      yoursOnly: boolean;
+      children: PreviewTreeNode[];
+    };
+
+/**
+ * The founder's files and Airrow's as one list, each tagged with where it comes from. `conflicts`
+ * is `diffAgainstExisting`'s verdict — the single place that decides what a collision is — so a path
+ * present on both sides with identical content is simply Airrow's file, not a conflict.
+ */
+export function mergePreviewFiles(
+  yours: ReadonlyArray<{ path: string }>,
+  airrow: ReadonlyArray<{ path: string }>,
+  conflicts: ReadonlyArray<string>,
+  resolutions: ReadonlyMap<string, ConflictResolution>
+): PreviewFileEntry[] {
+  const conflicting = new Set(conflicts);
+  const generated = new Set(airrow.map((f) => f.path));
+
+  const entries: PreviewFileEntry[] = airrow.map((f) => ({
+    path: f.path,
+    source: !conflicting.has(f.path)
+      ? "airrow"
+      : resolutions.get(f.path) === "use_generated"
+        ? "conflict_takes_airrow"
+        : "conflict_keeps_yours"
+  }));
+
+  for (const f of yours) {
+    if (!generated.has(f.path)) entries.push({ path: f.path, source: "yours" });
+  }
+
+  return entries.sort((a, b) => a.path.localeCompare(b.path));
 }
 
 /** Directories before files, then alphabetical — a stable order the UI can render as-is. */
-function sortTree(nodes: FileTreeNode[]): FileTreeNode[] {
+function sortTree(nodes: PreviewTreeNode[]): PreviewTreeNode[] {
   nodes.sort((a, b) => {
-    const aDir = a.children !== undefined;
-    const bDir = b.children !== undefined;
-    if (aDir !== bDir) return aDir ? -1 : 1;
+    if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
-  for (const node of nodes) if (node.children) sortTree(node.children);
+  for (const node of nodes) if (node.kind === "directory") sortTree(node.children);
   return nodes;
 }
 
-/**
- * Build the directory tree an imported project's paths describe. Pure: paths and sizes in, sorted
- * tree out — everything the structure view needs, and nothing the founder didn't already give us.
- */
-export function buildFileTree(files: ReadonlyArray<{ path: string; bytes: number }>): FileTreeNode[] {
-  const roots: FileTreeNode[] = [];
-  const directories = new Map<string, FileTreeNode>();
+/** A branch reads as the founder's only when nothing inside it can be opened. */
+function markYoursOnly(nodes: PreviewTreeNode[]): boolean {
+  let allYours = true;
+  for (const node of nodes) {
+    const yours =
+      node.kind === "file" ? node.source === "yours" : markYoursOnly(node.children);
+    if (node.kind === "directory") node.yoursOnly = yours;
+    if (!yours) allYours = false;
+  }
+  return allYours;
+}
 
-  /** The directory node for a path, creating it and its ancestors on the way down. */
-  function directoryAt(segments: string[]): FileTreeNode[] {
+/**
+ * Build the directory tree the paths describe. Pure: tagged paths in, sorted tree out — the whole
+ * project's shape, with no trace of what any of the founder's files contain.
+ */
+export function buildPreviewTree(
+  entries: ReadonlyArray<PreviewFileEntry>
+): PreviewTreeNode[] {
+  const roots: PreviewTreeNode[] = [];
+  const directories = new Map<string, PreviewTreeNode[]>();
+
+  /** The children of the directory a path sits in, creating it and its ancestors on the way down. */
+  function directoryAt(segments: string[]): PreviewTreeNode[] {
     let siblings = roots;
     let prefix = "";
     for (const segment of segments) {
       prefix = prefix === "" ? segment : `${prefix}/${segment}`;
-      let node = directories.get(prefix);
-      if (node === undefined) {
-        node = { name: segment, path: prefix, bytes: 0, children: [] };
-        directories.set(prefix, node);
-        siblings.push(node);
+      let children = directories.get(prefix);
+      if (children === undefined) {
+        children = [];
+        directories.set(prefix, children);
+        siblings.push({ kind: "directory", name: segment, path: prefix, yoursOnly: true, children });
       }
-      // `children` is always set for directory nodes, above.
-      siblings = node.children ?? [];
+      siblings = children;
     }
     return siblings;
   }
 
-  for (const file of files) {
-    const segments = file.path.split("/").filter((s) => s !== "");
+  for (const entry of entries) {
+    const segments = entry.path.split("/").filter((s) => s !== "");
     const name = segments.pop();
     if (name === undefined) continue;
-
-    directoryAt(segments).push({ name, path: file.path, bytes: file.bytes });
-
-    // Roll the size up every ancestor so a collapsed directory still says how big it is.
-    let prefix = "";
-    for (const segment of segments) {
-      prefix = prefix === "" ? segment : `${prefix}/${segment}`;
-      const directory = directories.get(prefix);
-      if (directory) directory.bytes += file.bytes;
-    }
+    directoryAt(segments).push({ kind: "file", name, path: entry.path, source: entry.source });
   }
 
+  markYoursOnly(roots);
   return sortTree(roots);
 }
 

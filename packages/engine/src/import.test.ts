@@ -1,12 +1,13 @@
 // Import analysis + diff (spec 63). Deterministic: no provider mock, no network, no clock.
 import { describe, it, expect } from "vitest";
-import type { GeneratedFile, ImportedFile } from "../../schemas/src/types.ts";
+import type { ConflictResolution, GeneratedFile, ImportedFile } from "../../schemas/src/types.ts";
 import {
   analyzeImport,
   applyResolutions,
-  buildFileTree,
+  buildPreviewTree,
   checkImportLimits,
   mergeOverlay,
+  mergePreviewFiles,
   pathOverlap,
   diffAgainstExisting,
   digestImported,
@@ -14,6 +15,7 @@ import {
   stripCommonRoot,
   IMPORT_LIMITS
 } from "./import.ts";
+import type { PreviewFileEntry, PreviewTreeNode } from "./import.ts";
 
 const file = (path: string, content = "x"): ImportedFile => ({ path, content });
 
@@ -141,44 +143,114 @@ describe("analyzeImport", () => {
   });
 });
 
-describe("buildFileTree", () => {
+describe("mergePreviewFiles", () => {
+  const yours = [{ path: "README.md" }, { path: "src/app.ts" }, { path: "package.json" }];
+  const airrow = [{ path: "README.md" }, { path: "CLAUDE.md" }, { path: "package.json" }];
+  const noDecisions = new Map<string, ConflictResolution>();
+
+  it("lists both sides once, in path order", () => {
+    const merged = mergePreviewFiles(yours, airrow, [], noDecisions);
+    // Collated like every other list in the engine: case-insensitive, so `package.json` < `README.md`.
+    expect(merged.map((e) => e.path)).toEqual([
+      "CLAUDE.md",
+      "package.json",
+      "README.md",
+      "src/app.ts"
+    ]);
+  });
+
+  it("tags each file with the side it came from", () => {
+    const merged = mergePreviewFiles(yours, airrow, [], noDecisions);
+    const source = (path: string) => merged.find((e) => e.path === path)?.source;
+    expect(source("CLAUDE.md")).toBe("airrow");
+    expect(source("src/app.ts")).toBe("yours");
+  });
+
+  it("treats a shared path with identical content as Airrow's file, not a conflict", () => {
+    // `diffAgainstExisting` reported no conflict, so there is no decision to make.
+    const merged = mergePreviewFiles(yours, airrow, [], noDecisions);
+    expect(merged.find((e) => e.path === "README.md")?.source).toBe("airrow");
+  });
+
+  it("carries the founder's decision on a conflict, so the row can state the outcome", () => {
+    const decided = new Map<string, ConflictResolution>([["README.md", "use_generated"]]);
+    const merged = mergePreviewFiles(yours, airrow, ["README.md", "package.json"], decided);
+    const source = (path: string) => merged.find((e) => e.path === path)?.source;
+    expect(source("README.md")).toBe("conflict_takes_airrow");
+    expect(source("package.json")).toBe("conflict_keeps_yours");
+  });
+
+  it("keeps an explicit 'keep mine' on the founder's side, like the download does", () => {
+    const decided = new Map<string, ConflictResolution>([["README.md", "keep_existing"]]);
+    const merged = mergePreviewFiles(yours, airrow, ["README.md"], decided);
+    expect(merged.find((e) => e.path === "README.md")?.source).toBe("conflict_keeps_yours");
+  });
+
+  it("is exactly today's tree for a project that was never imported", () => {
+    const merged = mergePreviewFiles([], airrow, [], noDecisions);
+    expect(merged.every((e) => e.source === "airrow")).toBe(true);
+    expect(merged).toHaveLength(airrow.length);
+  });
+});
+
+describe("buildPreviewTree", () => {
+  const entry = (path: string, source: PreviewFileEntry["source"]): PreviewFileEntry => ({
+    path,
+    source
+  });
+
   const tree = () =>
-    buildFileTree([
-      { path: "src/components/ui/button.tsx", bytes: 100 },
-      { path: "src/app.ts", bytes: 20 },
-      { path: "package.json", bytes: 10 },
-      { path: "src/components/Card.tsx", bytes: 50 }
+    buildPreviewTree([
+      entry("src/components/ui/button.tsx", "yours"),
+      entry("src/app.ts", "yours"),
+      entry("package.json", "yours"),
+      entry("docs/VISION.md", "airrow"),
+      entry("src/components/Card.tsx", "airrow")
     ]);
 
+  const children = (node: PreviewTreeNode | undefined): PreviewTreeNode[] =>
+    node?.kind === "directory" ? node.children : [];
+
   it("nests files under the directories their paths describe", () => {
-    const [src, pkg] = tree();
-    expect(pkg?.name).toBe("package.json");
+    const [docs, src, pkg] = tree();
+    expect(docs?.name).toBe("docs");
     expect(src?.name).toBe("src");
-    expect(src?.children?.map((n) => n.name)).toEqual(["components", "app.ts"]);
+    expect(pkg?.name).toBe("package.json");
+    expect(children(src).map((n) => n.name)).toEqual(["components", "app.ts"]);
   });
 
   it("puts directories before files, then alphabetical", () => {
-    const components = tree()[0]?.children?.[0];
-    expect(components?.children?.map((n) => n.name)).toEqual(["ui", "Card.tsx"]);
+    const components = children(tree()[1])[0];
+    expect(children(components).map((n) => n.name)).toEqual(["ui", "Card.tsx"]);
   });
 
-  it("rolls sizes up so a collapsed directory still says how big it is", () => {
-    const src = tree()[0];
-    expect(src?.bytes).toBe(170);
-    expect(src?.children?.find((n) => n.name === "components")?.bytes).toBe(150);
+  it("marks a directory as the founder's only when nothing inside can be opened", () => {
+    const src = tree()[1];
+    const components = children(src)[0];
+    const ui = children(components)[0];
+    expect(src?.kind === "directory" && src.yoursOnly).toBe(false);
+    expect(components?.kind === "directory" && components.yoursOnly).toBe(false);
+    expect(ui?.kind === "directory" && ui.yoursOnly).toBe(true);
+  });
+
+  it("carries the source down to every file node, for the rail to render", () => {
+    const card = children(children(tree()[1])[0]).find((n) => n.name === "Card.tsx");
+    expect(card?.kind === "file" && card.source).toBe("airrow");
   });
 
   it("carries the full path on every node, for stable React keys", () => {
-    const ui = tree()[0]?.children?.[0]?.children?.[0];
+    const ui = children(children(tree()[1])[0])[0];
     expect(ui?.path).toBe("src/components/ui");
   });
 
-  it("describes shape only — no node carries file content", () => {
-    expect(JSON.stringify(tree())).not.toContain("content");
+  it("describes shape only — no node carries file content or size", () => {
+    const json = JSON.stringify(tree());
+    expect(json).not.toContain("content");
+    expect(json).not.toContain("bytes");
   });
 
   it("handles an empty project", () => {
-    expect(buildFileTree([])).toEqual([]);
+    expect(buildPreviewTree([])).toEqual([]);
   });
 });
 

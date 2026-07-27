@@ -61,8 +61,9 @@ A founder with a codebase already in flight enters at `/app/projects/import` ins
    A conflict is only ever written when the founder picks it on `/app/projects/[id]/import`;
    an undecided conflict keeps their file.
 
-5. **Show** — `buildFileTree` turns those paths into the structure view on the same screen. Shape
-   only: names and sizes, never content.
+5. **Show** — `mergePreviewFiles` + `buildPreviewTree` put those paths in the *preview* tree next to
+   Airrow's own files, each row tagged with where it comes from. Shape only: the founder's files are
+   listed by name, never opened, because their content was never stored.
 6. **Deliver** — the download is assembled **in the browser**: `MergedDownload` overlays Airrow's
    files onto the founder's own archive, cached in IndexedDB at import time. The server sends only
    what `applyResolutions` deemed safe to write, so the overlay is correct by construction. If this

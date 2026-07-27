@@ -5,26 +5,33 @@
 // The merge happens here, in the browser, because Airrow does not store the founder's source. The
 // server sends only what `applyResolutions` deemed safe to write, so overlaying it is correct by
 // construction — an undecided conflict never arrives and their file survives untouched.
-import { useRef, useState } from "react";
+//
+// One button, always. It sits in the preview header as well as on the project pages, so it stays a
+// single control and says everything transient through the toaster instead of growing a paragraph
+// that a header row cannot hold.
+import { useEffect, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import { mergeOverlay, pathOverlap, stripCommonRoot } from "@airrow/engine";
 import { Button } from "@/components/ui/button";
-import { InlineError } from "@/components/ui/states";
-import { readCachedArchive } from "./archive-cache";
+import { useToast } from "@/components/ui/toast";
+import { hasCachedArchive, readCachedArchive } from "./archive-cache";
 
 /** Below this, the archive probably isn't the project that was imported. */
 const OVERLAP_WARNING_THRESHOLD = 0.5;
 
-type State =
-  | { step: "idle" }
-  | { step: "working"; label: string }
-  | { step: "needs-archive" }
-  | { step: "error"; message: string };
+const PICK_PROMPT = "Your code never left your machine — choose the archive you imported.";
 
 interface ZipFile {
   path: string;
   content: Promise<Uint8Array>;
 }
+
+/**
+ * Whether this browser still holds the founder's archive. Settled *before* the first click: a file
+ * picker can only be opened from a real user gesture, so the button must not have to await an
+ * IndexedDB read to find out which of its two jobs it has.
+ */
+type Archive = "checking" | "ready" | "missing";
 
 export function MergedDownload({
   projectId,
@@ -36,18 +43,30 @@ export function MergedDownload({
   /** Paths recorded at import, used to notice a wrong archive being picked. */
   expectedPaths: string[];
 }) {
-  const [state, setState] = useState<State>({ step: "idle" });
-  const [warning, setWarning] = useState<string | null>(null);
+  const notify = useToast();
+  const [archive, setArchive] = useState<Archive>("checking");
+  const [working, setWorking] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
 
-  async function build(archive: Blob): Promise<void> {
-    setState({ step: "working", label: "Merging…" });
-    setWarning(null);
+  // Browser storage, not server data — the constitution's no-useEffect-for-fetching rule is about
+  // the latter, and this cannot be answered on the server at all.
+  useEffect(() => {
+    let current = true;
+    void hasCachedArchive(projectId).then((held) => {
+      if (current) setArchive(held ? "ready" : "missing");
+    });
+    return () => {
+      current = false;
+    };
+  }, [projectId]);
+
+  async function build(source: Blob): Promise<void> {
+    setWorking(true);
     try {
       // Lazy: JSZip is only needed on the one click, and it is not small.
       const { default: JSZip } = await import("jszip");
 
-      const theirZip = await JSZip.loadAsync(await archive.arrayBuffer());
+      const theirZip = await JSZip.loadAsync(await source.arrayBuffer());
       const theirs: ZipFile[] = stripCommonRoot(
         Object.values(theirZip.files)
           .filter((e) => !e.dir)
@@ -64,8 +83,8 @@ export function MergedDownload({
 
       const overlap = pathOverlap(expectedPaths, theirs.map((f) => f.path));
       if (overlap < OVERLAP_WARNING_THRESHOLD) {
-        setWarning(
-          `Only ${Math.round(overlap * 100)}% of the files from your import are in this archive — it may be a different project. The download still went ahead.`
+        notify(
+          `Only ${Math.round(overlap * 100)}% of your imported files are in that archive — it may be a different project. The download went ahead anyway.`
         );
       }
 
@@ -81,43 +100,46 @@ export function MergedDownload({
       link.download = `${slug}.zip`;
       link.click();
       URL.revokeObjectURL(url);
-      setState({ step: "idle" });
     } catch (error) {
-      setState({
-        step: "error",
-        message: error instanceof Error ? error.message : "The merge failed."
-      });
+      notify(error instanceof Error ? error.message : "The merge failed.", "danger");
+    } finally {
+      setWorking(false);
     }
   }
 
-  async function start(): Promise<void> {
-    setState({ step: "working", label: "Preparing…" });
-    const cached = await readCachedArchive(projectId);
-    if (cached === null) {
-      setState({ step: "needs-archive" });
+  /** The cached archive, or the picker — decided before the click so neither path is a dead end. */
+  function download(): void {
+    if (archive === "missing") {
+      notify(PICK_PROMPT);
+      picker.current?.click();
       return;
     }
-    await build(cached);
+    void (async () => {
+      setWorking(true);
+      const cached = await readCachedArchive(projectId);
+      if (cached === null) {
+        // Cleared between mount and click. The gesture is spent, so ask for one more click rather
+        // than open a picker the browser would block.
+        setArchive("missing");
+        setWorking(false);
+        notify("This browser no longer has your archive — click Download again to choose it.");
+        return;
+      }
+      await build(cached);
+    })();
   }
 
   return (
-    <div>
-      <div className="flex flex-wrap items-center gap-2.5">
-        <Button
-          variant="secondary"
-          onClick={start}
-          disabled={state.step === "working"}
-          aria-busy={state.step === "working"}
-        >
-          <Download className="size-4" />
-          {state.step === "working" ? state.label : "Download project"}
-        </Button>
-        {state.step === "needs-archive" ? (
-          <Button variant="secondary" onClick={() => picker.current?.click()}>
-            Choose your archive
-          </Button>
-        ) : null}
-      </div>
+    <>
+      <Button
+        variant="secondary"
+        onClick={download}
+        disabled={working || archive === "checking"}
+        aria-busy={working}
+      >
+        <Download className="size-4" />
+        {working ? "Preparing…" : "Download project"}
+      </Button>
 
       <input
         ref={picker}
@@ -129,16 +151,6 @@ export function MergedDownload({
           if (file) void build(file);
         }}
       />
-
-      {state.step === "needs-archive" ? (
-        <p className="mt-2 max-w-md text-sm text-fg-muted">
-          Airrow doesn&rsquo;t keep a copy of your code, and this browser no longer has the archive
-          you imported. Choose it again and the download will contain your whole project.
-        </p>
-      ) : null}
-
-      {warning ? <p className="mt-2 max-w-md text-sm text-fg-muted">{warning}</p> : null}
-      {state.step === "error" ? <InlineError className="mt-2">{state.message}</InlineError> : null}
-    </div>
+    </>
   );
 }

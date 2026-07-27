@@ -5,7 +5,7 @@
 // IndexedDB is stubbed rather than polyfilled: quota exhaustion and blocked storage cannot be
 // provoked reliably in a real browser, and they are exactly what needs covering.
 import { describe, it, expect, afterEach } from "vitest";
-import { cacheArchive, readCachedArchive } from "./archive-cache";
+import { cacheArchive, hasCachedArchive, readCachedArchive } from "./archive-cache";
 
 type Handler = (() => void) | null;
 
@@ -54,6 +54,19 @@ function stubIndexedDB(options: { failOpen?: boolean; failRequest?: boolean } = 
           return;
         }
         request.result = stored.get(key) ?? undefined;
+        request.onsuccess?.();
+      });
+      return request;
+    },
+    count(key: string) {
+      const request = newRequest();
+      queueMicrotask(() => {
+        if (options.failRequest) {
+          request.error = new Error("count failed");
+          request.onerror?.();
+          return;
+        }
+        request.result = stored.has(key) ? 1 : 0;
         request.onsuccess?.();
       });
       return request;
@@ -120,6 +133,24 @@ describe("cacheArchive", () => {
   it("does not throw when IndexedDB is missing altogether", async () => {
     const result = await cacheArchive("project-1", archive());
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("hasCachedArchive", () => {
+  it("answers without reading the archive back, so a 50 MB blob is never loaded to answer it", async () => {
+    stubIndexedDB();
+    await cacheArchive("project-1", archive());
+    expect(await hasCachedArchive("project-1")).toBe(true);
+  });
+
+  it("is false for a project this browser never held", async () => {
+    stubIndexedDB();
+    expect(await hasCachedArchive("never-imported-here")).toBe(false);
+  });
+
+  it("is false rather than throwing when storage is unavailable", async () => {
+    stubIndexedDB({ failOpen: true });
+    expect(await hasCachedArchive("project-1")).toBe(false);
   });
 });
 
