@@ -170,10 +170,14 @@ _What "done" means. Every line is something a reviewer can check._
 - [ ] Prompt caching is verified empirically via `usage.cache_read_input_tokens` on a repeat
       generation, not assumed — a stable prefix under 4096 tokens caches nothing and reports no error.
 - [ ] Measured cost per generation on the fixture set is recorded here.
-- [ ] **Quality gate:** authored output for the fixtures is compared side by side against the
+- [x] **Quality gate:** authored output for the fixtures is compared side by side against the
       deterministic output and against a higher-tier model on the same inputs. If Haiku's prose is not
       clearly better than the deterministic baseline, this does not ship on Haiku — the fallback
       already costs nothing.
+      **Passed 2026-07-27 (founder's call):** Haiku is clearly better than the deterministic baseline
+      and good enough to ship. The comparison against a higher-tier model was judged unnecessary —
+      the bar was "better than the fallback", and it clears it. `AIRROW_AUTHORING_MODEL` keeps the
+      escape hatch open if that judgement changes.
 - [x] An answer instructing the model to ignore its instructions, reveal its prompt, or write into a
       command or setup-step slot changes nothing that reaches a file — proven by a test using
       injection-shaped fixture answers, not by reading the prompt wording.
@@ -291,6 +295,19 @@ worth watching, and a reason the memoisation below matters more than it first ap
 while the response could legitimately reach 7,855 tokens once documents were added. A verbose model
 would have been cut mid-JSON — parsing as nothing, returning null, and falling back silently. Now
 counted from both budgets, with a test asserting the ceiling covers what the prompt asks for.
+
+**Amendment — the generation allowance.** Authoring opened a cost hole: every generation pays for a
+Claude call and signup is open, so one account could spend without limit. Shipping spec 65 without a
+ceiling would have put that hole in production, so it landed here rather than as a follow-up:
+`FREE_GENERATION_LIMIT = 3` per organization, enforced in `checkAllowance`
+(`apps/web/src/features/generation/allowance.ts`) at the point a job is created, so a founder hears
+"no" before landing on a progress screen instead of after.
+
+`countGenerations` counts through `projects.organization_id` and **excludes failed jobs** — an
+outage on our side must never cost a founder part of their allowance. Queued and running jobs do
+count, so the limit cannot be sidestepped by starting several at once. The landing page states the
+limit rather than letting founders discover it. Turning this ceiling into a business model is
+[#74](https://github.com/MS-Flow/airrow/issues/74).
 
 **Known gap:** `validateCompleteAnswers` re-parses stored answers at submit, so a signed-in founder
 who saved a long answer before this change is rejected at submit rather than silently truncated. The

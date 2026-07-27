@@ -355,6 +355,26 @@ export async function createJob(projectId: string, modelVersionId: string): Prom
   return toJob(row);
 }
 
+/**
+ * Generations an organization has used, for the early-access allowance (spec 65).
+ *
+ * Counts through `projects.organization_id` rather than trusting a caller-supplied id, so the
+ * allowance is scoped the same way every other resource is (§II).
+ *
+ * `failed` jobs are excluded deliberately: a generation that fell over on our side — a timeout, a
+ * bad response, an outage — must not cost the founder part of their allowance. Queued and running
+ * jobs *do* count, so the limit cannot be sidestepped by starting several at once.
+ */
+export async function countGenerations(orgId: string): Promise<number> {
+  const res = await db()
+    .from("generation_jobs")
+    .select("id, projects!inner(organization_id)", { count: "exact", head: true })
+    .eq("projects.organization_id", orgId)
+    .neq("status", "failed");
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
+  return res.count ?? 0;
+}
+
 export async function getJob(jobId: string): Promise<JobRecord | null> {
   const row = maybe<JobRow>(
     await db().from("generation_jobs").select("*").eq("id", jobId).maybeSingle()

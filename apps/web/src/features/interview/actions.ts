@@ -19,6 +19,7 @@ import {
   saveInterviewAnswers,
   setProjectStatus
 } from "@/lib/data/store";
+import { ALLOWANCE_REACHED_MESSAGE, checkAllowance } from "@/features/generation/allowance";
 
 export async function saveAnswersAction(projectId: string, raw: unknown): Promise<{ ok: boolean }> {
   const { org } = await requireSession();
@@ -54,6 +55,12 @@ export async function submitInterviewAction(projectId: string, raw: unknown): Pr
   if (existing && existing.modelVersionId === modelVersion.id && existing.status === "running") {
     redirect(`/app/projects/${projectId}/generating`);
   }
+
+  // Checked here rather than at the point of generation: a founder who is out of allowance should
+  // hear it now, not after landing on a progress screen that will never move. The idempotent
+  // re-entry above is deliberately allowed through — resuming a running job costs nothing new.
+  const allowance = await checkAllowance(org.id);
+  if (!allowance.allowed) return { error: ALLOWANCE_REACHED_MESSAGE };
 
   await createJob(projectId, modelVersion.id);
   await setProjectStatus(projectId, "generating");

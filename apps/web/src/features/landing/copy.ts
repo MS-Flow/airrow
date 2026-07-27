@@ -40,7 +40,7 @@ export const STEPS = [
   {
     n: "02",
     title: "Airrow generates your foundation",
-    body: "Architecture, specifications, standards, roadmap, prompt library and an AI context system, personalised to your product instead of filled in from a template.",
+    body: "A language model turns your answers into the architecture, specifications, standards, roadmap and AI context your project needs. Your stack decisions are applied exactly as you chose them; the writing around them is done for your product, not filled in from a template.",
   },
   {
     n: "03",
@@ -134,12 +134,12 @@ export const WHY_SDD = [
 /* Everything is free for now. No invented tiers and no "TBD" — if a price isn't decided,
    the honest thing is to say the product is free, not to imply a paywall that isn't built. */
 export const INCLUDED = [
-  "Unlimited projects",
+  "Three generated foundations",
   "The full CTO interview",
-  "The complete generated foundation",
+  "Documents written for your product, not filled in from a template",
   "ZIP delivery of your repository",
-  "Regenerate whenever your answers change",
   "Every document type Airrow produces",
+  "Yours to keep, with no lock-in",
 ];
 
 export const SECTIONS = {
@@ -159,9 +159,9 @@ export const SECTIONS = {
   },
   pricing: {
     title: "Pricing",
-    body: "Airrow is free while it's in early access. Every feature, no project limit, no card.",
+    body: "Airrow is free while it's in early access. Three generated foundations per account, every feature, no card.",
     amount: "$0",
-    note: "Everything included.",
+    note: "Three foundations, everything included.",
   },
   cta: {
     title: "Start with the foundation.",
