@@ -1,7 +1,7 @@
 // Declarative interview schema v1. Pure data + pure evaluator — no runtime deps.
 // This is the single source of truth for the interview UI and engine resolution.
 
-import type { InterviewAnswers } from "./types.ts";
+import type { Framework, InterviewAnswers, ProductType } from "./types.ts";
 
 export const INTERVIEW_SCHEMA_VERSION = "1";
 
@@ -9,12 +9,31 @@ export interface QuestionOption {
   value: string;
   label: string;
   description?: string;
+  /**
+   * The golden path for this question, when it is the same one for everybody. Where the answer
+   * depends on an earlier one, use `Question.suggest` instead — never both.
+   */
+  recommended?: boolean;
 }
 
 export interface Condition {
   questionId: keyof InterviewAnswers;
   /** Show when the answer (or any selected value for multi) is in this list. */
   in: string[];
+}
+
+/**
+ * What this question suggests, given an earlier answer.
+ *
+ * For a `single` question the value is the option to mark as recommended; for a `text` one it is the
+ * text prefilled into the field. One shape for both because it is one idea: the founder is answering
+ * a question we can already make a good guess at, and the guess is theirs to keep or replace.
+ */
+export interface Suggestion {
+  /** The earlier answer this suggestion keys off. */
+  from: keyof InterviewAnswers;
+  /** Suggested value per answer to `from`. A missing key means no suggestion. */
+  value: Record<string, string>;
 }
 
 export interface Question {
@@ -26,6 +45,7 @@ export interface Question {
   placeholder?: string;
   required: boolean;
   showIf?: Condition[];
+  suggest?: Suggestion;
   /** Character ceiling for a `text` answer — see `ANSWER_MAX_CHARS`. */
   maxChars?: number;
 }
@@ -50,6 +70,64 @@ export const ANSWER_MAX_CHARS = {
 } as const;
 
 const WEB_PRODUCT_TYPES = ["saas", "marketplace", "ai_agent", "mobile_app", "api", "browser_extension"];
+
+/** The stack a product type points at before the founder says otherwise. */
+export interface StandardStack {
+  /** The `framework` option this product type recommends. */
+  framework: Framework;
+  /**
+   * Prefilled into `frameworkOther` when the recommendation is a stack this engine cannot scaffold
+   * itself. Written the way the `frameworkOther` question asks for it — language, framework and
+   * package manager — because that is what decides every command in the generated documents.
+   *
+   * A fragment, with no closing period: it is rendered inline in a stack summary as often as it is
+   * rendered as a sentence, and the renderer adds the period where one belongs.
+   */
+  describe?: string;
+}
+
+/**
+ * What each product type is normally built in.
+ *
+ * The two scaffoldable golden paths cover the web products. Everything else gets the stack its own
+ * community treats as standard, *described* rather than derived — the toolchain, the setup steps and
+ * `/start` are then written for it, the same way they are for any stack a founder names themselves.
+ *
+ * This exists because the silent default was worse than any of these. A mobile app was never asked
+ * which stack it wanted and was resolved to Vite + React, so a founder building for iOS downloaded a
+ * web SPA whose documents said `npm run dev`. A default nobody is shown is a decision nobody made.
+ */
+export const STANDARD_STACK: Record<ProductType, StandardStack> = {
+  saas: { framework: "nextjs" },
+  marketplace: { framework: "nextjs" },
+  ai_agent: { framework: "nextjs" },
+  internal_tool: { framework: "nextjs" },
+  hobby: { framework: "nextjs" },
+  mobile_app: {
+    framework: "custom",
+    describe:
+      "Expo (React Native) with TypeScript and expo-router, npm for packages, Jest with jest-expo for tests"
+  },
+  api: {
+    framework: "custom",
+    describe: "Node 20 with TypeScript and Hono for the HTTP layer, pnpm for packages, Vitest for tests"
+  },
+  browser_extension: {
+    framework: "custom",
+    describe:
+      "Vite with React and TypeScript, CRXJS for the extension manifest and build, npm for packages, Vitest for tests"
+  }
+};
+
+/** One `Suggestion.value` map per field of the table above — derived, so the two cannot drift. */
+function standardStackMap(pick: (s: StandardStack) => string | undefined): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const [productType, stack] of Object.entries(STANDARD_STACK)) {
+    const value = pick(stack);
+    if (value !== undefined) map[productType] = value;
+  }
+  return map;
+}
 
 export const interviewQuestions: Question[] = [
   {
@@ -244,18 +322,22 @@ export const interviewQuestions: Question[] = [
   {
     // Every stack question states what it *changes* in the output, not just what it means. A founder
     // picked Vite, got `npm run dev` in START_HERE, and read it as a bug — the choice was clear, its
-    // consequence was invisible. TypeScript, Tailwind and shadcn/ui are fixed and not asked about.
+    // consequence was invisible.
+    //
+    // Asked of everyone. It used to be hidden for mobile apps, APIs and browser extensions, which
+    // resolved them to Vite behind the founder's back; the recommendation now comes from
+    // STANDARD_STACK instead, so the answer is always theirs to see and change.
     id: "framework",
-    title: "Which web framework?",
-    help: "Recommended: Next.js. Either way you get TypeScript, Tailwind and shadcn/ui — this choice decides the package manager, so it sets every command in your generated docs and CI.",
+    title: "Which stack?",
+    help: "This decides the package manager, so it sets every command in your generated docs and CI — and the setup steps `/start` runs on your machine. The two web paths ship TypeScript, Tailwind and shadcn/ui; anything else is written for the stack you name.",
     type: "single",
     required: true,
-    showIf: [{ questionId: "productType", in: ["saas", "marketplace", "ai_agent", "internal_tool", "hobby"] }],
+    suggest: { from: "productType", value: standardStackMap((s) => s.framework) },
     options: [
       {
         value: "nextjs",
-        label: "Next.js — recommended",
-        description: "App Router, server actions, server-side rendering. Uses pnpm, so your docs say `pnpm dev`. Pick this unless you know you want an SPA."
+        label: "Next.js",
+        description: "App Router, server actions, server-side rendering. Uses pnpm, so your docs say `pnpm dev`. The golden path for anything that lives on the web."
       },
       {
         value: "vite",
@@ -265,7 +347,7 @@ export const interviewQuestions: Question[] = [
       {
         value: "custom",
         label: "Something else — describe it",
-        description: "Django, Rails, SvelteKit, Go, Laravel — anything. Your docs are written for the stack you name, commands included."
+        description: "Expo for a mobile app, Django, Rails, SvelteKit, Go, Laravel — anything. Your docs are written for the stack you name, commands included."
       }
     ]
   },
@@ -274,12 +356,17 @@ export const interviewQuestions: Question[] = [
     // the toolchain is authored from this answer (see TOOLCHAIN_SLOTS). Naming the language and
     // package manager matters more than the framework: it is what decides `pnpm dev` from
     // `python manage.py runserver`.
+    //
+    // Prefilled from STANDARD_STACK when the product type has an obvious answer, so a founder
+    // building a mobile app is shown Expo rather than made to know it. It is a starting sentence,
+    // not a lock: everything below the field is written for whatever they leave in it.
     id: "frameworkOther",
     title: "Describe your stack",
-    help: "Language, framework and package manager at minimum. Everything generated for you — setup steps, the commands in START_HERE.md, the architecture docs — is written for what you put here.",
+    help: "Language, framework and package manager at minimum. Everything generated for you — setup steps, the commands in START_HERE.md, the architecture docs — is written for what you put here. Edit or replace the suggestion freely.",
     type: "text",
     required: true,
     showIf: [{ questionId: "framework", in: ["custom"] }],
+    suggest: { from: "productType", value: standardStackMap((s) => s.describe) },
     maxChars: ANSWER_MAX_CHARS.frameworkOther,
     placeholder: "e.g. Django 5 with Python 3.12 and uv for dependencies, HTMX and Tailwind on the front end, pytest for tests."
   },
@@ -292,7 +379,8 @@ export const interviewQuestions: Question[] = [
     options: [
       {
         value: "supabase",
-        label: "Supabase — recommended",
+        label: "Supabase",
+        recommended: true,
         description: "Postgres with Auth, Storage, Realtime and RLS already wired. Your setup steps become 'create a project, paste two keys'."
       },
       {
@@ -311,7 +399,8 @@ export const interviewQuestions: Question[] = [
     options: [
       {
         value: "vercel",
-        label: "Vercel — recommended",
+        label: "Vercel",
+        recommended: true,
         description: "Zero-config for Next.js, a preview URL per pull request. The generated deploy workflow targets it and works as shipped."
       },
       {
@@ -332,7 +421,7 @@ export const interviewQuestions: Question[] = [
     type: "single",
     required: true,
     options: [
-      { value: "github", label: "GitHub", description: "Recommended — best Claude Code & CI ecosystem" },
+      { value: "github", label: "GitHub", recommended: true, description: "Best Claude Code & CI ecosystem" },
       { value: "azure_devops", label: "Azure DevOps", description: "For Microsoft-centric organizations" }
     ]
   },
@@ -360,6 +449,43 @@ export function isQuestionVisible(q: Question, answers: InterviewAnswers): boole
     if (Array.isArray(answer)) return answer.some((v) => cond.in.includes(v));
     return cond.in.includes(String(answer));
   });
+}
+
+/** What this question suggests given the answers so far; null when it has no opinion. */
+export function suggestedValue(q: Question, answers: InterviewAnswers): string | null {
+  if (!q.suggest) return null;
+  const from = answers[q.suggest.from];
+  if (typeof from !== "string") return null;
+  return q.suggest.value[from] ?? null;
+}
+
+/** True when this option is the one to point the founder at, given the answers so far. */
+export function isRecommendedOption(
+  q: Question,
+  option: QuestionOption,
+  answers: InterviewAnswers
+): boolean {
+  const suggested = suggestedValue(q, answers);
+  return suggested === null ? option.recommended === true : suggested === option.value;
+}
+
+/**
+ * Fill in the suggested text answers the founder has not written over.
+ *
+ * Only empty answers are touched, so nothing typed is ever lost — including a suggestion the founder
+ * cleared and replaced. Applied to every answer change rather than at one screen, because a
+ * suggestion keys off an *earlier* answer and that answer can be edited from the review screen.
+ */
+export function withSuggestions(answers: InterviewAnswers): InterviewAnswers {
+  const next: InterviewAnswers = { ...answers };
+  for (const q of interviewQuestions) {
+    if (q.type !== "text") continue;
+    const current = next[q.id];
+    if (typeof current === "string" && current.trim() !== "") continue;
+    const suggested = suggestedValue(q, next);
+    if (suggested !== null) (next as Record<string, unknown>)[q.id] = suggested;
+  }
+  return next;
 }
 
 /** Questions visible for the given answers, in order. */
