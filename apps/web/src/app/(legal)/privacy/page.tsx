@@ -26,6 +26,14 @@ export default function PrivacyPage() {
           treat it that way.
         </li>
         <li>
+          <strong>Imported project structure.</strong> If you import an existing project, we store
+          its <em>shape</em> — the file names, their sizes, and a keyed fingerprint of each file —
+          so we can show you the structure and work out what we would add. We do{" "}
+          <strong>not</strong> store the contents of your files. They are read in memory while we
+          analyse the archive and are never written down or logged. That is also why a download of
+          an imported project is assembled in your browser: your code stays on your machine.
+        </li>
+        <li>
           <strong>Operational logs.</strong> Request metadata, identifiers, timestamps and
           errors. Logs deliberately carry IDs and metadata only, never your answers or the
           contents of generated documents.

@@ -45,7 +45,7 @@ content) → Validate (required files present, no unresolved token) → Manifest
 id + version, bytes → Postgres). `renderScaffold` also returns a `ScaffoldPlan` for the founder to
 approve before anything is written.
 
-## Importing an existing project (spec 63)
+## Importing an existing project (specs 63, 68)
 A founder with a codebase already in flight enters at `/app/projects/import` instead of
 `/app/projects/new`. The archive is read server-side, then:
 
@@ -61,8 +61,19 @@ A founder with a codebase already in flight enters at `/app/projects/import` ins
    A conflict is only ever written when the founder picks it on `/app/projects/[id]/import`;
    an undecided conflict keeps their file.
 
-**Only digests are stored.** `import_files` holds path, size and a SHA-256 of each imported file —
-enough to diff, while the founder's source never outlives the request that analysed it (§II).
+5. **Show** — `buildFileTree` turns those paths into the structure view on the same screen. Shape
+   only: names and sizes, never content.
+6. **Deliver** — the download is assembled **in the browser**: `MergedDownload` overlays Airrow's
+   files onto the founder's own archive, cached in IndexedDB at import time. The server sends only
+   what `applyResolutions` deemed safe to write, so the overlay is correct by construction. If this
+   browser no longer holds the archive, the founder is asked to pick it again rather than handed a
+   silent additions-only ZIP.
+
+**Only digests are stored.** `import_files` holds path, size and an **HMAC-SHA256** of each imported
+file, keyed by a pepper that lives in the app environment and never in the database
+(`IMPORT_DIGEST_PEPPERS`, versioned per import so it can be rotated). A raw hash of a short file — a
+single `.env` line — is guessable; a keyed one is not. That is enough to diff, while the founder's
+source never outlives the request that analysed it (§II) and never reaches Airrow's storage at all.
 Importing from a repository, and delivering back as a pull request, wait on the GitHub App
 integration; ZIP delivery covers the import flow end to end today.
 

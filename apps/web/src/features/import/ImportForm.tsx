@@ -8,21 +8,57 @@
 // and, since they are required, the form silently refused to submit again. Controlled values
 // survive the reset. The file input can't be controlled (browsers forbid it), so it does clear;
 // the hint below says so rather than leaving a required-but-empty field to explain itself.
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { InlineError } from "@/components/ui/states";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { importProjectAction, type ImportFormState } from "./actions";
+import { cacheArchive } from "./archive-cache";
 
 export function ImportForm() {
   const [state, action] = useActionState<ImportFormState, FormData>(importProjectAction, {});
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [cacheWarning, setCacheWarning] = useState<string | null>(null);
+  // Held in state, not read back off the input: React clears the field once the action returns.
+  const [archive, setArchive] = useState<File | null>(null);
+  const router = useRouter();
+
+  // Once the import lands, keep the founder's archive in this browser before moving on — it is the
+  // only remaining copy, and the merged download needs it. Navigation waits for that, so nothing
+  // is lost by leaving the page. A quota failure is said out loud rather than discovered later.
+  useEffect(() => {
+    const projectId = state.projectId;
+    if (projectId === undefined) return;
+
+    let active = true;
+    void (async () => {
+      const result = archive ? await cacheArchive(projectId, archive) : { ok: false, reason: "no file" };
+      if (!active) return;
+      if (result.ok) {
+        router.push(`/app/projects/${projectId}/interview`);
+        return;
+      }
+      setCacheWarning(
+        "Your archive was too large to keep in this browser, so the download will ask for it again. Everything else is imported."
+      );
+      setTimeout(() => router.push(`/app/projects/${projectId}/interview`), 4000);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [state.projectId, archive, router]);
 
   return (
     <form action={action} className="space-y-5">
       {state.error ? <InlineError>{state.error}</InlineError> : null}
+      {cacheWarning ? (
+        <p role="status" className="rounded-md border border-border bg-bg-subtle px-3 py-2 text-sm text-fg-muted">
+          {cacheWarning}
+        </p>
+      ) : null}
 
       <div>
         <Label htmlFor="name">Project name</Label>
@@ -54,7 +90,14 @@ export function ImportForm() {
 
       <div>
         <Label htmlFor="archive">Your project as a .zip</Label>
-        <Input id="archive" name="archive" type="file" accept=".zip,application/zip" required />
+        <Input
+          id="archive"
+          name="archive"
+          type="file"
+          accept=".zip,application/zip"
+          required
+          onChange={(e) => setArchive(e.target.files?.[0] ?? null)}
+        />
         {state.error ? (
           <p className="mt-2 text-sm text-fg-muted">Choose your archive again — the file field clears after an error.</p>
         ) : null}

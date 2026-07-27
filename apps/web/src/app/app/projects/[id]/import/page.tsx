@@ -2,7 +2,7 @@
 // output would do to the founder's project. Nothing here writes files; it records decisions.
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { diffAgainstExisting } from "@airrow/engine";
+import { buildFileTree, diffAgainstExisting } from "@airrow/engine";
 import type { GeneratedFile } from "@airrow/schemas";
 import { PageContainer } from "@/components/shell/page-container";
 import { Badge } from "@/components/ui/badge";
@@ -18,8 +18,9 @@ import {
   listImportFiles,
   loadArtifact
 } from "@/lib/data/store";
-import { sha256 } from "@/features/import/archive";
+import { digestFor } from "@/features/import/digest";
 import { ConflictRow } from "@/features/import/ConflictRow";
+import { ProjectTree } from "@/features/import/ProjectTree";
 
 export const metadata = { title: "Import review" };
 
@@ -44,6 +45,15 @@ export default async function ImportReview({ params }: { params: Promise<{ id: s
       </p>
 
       <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Your project</CardTitle>
+        </CardHeader>
+        <CardBody className="p-0">
+          <ProjectTree nodes={buildFileTree(await listImportFiles(source.id))} />
+        </CardBody>
+      </Card>
+
+      <Card className="mt-4">
         <CardHeader>
           <CardTitle>What Airrow could work out</CardTitle>
         </CardHeader>
@@ -81,7 +91,13 @@ export default async function ImportReview({ params }: { params: Promise<{ id: s
       ) : null}
 
       {artifact && job ? (
-        <ImportDiffSection projectId={id} jobId={job.id} sourceId={source.id} files={artifact.files} />
+        <ImportDiffSection
+          projectId={id}
+          jobId={job.id}
+          sourceId={source.id}
+          digestVersion={source.digestVersion}
+          files={artifact.files}
+        />
       ) : (
         <EmptyState
           className="mt-6"
@@ -102,18 +118,22 @@ async function ImportDiffSection({
   projectId,
   jobId,
   sourceId,
+  digestVersion,
   files
 }: {
   projectId: string;
   jobId: string;
   sourceId: string;
+  digestVersion: number;
   files: GeneratedFile[];
 }) {
   const [existing, decisions] = await Promise.all([
     listImportFiles(sourceId),
     listConflictResolutions(jobId)
   ]);
-  const diff = diffAgainstExisting(files, existing, sha256);
+  // Hashed with the same key the import was stored under, so a rotated pepper doesn't turn every
+  // file into a conflict (spec 68).
+  const diff = diffAgainstExisting(files, existing, digestFor(digestVersion));
 
   return (
     <>

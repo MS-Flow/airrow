@@ -5,7 +5,6 @@ import {
   ArrowRight,
   BookOpen,
   Boxes,
-  Download,
   FileCode2,
   FolderTree,
   Github,
@@ -14,6 +13,7 @@ import {
 import { PageContainer } from "@/components/shell/page-container";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DownloadProject } from "@/features/import/DownloadProject";
 import { Card, CardBody } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ComingSoon } from "@/components/ui/states";
@@ -87,12 +87,7 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
             </Button>
             {ready ? (
               <>
-                <Button variant="secondary" asChild>
-                  <a href={`/api/projects/${id}/zip`}>
-                    <Download className="size-4" />
-                    Download project
-                  </a>
-                </Button>
+                <DownloadProject projectId={id} slug={project.slug} />
                 <Button variant="secondary" asChild>
                   <Link href={`/app/projects/${id}/continue`}>
                     <FolderTree className="size-4" />

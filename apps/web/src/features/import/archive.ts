@@ -5,7 +5,6 @@
 // decompressed, the running total is checked again during decompression (an archive's declared
 // size proves nothing), and entry names are normalised so a crafted path cannot escape the tree.
 // Nothing read here is ever executed or written to disk.
-import crypto from "node:crypto";
 import JSZip from "jszip";
 import { checkImportLimits, isIgnoredImportPath, stripCommonRoot, IMPORT_LIMITS } from "@airrow/engine";
 import type { ImportedFile } from "@airrow/schemas";
@@ -71,7 +70,3 @@ export async function readArchive(bytes: ArrayBuffer): Promise<ArchiveRead> {
   return { ok: true, files: checked.files, ignored: skipped + checked.ignored };
 }
 
-/** Content digest stored in place of the content itself (§II, customer IP). */
-export function sha256(content: string): string {
-  return crypto.createHash("sha256").update(content, "utf8").digest("hex");
-}
