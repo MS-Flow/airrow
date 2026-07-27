@@ -6,6 +6,14 @@
 
 import type { FeatureId, GeneratedFile, ProjectModel } from "../../schemas/src/types.ts";
 import {
+  TOOLCHAIN_SLOTS,
+  isAuthoredDocument,
+  isProseSlot,
+  type AuthoredDocuments,
+  type AuthoredSlots,
+  type AuthoredToolchain
+} from "../../schemas/src/authoring.ts";
+import {
   aiUsageLabel,
   audienceLabel,
   authMethodLabel,
@@ -14,6 +22,7 @@ import {
   featureLabel,
   frameworkLabel,
   hostingLabel,
+  isCustomStack,
   productTypeLabel,
   repoLabel,
   tenancyLabel,
@@ -77,16 +86,45 @@ function packageManager(model: ProjectModel): "pnpm" | "npm" {
   return model.stack.framework === "vite" ? "npm" : "pnpm";
 }
 
-function cmds(model: ProjectModel): Commands {
+/**
+ * The five commands the founder actually runs.
+ *
+ * Derived for the two golden-path frameworks, where the answer is knowable. For a stack the founder
+ * described themselves it cannot be — nothing here knows whether the test command is `pytest`,
+ * `go test ./...` or `bin/rails test` — so those come from `authoredToolchain`, each one having
+ * already passed the command contract in `@airrow/schemas`. Anything not authored is left blank
+ * rather than defaulted, for the reason given below.
+ */
+function cmds(
+  model: ProjectModel,
+  authoredToolchain?: AuthoredToolchain
+): { commands: Commands; fromModel: Set<string> } {
   // Customer projects are single-app repos, so every script runs from the repo root.
   const run = packageManager(model) === "npm" ? "npm run" : "pnpm";
-  return {
+  const commands: Commands = {
     CMD_DEV: `${run} dev`,
     CMD_BUILD: `${run} build`,
     CMD_TYPECHECK: `${run} typecheck`,
     CMD_LINT: `${run} lint`,
     CMD_TEST: `${run} test`
   };
+  const fromModel = new Set<string>();
+  if (!isCustomStack(model)) return { commands, fromModel };
+
+  for (const slot of TOOLCHAIN_SLOTS) {
+    const written = authoredToolchain?.[slot];
+    if (typeof written === "string" && written.trim() !== "") {
+      commands[slot] = written.trim();
+      fromModel.add(slot);
+      continue;
+    }
+    // Nothing was authored for this one, and the npm/pnpm default is not a harmless fallback here —
+    // it is a wrong command in the file the founder runs first. Telling a .NET project to run
+    // `pnpm dev` is worse than admitting we do not know, so it empties to a `[NEEDS CLARIFICATION]`
+    // marker through the ordinary substitution path, the same as any other unanswered value.
+    commands[slot] = "";
+  }
+  return { commands, fromModel };
 }
 
 /** `install` for the chosen package manager — the reproducible, lockfile-respecting form. */
@@ -95,7 +133,18 @@ function installCommand(model: ProjectModel, ci: boolean): string {
   return ci ? "pnpm install --frozen-lockfile" : "pnpm install";
 }
 
-function ciSetupSteps(model: ProjectModel): string {
+function ciSetupSteps(model: ProjectModel, stackName: string): string {
+  // A custom stack gets an honest placeholder rather than a Node toolchain that would be wrong for
+  // it. This is the same treatment a non-Vercel deploy target already gets: CI that fails loudly on
+  // the first run is worse than CI that says what is missing and stops.
+  if (isCustomStack(model)) {
+    return [
+      "      - name: Set up the toolchain",
+      "        run: |",
+      `          echo "::warning::Add the setup and install steps for ${stackName} here, then remove this guard."`,
+      "          exit 0"
+    ].join("\n");
+  }
   // Indented to sit under `steps:` in the workflow YAML.
   const setupNode = [
     "      - uses: actions/setup-node@v4",
@@ -144,14 +193,37 @@ function rolesText(model: ProjectModel): string {
   return "Organization membership with owner / admin / member roles.";
 }
 
-/** Derive the interview-variable values + their provenance from a resolved ProjectModel. */
-export function deriveScaffoldValues(model: ProjectModel): {
+/**
+ * Derive the interview-variable values + their provenance from a resolved ProjectModel.
+ *
+ * `authored` is optional LLM-written prose (spec 65). It is merged **only** over the slots in
+ * `PROSE_SLOTS`; anything else in it is ignored. That is the point rather than a detail: the
+ * excluded slots are commands and setup steps a founder will run, and interview answers — the
+ * authoring input — can come from an unauthenticated visitor. A `null` or empty value means the
+ * interview didn't support one, so the derived value stands and the founder gets a
+ * `[NEEDS CLARIFICATION]` marker instead of an invention.
+ */
+export function deriveScaffoldValues(
+  model: ProjectModel,
+  authored?: AuthoredSlots,
+  authoredToolchain?: AuthoredToolchain
+): {
   values: Record<string, string>;
   decisions: ScaffoldDecision[];
+  /** Tokens whose value came from the model rather than being derived — the manifest reports them. */
+  authoredTokens: Set<string>;
 } {
-  const command = cmds(model);
+  const { commands: command, fromModel: authoredCommands } = cmds(model, authoredToolchain);
+  // "dotnet efcore c# js" is what a founder types; it is not what their documentation should say.
+  // For a custom stack the model turns that into a name a reader recognises, and everything that
+  // renders the stack uses it. Falls back to the raw answer when nothing was authored — still
+  // theirs, still honest, just untidy.
+  const stackName = stackNameFor(model, authored);
   const hosting = hostingLabel[model.hosting];
-  const summary = `${frameworkLabel(model)} · TypeScript · Tailwind + shadcn/ui · ${databaseLabel(model)} (Postgres) · ${hosting} · ${repoLabel(model)}`;
+  // TypeScript, Tailwind and shadcn/ui are the golden path's fixed choices — asserting them over a
+  // founder who told us they are on Django would make the first line of their docs a falsehood.
+  const frontend = isCustomStack(model) ? "" : "TypeScript · Tailwind + shadcn/ui · ";
+  const summary = `${stackName} · ${frontend}${databaseLabel(model)} (Postgres) · ${hosting} · ${repoLabel(model)}`;
   const roles = rolesText(model);
 
   const values: Record<string, string> = {
@@ -162,6 +234,8 @@ export function deriveScaffoldValues(model: ProjectModel): {
     DOMAIN_OVERVIEW: `${model.name} is ${aOrAn(productTypeLabel[model.productType])} for ${audienceLabel[model.audience]}. ${model.description}`,
     VISION: model.vision,
     MVP_FOCUS: model.mvpFocus,
+    PROBLEM: model.problem,
+    NON_GOALS: nonGoalsText(model),
     CAPABILITY_SCOPE: capabilityScope(model),
     CAPABILITY_SPECS: capabilitySpecs(model),
     TENANCY_MODEL: tenancyModel(model),
@@ -172,12 +246,13 @@ export function deriveScaffoldValues(model: ProjectModel): {
     SCALE_POSTURE: scalePosture(model),
     ROLES: roles,
     STACK_SUMMARY: summary,
-    STACK_DETAIL: `${frameworkLabel(model)} · TypeScript · Tailwind + shadcn/ui · ${backendSummary(model)} · deployed to ${hosting} · code on ${repoLabel(model)}`,
+    STACK_NAME: stackName,
+    STACK_DETAIL: `${stackName} · ${frontend}${backendSummary(model)} · deployed to ${hosting} · code on ${repoLabel(model)}`,
     REPO_PROVIDER: repoLabel(model),
-    SETUP_STEPS: setupSteps(model),
+    SETUP_STEPS: setupSteps(model, stackName),
     FIRST_SPEC_HINT: firstSpecHint(model),
     DEPLOY_TARGET: hosting,
-    CI_SETUP_STEPS: ciSetupSteps(model),
+    CI_SETUP_STEPS: ciSetupSteps(model, stackName),
     DEPLOY_STEPS: deploySteps(model),
     ARCHITECTURE_INVARIANTS: architectureInvariants(model),
     DATA_INVARIANTS: dataInvariants(model),
@@ -189,10 +264,22 @@ export function deriveScaffoldValues(model: ProjectModel): {
     ...command
   };
 
+  // Commands the model wrote count as authored too: the manifest has to say which files a prompt
+  // change can move, and for a custom stack that includes every file carrying a command.
+  const authoredTokens = new Set<string>(authoredCommands);
+  for (const [token, prose] of Object.entries(authored ?? {})) {
+    if (!isProseSlot(token)) continue;
+    if (typeof prose !== "string") continue;
+    const trimmed = prose.trim();
+    if (trimmed === "") continue;
+    values[token] = trimmed;
+    authoredTokens.add(token);
+  }
+
   const decisions: ScaffoldDecision[] = [
     dec("PROJECT_NAME", model.name, "interview", "Product name from the interview."),
     dec("STACK_SUMMARY", summary, "default", "Golden-path stack (Next.js/TS/Tailwind/Supabase), narrowed by the interview."),
-    dec("CMD_TEST", command.CMD_TEST, "default", `${packageManager(model)} — the package manager the ${frameworkLabel(model)} toolchain defaults to.`),
+    dec("CMD_TEST", command.CMD_TEST, "default", `${packageManager(model)} — the package manager the ${stackName} toolchain defaults to.`),
     dec("DEPLOY_TARGET", hosting, model.hosting === "vercel" ? "default" : "interview",
       model.hosting === "vercel"
         ? "Golden-path hosting."
@@ -217,11 +304,34 @@ export function deriveScaffoldValues(model: ProjectModel): {
       ? dec("CORE_ENTITIES", model.coreEntities, "interview", "Core objects described in the interview.")
       : dec("CORE_ENTITIES", "(unset)", "default", "No core entities given — flagged for the founder to fill, never invented.")
   );
-  return { values, decisions };
+  return { values, decisions, authoredTokens };
 }
 
 function dec(token: string, value: string, source: "interview" | "default", rationale: string): ScaffoldDecision {
   return { token, value, source, rationale };
+}
+
+/**
+ * Non-goals are optional in the interview, but the slot is not: it lands in the generated CLAUDE.md,
+ * where an empty value would read as "there are none" — an invitation to build anything. Unanswered
+ * gets an explicit note to fill it in, matching how an unanswered vision is handled.
+ */
+function nonGoalsText(model: ProjectModel): string {
+  return model.nonGoals || "_Not yet decided — add what this product is deliberately not doing._";
+}
+
+/**
+ * The name to print for this project's stack.
+ *
+ * Only a custom stack can be renamed, and only by the model: the golden-path labels are already the
+ * names people use. `STACK_NAME` is an ordinary prose slot, so it is subject to the same allowlist
+ * and length contract as every other authored value — nothing about this widens what the model can
+ * reach.
+ */
+function stackNameFor(model: ProjectModel, authored?: AuthoredSlots): string {
+  if (!isCustomStack(model)) return frameworkLabel(model);
+  const written = authored?.STACK_NAME;
+  return typeof written === "string" && written.trim() !== "" ? written.trim() : frameworkLabel(model);
 }
 
 function aOrAn(label: string): string {
@@ -326,9 +436,15 @@ function scalePosture(model: ProjectModel): string {
 }
 
 /** The ordered first-hour setup, specific to the chosen database and host. */
-function setupSteps(model: ProjectModel): string {
-  const steps =
-    packageManager(model) === "pnpm"
+function setupSteps(model: ProjectModel, stackName: string): string {
+  const steps = isCustomStack(model)
+    ? [
+        // Their words, not an invented install procedure. Getting this wrong for an unknown stack
+        // costs a founder an afternoon; saying plainly that it is theirs to fill in costs a minute.
+        `1. Install the runtime and package manager for **${stackName}**.`,
+        "2. Install dependencies with your package manager, then commit the lockfile."
+      ]
+    : packageManager(model) === "pnpm"
       ? [
           "1. Install **Node 20+** and **pnpm 9** (`corepack enable && corepack prepare pnpm@9 --activate`).",
           "2. Install dependencies: `pnpm install`."
@@ -443,17 +559,54 @@ function substitute(
  * Returns the files plus a ScaffoldPlan for the founder to approve before provisioning.
  * `EXCLUDED` meta files (e.g. .airrow-template.json) are dropped by the caller before passing in.
  */
-export function renderScaffold(template: TemplateFile[], model: ProjectModel): RenderedScaffold {
-  const { values, decisions } = deriveScaffoldValues(model);
+export function renderScaffold(
+  template: TemplateFile[],
+  model: ProjectModel,
+  authored?: AuthoredSlots,
+  authoredDocuments?: AuthoredDocuments,
+  authoredToolchain?: AuthoredToolchain
+): RenderedScaffold {
+  const { values, decisions, authoredTokens } = deriveScaffoldValues(
+    model,
+    authored,
+    authoredToolchain
+  );
   const missing = new Set<string>();
 
+  /**
+   * A narrative document the model wrote end to end replaces the template's scaffolding, so the
+   * headings and transitions belong to this project rather than being the same in every one. Only
+   * the paths in `AUTHORED_DOCUMENTS` are eligible — everything else, including every file carrying
+   * a command, renders from the template exactly as before. Substitution still runs over the result:
+   * the contract rejects unrendered tokens, so it is a no-op, and if one ever slipped through the
+   * founder gets a `[NEEDS CLARIFICATION]` marker rather than a literal `{{TOKEN}}`.
+   */
+  const bodyFor = (tf: TemplateFile): string => {
+    if (!isAuthoredDocument(tf.path)) return tf.content;
+    const written = authoredDocuments?.[tf.path];
+    return typeof written === "string" && written.trim() !== "" ? written : tf.content;
+  };
+
+  /**
+   * `authored` means the model's words are in this file — either it wrote the whole body, or the
+   * template left a slot open that the model filled. Asked against the template body, before
+   * substitution, because that is where the `{{TOKEN}}` still is.
+   *
+   * Everything else is `static`: the same words every project gets. The distinction is the point of
+   * recording it — it is what tells a reader months from now which files a prompt change can move.
+   */
   const files: GeneratedFile[] = template
-    .map((tf) => ({
-      path: tf.path,
-      content: substitute(tf.content, values, missing),
-      source: "static" as const,
-      templateId: `template/${tf.path}`
-    }))
+    .map((tf) => {
+      const body = bodyFor(tf);
+      const fromModel =
+        body !== tf.content || [...authoredTokens].some((t) => body.includes(`{{${t}}}`));
+      return {
+        path: tf.path,
+        content: substitute(body, values, missing),
+        source: fromModel ? ("authored" as const) : ("static" as const),
+        templateId: `template/${tf.path}`
+      };
+    })
     .sort((a, b) => a.path.localeCompare(b.path));
 
   const plan: ScaffoldPlan = {

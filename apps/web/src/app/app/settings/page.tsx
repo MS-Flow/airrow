@@ -1,6 +1,6 @@
 // Settings: profile, theme, workspace, and every connection we don't have yet.
 import { redirect } from "next/navigation";
-import { Github } from "lucide-react";
+import { Github, ShieldCheck } from "lucide-react";
 import { profileUpdateSchema } from "@airrow/schemas";
 import { PageContainer } from "@/components/shell/page-container";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ComingSoon } from "@/components/ui/states";
 import { ThemeToggle } from "@/features/settings/ThemeToggle";
+import { FREE_GENERATION_LIMIT, checkAllowance } from "@/features/generation/allowance";
 import { requireSession, updateName } from "@/lib/auth";
 import { readTheme } from "@/lib/theme";
 
@@ -31,6 +32,7 @@ export default async function SettingsPage({
   const { saved } = await searchParams;
   const { user, org } = await requireSession();
   const theme = await readTheme();
+  const allowance = await checkAllowance(org.id, user.id);
   const githubConfigured = Boolean(process.env.GITHUB_APP_ID && process.env.GITHUB_APP_PRIVATE_KEY);
 
   return (
@@ -40,7 +42,15 @@ export default async function SettingsPage({
 
       <Card className="mt-8">
         <CardHeader>
-          <CardTitle>Profile</CardTitle>
+          <CardTitle className="flex items-center gap-2.5">
+            Profile
+            {allowance.unlimited ? (
+              <Badge tone="accent" className="inline-flex items-center gap-1">
+                <ShieldCheck className="size-3.5" />
+                Admin
+              </Badge>
+            ) : null}
+          </CardTitle>
         </CardHeader>
         <CardBody>
           {saved ? <p className="mb-4 text-sm text-success">Saved.</p> : null}
@@ -60,6 +70,33 @@ export default async function SettingsPage({
               Save changes
             </Button>
           </form>
+        </CardBody>
+      </Card>
+
+      {/* What is left, in the one place a founder looks when they wonder. Shown to everyone rather
+          than only on the way out: a limit discovered at the moment it stops you reads as a trap. */}
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Plan</CardTitle>
+        </CardHeader>
+        <CardBody>
+          {allowance.unlimited ? (
+            <p className="text-sm text-fg-muted">
+              <span className="font-medium text-fg">Admin</span> · unlimited generations.{" "}
+              {allowance.used} used so far.
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-fg-muted">
+                <span className="font-medium text-fg">Free</span> · {allowance.remaining} of{" "}
+                {FREE_GENERATION_LIMIT} generations left.
+              </p>
+              <p className="mt-1.5 text-xs text-fg-faint">
+                Deleting a project doesn&apos;t return a generation — each one is authored the moment
+                you start it. Pro lifts the limit, coming soon.
+              </p>
+            </>
+          )}
         </CardBody>
       </Card>
 
@@ -125,8 +162,8 @@ export default async function SettingsPage({
           description="Invite your team, share projects and set roles beyond your personal workspace."
         />
         <ComingSoon
-          title="Billing"
-          description="Plans, invoices and payment method, once pricing is set."
+          title="Pro"
+          description="Unlimited generations, push straight to GitHub, and regeneration as your product changes."
         />
         <ComingSoon
           title="API keys"
