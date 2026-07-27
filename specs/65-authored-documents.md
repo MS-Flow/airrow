@@ -152,8 +152,12 @@ tightening.]
 
 _What "done" means. Every line is something a reviewer can check._
 
-- [ ] Two different products on the same stack produce genuinely different prose — not the same
+- [x] Two different products on the same stack produce genuinely different prose — not the same
       sentences with the names swapped.
+      **Measured 2026-07-27:** a padel-session organiser and a veterinary records tool, identical
+      stack answers so every deterministic value matched. Word overlap in the authored prose:
+      `VISION` **0%**, `MVP_FOCUS` 5%, `DOMAIN_OVERVIEW` 6%, `docs/VISION.md` 9% — and
+      structurally different, not just reworded: one opens with a scene, the other with a diagnosis.
 - [x] `docs/VISION.md` no longer contains the founder's typed sentence verbatim.
 - [ ] Structural files are byte-identical across two generated projects.
 - [x] Only the 21 prose slots can be authored; the 13 fact/procedure slots are unreachable by the
