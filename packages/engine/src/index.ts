@@ -7,6 +7,7 @@ import type {
   Manifest,
   ProjectModel
 } from "../../schemas/src/types.ts";
+import type { AuthoredDocuments, AuthoredSlots } from "../../schemas/src/authoring.ts";
 import { ENGINE_VERSION, resolveProjectModel, slugify } from "./model.ts";
 import type { ResolveInput } from "./model.ts";
 import { hasUnresolvedToken, renderScaffold } from "./scaffold.ts";
@@ -81,6 +82,19 @@ function buildManifest(model: ProjectModel, files: GeneratedFile[]): Manifest {
 export interface GenerateOptions {
   /** Called after each file is rendered — powers live progress UI. */
   onFile?: (path: string, index: number, total: number) => void;
+  /**
+   * LLM-written prose for the slots in `PROSE_SLOTS` (spec 65). Authored by the app *before* calling
+   * in — the engine takes strings and stays pure, so `generate` remains synchronous and needs no
+   * network, no env and no provider of its own. Omit it and generation is fully deterministic, which
+   * is what happens when no API key is configured.
+   */
+  authored?: AuthoredSlots;
+  /**
+   * Whole narrative documents, written end to end rather than assembled from fixed scaffolding plus
+   * fills (spec 65). Only the paths in `AUTHORED_DOCUMENTS` are eligible; every file carrying a
+   * command renders from the template regardless of what is passed here.
+   */
+  authoredDocuments?: AuthoredDocuments;
 }
 
 /**
@@ -92,7 +106,7 @@ export function generate(
   model: ProjectModel,
   options: GenerateOptions = {}
 ): GenerationResult {
-  const { files } = renderScaffold(template, model);
+  const { files } = renderScaffold(template, model, options.authored, options.authoredDocuments);
   files.forEach((f, i) => options.onFile?.(f.path, i + 1, files.length));
   validate(files);
   return { files, manifest: buildManifest(model, files) };
