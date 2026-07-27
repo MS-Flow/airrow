@@ -360,6 +360,51 @@ export async function createJob(projectId: string, modelVersionId: string): Prom
   return toJob(row);
 }
 
+/**
+ * Generations an organization has used, for the early-access allowance (spec 65).
+ *
+ * Counts through `projects.organization_id` rather than trusting a caller-supplied id, so the
+ * allowance is scoped the same way every other resource is (§II).
+ *
+ * `failed` jobs are excluded deliberately: a generation that fell over on our side — a timeout, a
+ * bad response, an outage — must not cost the founder part of their allowance. Queued and running
+ * jobs *do* count, so the limit cannot be sidestepped by starting several at once.
+ */
+/**
+ * Generations this organization has spent, from the durable ledger.
+ *
+ * This used to count live `generation_jobs`, which cascade away with their project — so deleting a
+ * project refunded the allowance, and the ceiling could be reset at will. `generation_usage` rows
+ * are written by a trigger and survive their project, because a Claude call is paid for whether or
+ * not what it produced still exists.
+ *
+ * Failed jobs are still not charged for: an outage on our side must never cost a founder part of
+ * their allowance, so the ledger is joined back to the job to exclude them. A job whose row is gone
+ * counts — it completed, was delivered, and was then deleted.
+ */
+export async function countGenerations(orgId: string): Promise<number> {
+  const usage = rows<{ generation_job_id: string | null }>(
+    await db().from("generation_usage").select("generation_job_id").eq("organization_id", orgId)
+  );
+  if (usage.length === 0) return 0;
+
+  const jobIds = usage.map((u) => u.generation_job_id).filter((id): id is string => id !== null);
+  if (jobIds.length === 0) return usage.length;
+
+  const failed = rows<{ id: string }>(
+    await db().from("generation_jobs").select("id").in("id", jobIds).eq("status", "failed")
+  );
+  return usage.length - failed.length;
+}
+
+/** True when this account bypasses the free allowance. Set by migration only — never from the app. */
+export async function isAdminUser(userId: string): Promise<boolean> {
+  const row = maybe<{ is_admin: boolean }>(
+    await db().from("profiles").select("is_admin").eq("id", userId).maybeSingle()
+  );
+  return row?.is_admin === true;
+}
+
 export async function getJob(jobId: string): Promise<JobRecord | null> {
   const row = maybe<JobRow>(
     await db().from("generation_jobs").select("*").eq("id", jobId).maybeSingle()
@@ -367,14 +412,22 @@ export async function getJob(jobId: string): Promise<JobRecord | null> {
   return row ? toJob(row) : null;
 }
 
+/**
+ * The project's most recently *created* job — which is what every caller means by "latest".
+ *
+ * Ordered on `created_at` because it is the only column that is both always set and never changed.
+ * This used to order on `started_at desc nulls last`, which is null until a job runs: a freshly
+ * queued job therefore sorted *behind* the completed one it was meant to replace, so regenerating
+ * an existing project started nothing and hung on `generating`. `heartbeat_at` is no better — every
+ * update bumps it, so it says when a job was last touched, not when it was queued.
+ */
 export async function latestJob(projectId: string): Promise<JobRecord | null> {
   const row = maybe<JobRow>(
     await db()
       .from("generation_jobs")
       .select("*")
       .eq("project_id", projectId)
-      .order("started_at", { ascending: false, nullsFirst: false })
-      .order("heartbeat_at", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle()
   );
@@ -399,6 +452,63 @@ function jobPatchToRow(patch: Partial<JobRecord>): Record<string, unknown> {
 export async function updateJob(jobId: string, patch: Partial<JobRecord>): Promise<void> {
   const res = await db().from("generation_jobs").update(jobPatchToRow(patch)).eq("id", jobId);
   if (res.error) throw new Error(`Supabase: ${res.error.message}`);
+}
+
+/* ── Authoring provenance & memoisation ───────────────────────────────────── */
+
+/** What produced a job's prose. Written once, when authoring succeeds. */
+export interface AuthoringProvenance {
+  inputsHash: string;
+  promptVersion: string;
+  authoringModel: string;
+  /** The validated `{ slots, documents }` payload, kept so an unchanged rerun can reuse it. */
+  authored: unknown;
+}
+
+export async function saveAuthoringProvenance(
+  jobId: string,
+  provenance: AuthoringProvenance
+): Promise<void> {
+  const res = await db()
+    .from("generation_jobs")
+    .update({
+      inputs_hash: provenance.inputsHash,
+      prompt_version: provenance.promptVersion,
+      authoring_model: provenance.authoringModel,
+      authored: provenance.authored
+    })
+    .eq("id", jobId);
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
+}
+
+/**
+ * Prose from a previous run of the same inputs, or null.
+ *
+ * Scoped to the project, matched on all three of hash, prompt version and model — change any one and
+ * this misses, which is the safe direction. Only `completed` jobs qualify: a failed or in-flight job
+ * may have written a partial payload, and serving that would be worse than paying for the call.
+ */
+export async function findAuthoredByInputs(
+  projectId: string,
+  inputsHash: string,
+  promptVersion: string,
+  authoringModel: string
+): Promise<unknown | null> {
+  const row = maybe<{ authored: unknown }>(
+    await db()
+      .from("generation_jobs")
+      .select("authored")
+      .eq("project_id", projectId)
+      .eq("inputs_hash", inputsHash)
+      .eq("prompt_version", promptVersion)
+      .eq("authoring_model", authoringModel)
+      .eq("status", "completed")
+      .not("authored", "is", null)
+      .order("finished_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  );
+  return row?.authored ?? null;
 }
 
 /* ── Artifacts (GenerationResult as jsonb; one per job) ───────────────────── */

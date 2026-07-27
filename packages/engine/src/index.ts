@@ -2,11 +2,17 @@
 // Stages: resolve → author → assemble → validate → manifest (SYSTEM_ARCHITECTURE).
 
 import type {
+  AuthoringRecord,
   GeneratedFile,
   GenerationResult,
   Manifest,
   ProjectModel
 } from "../../schemas/src/types.ts";
+import type {
+  AuthoredDocuments,
+  AuthoredSlots,
+  AuthoredToolchain
+} from "../../schemas/src/authoring.ts";
 import { ENGINE_VERSION, resolveProjectModel, slugify } from "./model.ts";
 import type { ResolveInput } from "./model.ts";
 import { hasUnresolvedToken, renderScaffold } from "./scaffold.ts";
@@ -83,13 +89,18 @@ function validate(files: GeneratedFile[]): void {
 }
 
 /** Stage 5: manifest with per-file provenance. */
-function buildManifest(model: ProjectModel, files: GeneratedFile[]): Manifest {
+function buildManifest(
+  model: ProjectModel,
+  files: GeneratedFile[],
+  authoring: AuthoringRecord | null
+): Manifest {
   return {
     engineVersion: ENGINE_VERSION,
     schemaVersion: model.schemaVersion,
     generatedAt: new Date().toISOString(),
     projectSlug: model.slug,
     fileCount: files.length,
+    authoring,
     files: files.map((f) => ({
       path: f.path,
       source: f.source,
@@ -103,6 +114,31 @@ function buildManifest(model: ProjectModel, files: GeneratedFile[]): Manifest {
 export interface GenerateOptions {
   /** Called after each file is rendered — powers live progress UI. */
   onFile?: (path: string, index: number, total: number) => void;
+  /**
+   * LLM-written prose for the slots in `PROSE_SLOTS` (spec 65). Authored by the app *before* calling
+   * in — the engine takes strings and stays pure, so `generate` remains synchronous and needs no
+   * network, no env and no provider of its own. Omit it and generation is fully deterministic, which
+   * is what happens when no API key is configured.
+   */
+  authored?: AuthoredSlots;
+  /**
+   * Whole narrative documents, written end to end rather than assembled from fixed scaffolding plus
+   * fills (spec 65). Only the paths in `AUTHORED_DOCUMENTS` are eligible; every file carrying a
+   * command renders from the template regardless of what is passed here.
+   */
+  authoredDocuments?: AuthoredDocuments;
+  /**
+   * The five commands the founder runs, for a stack the founder described themselves and nothing
+   * here can derive. Ignored for the golden-path frameworks, whose commands are known. Every value
+   * has already passed the command contract in `@airrow/schemas`; the engine takes strings.
+   */
+  authoredToolchain?: AuthoredToolchain;
+  /**
+   * Which prompt and model produced `authored`/`authoredDocuments`, recorded in the manifest. The
+   * engine never learns these on its own — it makes no calls — so a caller that passes prose must
+   * pass its provenance too, or the files it lands in are unattributable.
+   */
+  authoring?: AuthoringRecord;
 }
 
 /**
@@ -114,10 +150,18 @@ export function generate(
   model: ProjectModel,
   options: GenerateOptions = {}
 ): GenerationResult {
-  const { files } = renderScaffold(template, model);
+  const { files } = renderScaffold(
+    template,
+    model,
+    options.authored,
+    options.authoredDocuments,
+    options.authoredToolchain
+  );
   files.forEach((f, i) => options.onFile?.(f.path, i + 1, files.length));
   validate(files);
-  return { files, manifest: buildManifest(model, files) };
+  // No prose landed, so there is nothing to attribute even if a caller passed provenance in.
+  const authored = files.some((f) => f.source === "authored");
+  return { files, manifest: buildManifest(model, files, authored ? options.authoring ?? null : null) };
 }
 
 export interface GeneratedProject {

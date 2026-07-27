@@ -299,7 +299,9 @@ export function InterviewRuntime({
               autoFocus
               value={typeof value === "string" ? value : ""}
               placeholder={current.placeholder}
-              maxLength={2000}
+              // The question carries its own ceiling; the same number backs the Zod schema, so the
+              // field can't accept something the save would silently reject.
+              maxLength={current.maxChars}
               onChange={(e) => setAnswer(current.id, e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {

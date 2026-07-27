@@ -1,10 +1,11 @@
 // Zod validation at the app boundary (Constraint 7). Types + question data re-exported.
 
 import { z } from "zod";
-import { interviewQuestions } from "./questions.ts";
+import { ANSWER_MAX_CHARS, interviewQuestions } from "./questions.ts";
 
 export * from "./types.ts";
 export * from "./questions.ts";
+export * from "./authoring.ts";
 
 const TEXT_MAX = 2000;
 
@@ -35,24 +36,28 @@ export const featureIdSchema = z.enum([
   "audit_logs"
 ]);
 
-const textAnswer = z.string().trim().min(1).max(TEXT_MAX);
+/** Caps live with the questions (`ANSWER_MAX_CHARS`) so the textarea and this schema can't drift. */
+const textAnswer = (max: number) => z.string().trim().min(1).max(max);
 
 export const interviewAnswersSchema = z
   .object({
     productType: productTypeSchema,
-    vision: textAnswer,
-    mvpFocus: textAnswer,
+    problem: textAnswer(ANSWER_MAX_CHARS.problem),
+    vision: textAnswer(ANSWER_MAX_CHARS.vision),
+    mvpFocus: textAnswer(ANSWER_MAX_CHARS.mvpFocus),
     audience: z.enum(["b2b", "b2c", "both", "internal"]),
-    coreEntities: textAnswer,
+    coreEntities: textAnswer(ANSWER_MAX_CHARS.coreEntities),
+    nonGoals: textAnswer(ANSWER_MAX_CHARS.nonGoals),
     tenancy: z.enum(["single_user", "organizations", "marketplace", "internal"]),
     authModel: z.array(z.enum(["email_password", "magic_link", "social", "sso", "public"])).min(1).max(5),
     roles: z.enum(["simple", "granular"]),
     capabilities: z.array(featureIdSchema).min(0).max(13),
     aiUsage: z.enum(["llm_calls", "rag", "agents", "ml_models", "none"]),
-    integrations: textAnswer,
+    integrations: textAnswer(ANSWER_MAX_CHARS.integrations),
     dataSensitivity: z.enum(["standard", "pii", "regulated"]),
     scale: z.enum(["validate", "growth", "high_scale"]),
-    framework: z.enum(["nextjs", "vite"]),
+    framework: z.enum(["nextjs", "vite", "custom"]),
+    frameworkOther: textAnswer(ANSWER_MAX_CHARS.frameworkOther),
     database: z.enum(["supabase", "postgres"]),
     hosting: z.enum(["vercel", "azure", "self_host"]),
     repoProvider: z.enum(["github", "azure_devops"]),

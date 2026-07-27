@@ -6,6 +6,14 @@
 // redirect to the screen that shows it, and a job detached from that action would be
 // killed the moment the serverless invocation responds.
 import { NextResponse } from "next/server";
+
+/**
+ * Authoring is one Claude call that writes 21 slots and 3 whole documents; measured against the live
+ * API it takes ~20s. The platform default for a route handler is 10s, so without this the request is
+ * killed mid-call, the job never completes, and the founder sees the generation hang — the exact
+ * failure this endpoint was built to avoid.
+ */
+export const maxDuration = 60;
 import { getSession } from "@/lib/auth";
 import { getProject, latestJob, latestModelVersion } from "@/lib/data/store";
 import { runGenerationJob } from "@/features/generation/runner";

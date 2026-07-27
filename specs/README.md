@@ -25,6 +25,7 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Feature | Spec | Status |
 |---------|------|--------|
 | Interview-driven project generator | [1-interview-generator.md](1-interview-generator.md) | ✅ Done |
+| Documents that read like they were written for this project | [65-authored-documents.md](65-authored-documents.md) | 🔄 In progress |
 | Vercel + Supabase infrastructure setup | [9-vercel-supabase-setup.md](9-vercel-supabase-setup.md) | ✅ Done |
 | Vercel domains: production + stable dev URL | [12-vercel-domains.md](12-vercel-domains.md) | 🔄 In progress |
 | Supabase full schema migration + DataStore cutover | [14-supabase-schema-auth.md](14-supabase-schema-auth.md) | ✅ Done |
