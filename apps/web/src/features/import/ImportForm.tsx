@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import { FileDropzone } from "@/components/ui/file-dropzone";
 import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { InlineError } from "@/components/ui/states";
+import { InlineError, Notice } from "@/components/ui/states";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { importProjectAction, type ImportFormState } from "./actions";
 import { cacheArchive } from "./archive-cache";
@@ -56,11 +56,7 @@ export function ImportForm() {
   return (
     <form action={action} className="space-y-5">
       {state.error ? <InlineError>{state.error}</InlineError> : null}
-      {cacheWarning ? (
-        <p role="status" className="rounded-md border border-border bg-bg-subtle px-3 py-2 text-sm text-fg-muted">
-          {cacheWarning}
-        </p>
-      ) : null}
+      {cacheWarning ? <Notice role="status">{cacheWarning}</Notice> : null}
 
       <div>
         <Label htmlFor="name">Project name</Label>

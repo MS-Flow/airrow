@@ -82,6 +82,12 @@ export default function PrivacyPage() {
         your organization and everything hanging off it. Backups and logs age out on their own
         retention schedule shortly afterwards.
       </p>
+      <p>
+        An imported project&apos;s structure follows the same rule: the file names, sizes and
+        fingerprints live as long as the project they belong to and go when it does. The file
+        contents were never kept in the first place — they exist only for the length of the request
+        that analysed your archive, and the archive itself stays on your own machine.
+      </p>
 
       <h2>Your rights</h2>
       <p>
@@ -99,8 +105,9 @@ export default function PrivacyPage() {
 
       <h2>Changes</h2>
       <p>
-        When this policy changes, the date at the top of the page changes with it. Material
-        changes are announced in the application before they take effect.
+        When this policy changes, the date at the top of the page changes with it. That date is the
+        thing to check — we do not currently notify you in the application, and would rather say so
+        than promise a message we have no way to send.
       </p>
     </>
   );

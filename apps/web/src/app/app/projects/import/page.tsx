@@ -4,7 +4,7 @@ import Link from "next/link";
 import { PageContainer } from "@/components/shell/page-container";
 import { Card, CardBody } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { ComingSoon } from "@/components/ui/states";
+import { ComingSoon, Notice } from "@/components/ui/states";
 import { ImportForm } from "@/features/import/ImportForm";
 
 export const metadata = { title: "Import an existing project" };
@@ -26,7 +26,20 @@ export default function ImportProject() {
         is shown as a conflict for you to decide.
       </p>
 
-      <Card className="mt-6">
+      <Notice className="mt-6" title="Leave secrets and personal data out of the archive">
+        Airrow reads every file to work out what your project already has, and it does{" "}
+        <strong className="font-medium text-fg">not</strong> scan for secrets — an{" "}
+        <code className="font-mono text-2xs">.env</code> file, an API key or a{" "}
+        <code className="font-mono text-2xs">.pem</code> certificate is uploaded like any other
+        file, and a key that has left your machine has to be rotated. Airrow stores your project&rsquo;s
+        structure and never its file contents; the{" "}
+        <Link href="/privacy" className="underline underline-offset-4 hover:text-fg">
+          privacy policy
+        </Link>{" "}
+        sets out exactly what that means.
+      </Notice>
+
+      <Card className="mt-4">
         <CardBody className="p-6">
           <ImportForm />
         </CardBody>
