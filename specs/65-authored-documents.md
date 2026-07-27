@@ -343,6 +343,23 @@ Deliberately **not** wired to the allowance: a reused generation still counts. T
 what an account can create, not what it costs us, and a founder who regenerates ten times has ten
 foundations either way.
 
+**Amendment — regenerate hung forever, and it was never spec 65.** Found while testing this work
+against local Supabase: clicking regenerate on a finished project left it on `generating` for good.
+`latestJob` ordered by `started_at desc nulls last`, and a job is created with `started_at = null`
+— it is only set when the job starts running. So the newly queued job sorted *behind* the completed
+one it was meant to replace: the start endpoint asked for the latest job, got a completed one, and
+refused to run anything; the poll reported that same completed job; the project page sent the founder
+back to the progress screen.
+
+Neither existing column can order jobs. `started_at` is null exactly when the job most needs to be
+found, and `heartbeat_at` is bumped by every update — it says when a job was last touched, not when
+it was queued, so the stale-job check in the poll route could reorder history just by writing. Added
+an immutable `created_at` (migration `20260727140000`) and ordered on that.
+
+Proven in `jobs.order.db.test.ts` against real Postgres, because it is a fact about SQL ordering that
+no mock can see — the app-level tests were green throughout. All three assertions go red against the
+old ordering.
+
 **Known gap:** `validateCompleteAnswers` re-parses stored answers at submit, so a signed-in founder
 who saved a long answer before this change is rejected at submit rather than silently truncated. The
 textarea now prevents new over-long answers. Whether to clamp on read is still the open question

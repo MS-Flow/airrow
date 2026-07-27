@@ -382,14 +382,22 @@ export async function getJob(jobId: string): Promise<JobRecord | null> {
   return row ? toJob(row) : null;
 }
 
+/**
+ * The project's most recently *created* job — which is what every caller means by "latest".
+ *
+ * Ordered on `created_at` because it is the only column that is both always set and never changed.
+ * This used to order on `started_at desc nulls last`, which is null until a job runs: a freshly
+ * queued job therefore sorted *behind* the completed one it was meant to replace, so regenerating
+ * an existing project started nothing and hung on `generating`. `heartbeat_at` is no better — every
+ * update bumps it, so it says when a job was last touched, not when it was queued.
+ */
 export async function latestJob(projectId: string): Promise<JobRecord | null> {
   const row = maybe<JobRow>(
     await db()
       .from("generation_jobs")
       .select("*")
       .eq("project_id", projectId)
-      .order("started_at", { ascending: false, nullsFirst: false })
-      .order("heartbeat_at", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle()
   );

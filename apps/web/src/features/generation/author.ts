@@ -26,7 +26,7 @@ import {
  * Bump when the prompt changes in a way that would produce different prose from identical answers.
  * Recorded per file in the manifest, and part of what a regeneration is keyed on.
  */
-export const PROMPT_VERSION = "3";
+export const PROMPT_VERSION = "4";
 
 /** Haiku 4.5 is a 4.5-generation model: it takes no `effort` parameter, and sending one errors. */
 export const AUTHORING_MODEL = process.env.AIRROW_AUTHORING_MODEL ?? "claude-haiku-4-5";
@@ -80,6 +80,17 @@ NON_GOALS lands in the file a coding agent reads before every session, and it is
 stops a week of work nobody asked for. Write what the founder ruled out, in their terms. Never add a
 non-goal they did not state — an invented boundary is worse than a missing one. If they gave none,
 return null for it.
+
+WRITE FOR THE STACK THEY CHOSE. The stack answer is not decoration — ARCHITECTURE_LAYERS,
+ARCHITECTURE_INVARIANTS, KEY_CONVENTIONS, DATA_INVARIANTS and STACK_DETAIL must describe the stack in
+front of you, not the one you see most often. A Next.js app has server components, server actions and
+a server boundary to protect; a Vite SPA has none of those — it is a browser client talking to the
+database directly, so its invariants are about what the browser can be trusted with, and advice about
+server components would be wrong. Supabase brings auth, storage and row-level security with it; a
+plain Postgres project has to build them. Name the actual framework and database in these slots.
+
+Never write a command, a script name, a package manager or an install step in any slot. Those are
+derived from the stack and rendered elsewhere, and a command from you would contradict them.
 
 PROJECT_TAGLINE, PROJECT_DESCRIPTION and DOMAIN_OVERVIEW open the project's README on GitHub. They are
 the first thing anyone sees. Make them land: concrete about what the product does and who it is for,

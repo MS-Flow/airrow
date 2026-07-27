@@ -241,38 +241,69 @@ export const interviewQuestions: Question[] = [
     ]
   },
   {
+    // Every stack question states what it *changes* in the output, not just what it means. A founder
+    // picked Vite, got `npm run dev` in START_HERE, and read it as a bug — the choice was clear, its
+    // consequence was invisible. TypeScript, Tailwind and shadcn/ui are fixed and not asked about.
     id: "framework",
     title: "Which web framework?",
-    help: "Airrow's golden path is Next.js on Vercel. Vite fits pure SPAs.",
+    help: "Recommended: Next.js. Either way you get TypeScript, Tailwind and shadcn/ui — this choice decides the package manager, so it sets every command in your generated docs and CI.",
     type: "single",
     required: true,
     showIf: [{ questionId: "productType", in: ["saas", "marketplace", "ai_agent", "internal_tool", "hobby"] }],
     options: [
-      { value: "nextjs", label: "Next.js", description: "Recommended — App Router, server actions, Vercel-native" },
-      { value: "vite", label: "Vite + React", description: "Lightweight SPA, backend via Supabase only" }
+      {
+        value: "nextjs",
+        label: "Next.js — recommended",
+        description: "App Router, server actions, server-side rendering. Uses pnpm, so your docs say `pnpm dev`. Pick this unless you know you want an SPA."
+      },
+      {
+        value: "vite",
+        label: "Vite + React",
+        description: "A pure single-page app with no server of its own — all data goes through Supabase from the browser. Uses npm, so your docs say `npm run dev`."
+      }
     ]
   },
   {
     id: "database",
     title: "Which database?",
-    help: "All options are PostgreSQL — you keep RLS, SQL migrations, and the same schema. Supabase is the golden path (it also bundles Auth, Storage & Realtime).",
+    help: "Recommended: Supabase. Both are PostgreSQL — you keep RLS, SQL migrations and the same schema either way. This decides how much you wire up yourself.",
     type: "single",
     required: true,
     options: [
-      { value: "supabase", label: "Supabase", description: "Recommended — Postgres with Auth, Storage, Realtime & RLS built in" },
-      { value: "postgres", label: "Self-hosted Postgres", description: "Your own Postgres server — wire auth & storage yourself" }
+      {
+        value: "supabase",
+        label: "Supabase — recommended",
+        description: "Postgres with Auth, Storage, Realtime and RLS already wired. Your setup steps become 'create a project, paste two keys'."
+      },
+      {
+        value: "postgres",
+        label: "Self-hosted Postgres",
+        description: "Your own Postgres. Same schema and migrations, but auth and file storage are yours to build — your setup steps say so."
+      }
     ]
   },
   {
     id: "hosting",
     title: "Where will you deploy?",
-    help: "Vercel is the golden path and the generated CI targets it. Other targets need the deploy workflow adjusted.",
+    help: "Recommended: Vercel. This decides the deploy workflow you get in .github/workflows — Vercel ships ready to run; the others ship as a marked placeholder for you to finish.",
     type: "single",
     required: true,
     options: [
-      { value: "vercel", label: "Vercel", description: "Recommended — zero-config for Next.js, preview per PR" },
-      { value: "azure", label: "Azure", description: "For Microsoft-centric organizations" },
-      { value: "self_host", label: "Self-host", description: "Your own servers / containers" }
+      {
+        value: "vercel",
+        label: "Vercel — recommended",
+        description: "Zero-config for Next.js, a preview URL per pull request. The generated deploy workflow targets it and works as shipped."
+      },
+      {
+        value: "azure",
+        label: "Azure",
+        description: "For Microsoft-centric organizations. The deploy workflow ships as a placeholder you complete."
+      },
+      {
+        value: "self_host",
+        label: "Self-host",
+        description: "Your own servers or containers. The deploy workflow ships as a placeholder you complete."
+      }
     ]
   },
   {
