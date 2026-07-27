@@ -42,10 +42,12 @@ const textAnswer = (max: number) => z.string().trim().min(1).max(max);
 export const interviewAnswersSchema = z
   .object({
     productType: productTypeSchema,
+    problem: textAnswer(ANSWER_MAX_CHARS.problem),
     vision: textAnswer(ANSWER_MAX_CHARS.vision),
     mvpFocus: textAnswer(ANSWER_MAX_CHARS.mvpFocus),
     audience: z.enum(["b2b", "b2c", "both", "internal"]),
     coreEntities: textAnswer(ANSWER_MAX_CHARS.coreEntities),
+    nonGoals: textAnswer(ANSWER_MAX_CHARS.nonGoals),
     tenancy: z.enum(["single_user", "organizations", "marketplace", "internal"]),
     authModel: z.array(z.enum(["email_password", "magic_link", "social", "sso", "public"])).min(1).max(5),
     roles: z.enum(["simple", "granular"]),
@@ -54,7 +56,8 @@ export const interviewAnswersSchema = z
     integrations: textAnswer(ANSWER_MAX_CHARS.integrations),
     dataSensitivity: z.enum(["standard", "pii", "regulated"]),
     scale: z.enum(["validate", "growth", "high_scale"]),
-    framework: z.enum(["nextjs", "vite"]),
+    framework: z.enum(["nextjs", "vite", "custom"]),
+    frameworkOther: textAnswer(ANSWER_MAX_CHARS.frameworkOther),
     database: z.enum(["supabase", "postgres"]),
     hosting: z.enum(["vercel", "azure", "self_host"]),
     repoProvider: z.enum(["github", "azure_devops"]),
