@@ -780,6 +780,34 @@ same flag renders the Admin badge in Settings — one fact, two readers, so the 
 something the limit disagrees with. Currently granted to medlund01@gmail.com; a second address is
 one line in a new migration.
 
+**Amendment — the custom stack shipped half-working, and only a live probe showed it.** Reported
+from testing: a founder typed "dotnet efcore c# js" and got that string printed verbatim in their
+documents, with `pnpm dev` still in START_HERE. Three separate defects, none visible to a unit test.
+
+*The toolchain came back empty half the time.* The block sat at the end of the user prompt, behind
+23 slot limits and 3 document limits, and the system prompt introduced it as "usually absent" —
+so the model dropped it. **Measured 2 of 4 runs empty.** Moved directly after the answers, marked
+REQUIRED, and reworded so null is reserved for a command the stack genuinely lacks rather than one
+the model is unsure how to spell. **Now 4 of 4**, and correct across .NET, Rails and Go.
+
+*The unauthored fallback lied.* A command with nothing authored fell back to `pnpm lint`, which for
+a .NET project is a wrong instruction in the first file the founder opens — worse than no
+instruction. It now renders `[NEEDS CLARIFICATION: CMD_LINT]` through the ordinary substitution
+path, the same as any other value the interview could not supply.
+
+*The stack name was echoed raw.* "dotnet efcore c# js" is an answer, not documentation. `STACK_NAME`
+is now a prose slot — subject to the same allowlist and length contract as every other authored
+value, so nothing about it widens what the model can reach — and everything that renders the stack
+uses it. Live: "ASP.NET Core with Entity Framework Core (C#)", "Ruby on Rails with PostgreSQL",
+"Go with Chi and sqlc". Null falls back to the founder's own words: untidy, but true.
+
+**Admin by address, not by row.** The first admin migration used an UPDATE, which silently does
+nothing when the account has not signed up yet — and on a fresh database neither had. `admin_emails`
+is now the durable fact, consulted by the signup trigger and backfilled for existing accounts, so
+either order works. It carries RLS with no policy at all: every access denied, which is right for a
+list only a security-definer trigger reads. A founder must not be able to see who the admins are,
+let alone add themselves.
+
 **Known gap:** `validateCompleteAnswers` re-parses stored answers at submit, so a signed-in founder
 who saved a long answer before this change is rejected at submit rather than silently truncated. The
 textarea now prevents new over-long answers. Whether to clamp on read is still the open question

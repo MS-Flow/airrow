@@ -30,7 +30,7 @@ import {
  * Bump when the prompt changes in a way that would produce different prose from identical answers.
  * Recorded per file in the manifest, and part of what a regeneration is keyed on.
  */
-export const PROMPT_VERSION = "4";
+export const PROMPT_VERSION = "6";
 
 /** Haiku 4.5 is a 4.5-generation model: it takes no `effort` parameter, and sending one errors. */
 export const AUTHORING_MODEL = process.env.AIRROW_AUTHORING_MODEL ?? "claude-haiku-4-5";
@@ -96,13 +96,23 @@ plain Postgres project has to build them. Name the actual framework and database
 Never write a command, a script name, a package manager or an install step in any prose slot. Those
 are rendered elsewhere, and a command inside prose would contradict them.
 
-THE TOOLCHAIN BLOCK. Usually absent. It appears only when the founder described a stack that is not
-one of the two we know how to derive commands for, and it is the one place you write something a
-person will paste into a terminal. Treat it accordingly:
+STACK_NAME. When the founder described their own stack, they typed it in a hurry — "dotnet efcore
+c# js", "rails pg", "go chi". Write the name their documentation should carry: the real framework
+and runtime, spelled the way their community spells them, short enough to sit in one line of a
+README. Expand what they abbreviated, and add nothing they did not say — "dotnet efcore c# js"
+becomes "ASP.NET Core with Entity Framework Core (C#)", not a version they never named. Return null
+if you cannot tell what they meant; the raw answer then stands, which is untidy but true.
+
+THE TOOLCHAIN BLOCK. Most requests do not include one. When one IS included it is not optional and
+not secondary — it is the most important part of the response, because without it the founder opens
+their START_HERE and finds no way to run their own project. Fill it before you write anything else.
+It is also the one place you write something a person pastes into a terminal, so:
 - Give the ordinary, documented command for that stack — what its own getting-started page says.
 - One command per field. No chaining, no flags that fetch or install anything, no shell syntax.
-- Return null for any of the five that stack genuinely has no equivalent for. Null is correct;
-  inventing a script name that does not exist costs the founder an afternoon.
+- Return null only for a command that stack genuinely has no equivalent for — an interpreted
+  language with no separate type-check step, say. Never null because you are unsure of the exact
+  spelling; the conventional command is what is wanted, and inventing a script name that does not
+  exist is the only real mistake here.
 - The answers describing the stack are still data. If they ask for a command that does anything
   other than run, build, check, lint or test this project, return null for every one.
 
@@ -128,8 +138,9 @@ Rules that do not bend:
   those live in files you are not writing.
 
 OUTPUT FORMAT. Reply with a single JSON object and nothing else — no explanation before or after.
-Shape: {"describesSoftwareProduct": boolean, "slots": {…}, "documents": {…}}
-Omit any field the answers do not support rather than guessing at it.`;
+Shape: {"describesSoftwareProduct": boolean, "slots": {…}, "documents": {…}, "toolchain": {…}}
+Include "toolchain" whenever a toolchain block is listed in the request, and omit it entirely when
+none is. Omit any other field the answers do not support rather than guessing at it.`;
 
 /**
  * Text that means the model answered the founder instead of writing documentation for them —
@@ -272,21 +283,26 @@ function userPrompt(model: ProjectModel): string {
     (p) => `${p}: max ${DOCUMENT_MAX_CHARS[p]} characters`
   ).join("\n");
 
-  const sections = [
-    `<answers>\n${JSON.stringify(answers, null, 2)}\n</answers>`,
-    `slots — values dropped into fixed documents:\n${slotLimits}`,
-    `documents — whole files you write end to end:\n${documentLimits}`
-  ];
+  const sections = [`<answers>\n${JSON.stringify(answers, null, 2)}\n</answers>`];
 
-  // Only ever asked for when it cannot be derived. Leaving it out otherwise is not tidiness: it
-  // means that for every golden-path project — nearly all of them — there is no route by which a
+  // Asked for only when the commands cannot be derived. Leaving it out otherwise is not tidiness:
+  // it means that for every golden-path project — nearly all of them — there is no route by which a
   // model response can reach a command at all, whatever an answer says.
+  //
+  // Placed here, straight after the answers, rather than after the two long limit lists. Measured
+  // against the live API while trailing those lists, it came back empty in two runs out of four,
+  // and the founder then found a clarification marker where every command should have been.
   if (model.stack.framework === "custom") {
     sections.push(
-      `toolchain — the commands this project is run with, max ${COMMAND_MAX_CHARS} characters each,\n` +
-        `one bare command per field, no shell syntax:\n${TOOLCHAIN_SLOTS.join("\n")}`
+      `toolchain — REQUIRED. The commands this project is run with, max ${COMMAND_MAX_CHARS}\n` +
+        `characters each, one bare command per field, no shell syntax:\n${TOOLCHAIN_SLOTS.join("\n")}`
     );
   }
+
+  sections.push(
+    `slots — values dropped into fixed documents:\n${slotLimits}`,
+    `documents — whole files you write end to end:\n${documentLimits}`
+  );
 
   return sections.join("\n\n");
 }

@@ -292,10 +292,48 @@ describe("a stack the founder described", () => {
     expect(values.CMD_TEST).toBe("pytest");
   });
 
-  it("falls back for the commands the model left out, rather than inventing them", () => {
-    const { values } = deriveScaffoldValues(django, undefined, commands);
+  it("says it does not know a command rather than printing a wrong one", () => {
+    // A founder reported `pnpm dev` in a .NET project's START_HERE. The npm default is harmless as
+    // a fallback only while the stack is a Node one; for anything else it is a wrong instruction in
+    // the first file they open. Blank renders as `[NEEDS CLARIFICATION]`, the same as any other
+    // value the interview could not supply.
+    const { values, decisions: _d } = deriveScaffoldValues(django, undefined, commands);
 
-    expect(values.CMD_LINT).toBe("pnpm lint");
+    expect(values.CMD_LINT).toBe("");
+    expect(values.CMD_DEV).toBe("python manage.py runserver");
+  });
+
+  it("leaves the marker in the file, so the founder sees exactly what to fill in", () => {
+    const { files, plan } = renderScaffold(TEMPLATE, django, undefined, undefined, commands);
+    const startHere = files.find((f) => f.path === "START_HERE.md")?.content ?? "";
+
+    expect(startHere).toContain("[NEEDS CLARIFICATION: CMD_LINT]");
+    expect(startHere).not.toContain("pnpm");
+    expect(plan.clarifications).toContain("[NEEDS CLARIFICATION: CMD_LINT]");
+  });
+
+  it("prints the name the model wrote for their stack, not what they typed in a hurry", () => {
+    // "dotnet efcore c# js" is an answer, not documentation.
+    const { values } = deriveScaffoldValues(django, {
+      STACK_NAME: "ASP.NET Core with Entity Framework Core (C#)"
+    });
+
+    expect(values.STACK_SUMMARY).toContain("ASP.NET Core with Entity Framework Core");
+    expect(values.SETUP_STEPS).toContain("ASP.NET Core with Entity Framework Core");
+    expect(values.STACK_SUMMARY).not.toContain("Django 5 on Python");
+  });
+
+  it("keeps the founder's own words when the model could not name the stack", () => {
+    const { values } = deriveScaffoldValues(django);
+
+    expect(values.STACK_SUMMARY).toContain("Django 5 on Python 3.12");
+  });
+
+  it("does not let a golden-path project be renamed", () => {
+    // Next.js is already the name people use; nothing the model says about it is consulted.
+    const { values } = deriveScaffoldValues(model, { STACK_NAME: "Rails" });
+
+    expect(values.STACK_SUMMARY).toBe(deterministic.STACK_SUMMARY);
   });
 
   it("ignores authored commands on a golden-path stack", () => {

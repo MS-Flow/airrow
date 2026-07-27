@@ -92,9 +92,8 @@ function packageManager(model: ProjectModel): "pnpm" | "npm" {
  * Derived for the two golden-path frameworks, where the answer is knowable. For a stack the founder
  * described themselves it cannot be — nothing here knows whether the test command is `pytest`,
  * `go test ./...` or `bin/rails test` — so those come from `authoredToolchain`, each one having
- * already passed the command contract in `@airrow/schemas`. A command that failed that contract is
- * simply absent here, and the npm fallback below stands: wrong for their stack, but honest and
- * harmless, and the founder can see it is wrong.
+ * already passed the command contract in `@airrow/schemas`. Anything not authored is left blank
+ * rather than defaulted, for the reason given below.
  */
 function cmds(
   model: ProjectModel,
@@ -114,9 +113,16 @@ function cmds(
 
   for (const slot of TOOLCHAIN_SLOTS) {
     const written = authoredToolchain?.[slot];
-    if (typeof written !== "string" || written.trim() === "") continue;
-    commands[slot] = written.trim();
-    fromModel.add(slot);
+    if (typeof written === "string" && written.trim() !== "") {
+      commands[slot] = written.trim();
+      fromModel.add(slot);
+      continue;
+    }
+    // Nothing was authored for this one, and the npm/pnpm default is not a harmless fallback here —
+    // it is a wrong command in the file the founder runs first. Telling a .NET project to run
+    // `pnpm dev` is worse than admitting we do not know, so it empties to a `[NEEDS CLARIFICATION]`
+    // marker through the ordinary substitution path, the same as any other unanswered value.
+    commands[slot] = "";
   }
   return { commands, fromModel };
 }
@@ -127,7 +133,7 @@ function installCommand(model: ProjectModel, ci: boolean): string {
   return ci ? "pnpm install --frozen-lockfile" : "pnpm install";
 }
 
-function ciSetupSteps(model: ProjectModel): string {
+function ciSetupSteps(model: ProjectModel, stackName: string): string {
   // A custom stack gets an honest placeholder rather than a Node toolchain that would be wrong for
   // it. This is the same treatment a non-Vercel deploy target already gets: CI that fails loudly on
   // the first run is worse than CI that says what is missing and stops.
@@ -135,7 +141,7 @@ function ciSetupSteps(model: ProjectModel): string {
     return [
       "      - name: Set up the toolchain",
       "        run: |",
-      `          echo "::warning::Add the setup and install steps for ${frameworkLabel(model)} here, then remove this guard."`,
+      `          echo "::warning::Add the setup and install steps for ${stackName} here, then remove this guard."`,
       "          exit 0"
     ].join("\n");
   }
@@ -208,11 +214,16 @@ export function deriveScaffoldValues(
   authoredTokens: Set<string>;
 } {
   const { commands: command, fromModel: authoredCommands } = cmds(model, authoredToolchain);
+  // "dotnet efcore c# js" is what a founder types; it is not what their documentation should say.
+  // For a custom stack the model turns that into a name a reader recognises, and everything that
+  // renders the stack uses it. Falls back to the raw answer when nothing was authored — still
+  // theirs, still honest, just untidy.
+  const stackName = stackNameFor(model, authored);
   const hosting = hostingLabel[model.hosting];
   // TypeScript, Tailwind and shadcn/ui are the golden path's fixed choices — asserting them over a
   // founder who told us they are on Django would make the first line of their docs a falsehood.
   const frontend = isCustomStack(model) ? "" : "TypeScript · Tailwind + shadcn/ui · ";
-  const summary = `${frameworkLabel(model)} · ${frontend}${databaseLabel(model)} (Postgres) · ${hosting} · ${repoLabel(model)}`;
+  const summary = `${stackName} · ${frontend}${databaseLabel(model)} (Postgres) · ${hosting} · ${repoLabel(model)}`;
   const roles = rolesText(model);
 
   const values: Record<string, string> = {
@@ -235,12 +246,13 @@ export function deriveScaffoldValues(
     SCALE_POSTURE: scalePosture(model),
     ROLES: roles,
     STACK_SUMMARY: summary,
-    STACK_DETAIL: `${frameworkLabel(model)} · ${frontend}${backendSummary(model)} · deployed to ${hosting} · code on ${repoLabel(model)}`,
+    STACK_NAME: stackName,
+    STACK_DETAIL: `${stackName} · ${frontend}${backendSummary(model)} · deployed to ${hosting} · code on ${repoLabel(model)}`,
     REPO_PROVIDER: repoLabel(model),
-    SETUP_STEPS: setupSteps(model),
+    SETUP_STEPS: setupSteps(model, stackName),
     FIRST_SPEC_HINT: firstSpecHint(model),
     DEPLOY_TARGET: hosting,
-    CI_SETUP_STEPS: ciSetupSteps(model),
+    CI_SETUP_STEPS: ciSetupSteps(model, stackName),
     DEPLOY_STEPS: deploySteps(model),
     ARCHITECTURE_INVARIANTS: architectureInvariants(model),
     DATA_INVARIANTS: dataInvariants(model),
@@ -267,7 +279,7 @@ export function deriveScaffoldValues(
   const decisions: ScaffoldDecision[] = [
     dec("PROJECT_NAME", model.name, "interview", "Product name from the interview."),
     dec("STACK_SUMMARY", summary, "default", "Golden-path stack (Next.js/TS/Tailwind/Supabase), narrowed by the interview."),
-    dec("CMD_TEST", command.CMD_TEST, "default", `${packageManager(model)} — the package manager the ${frameworkLabel(model)} toolchain defaults to.`),
+    dec("CMD_TEST", command.CMD_TEST, "default", `${packageManager(model)} — the package manager the ${stackName} toolchain defaults to.`),
     dec("DEPLOY_TARGET", hosting, model.hosting === "vercel" ? "default" : "interview",
       model.hosting === "vercel"
         ? "Golden-path hosting."
@@ -306,6 +318,20 @@ function dec(token: string, value: string, source: "interview" | "default", rati
  */
 function nonGoalsText(model: ProjectModel): string {
   return model.nonGoals || "_Not yet decided — add what this product is deliberately not doing._";
+}
+
+/**
+ * The name to print for this project's stack.
+ *
+ * Only a custom stack can be renamed, and only by the model: the golden-path labels are already the
+ * names people use. `STACK_NAME` is an ordinary prose slot, so it is subject to the same allowlist
+ * and length contract as every other authored value — nothing about this widens what the model can
+ * reach.
+ */
+function stackNameFor(model: ProjectModel, authored?: AuthoredSlots): string {
+  if (!isCustomStack(model)) return frameworkLabel(model);
+  const written = authored?.STACK_NAME;
+  return typeof written === "string" && written.trim() !== "" ? written.trim() : frameworkLabel(model);
 }
 
 function aOrAn(label: string): string {
@@ -410,12 +436,12 @@ function scalePosture(model: ProjectModel): string {
 }
 
 /** The ordered first-hour setup, specific to the chosen database and host. */
-function setupSteps(model: ProjectModel): string {
+function setupSteps(model: ProjectModel, stackName: string): string {
   const steps = isCustomStack(model)
     ? [
         // Their words, not an invented install procedure. Getting this wrong for an unknown stack
         // costs a founder an afternoon; saying plainly that it is theirs to fill in costs a minute.
-        `1. Install the runtime and package manager for **${frameworkLabel(model)}**.`,
+        `1. Install the runtime and package manager for **${stackName}**.`,
         "2. Install dependencies with your package manager, then commit the lockfile."
       ]
     : packageManager(model) === "pnpm"
