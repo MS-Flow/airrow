@@ -1,0 +1,401 @@
+# Spec 91 — `/cleanup`: rätt kommando för rätt ursprung
+
+> **In one sentence:** Ett genererat projekt ska veta om det kom från noll eller från en import — nya
+> projekt får `/start`, importerade får ett nytt `/cleanup` som skräddarsyr dokumenten efter den kod
+> som redan finns, utan att röra koden.
+
+|                |                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------ |
+| **Status**     | ✅ Done                                                                               |
+| **Issue**      | #91 — "Nytt vs. importerat projekt: /start bara på nya, nytt /cleanup bara på importerade" |
+| **Branch**     | `91-cleanup-command` (from `feature/import-existing-projects`)                        |
+| **Feature**    | Import existing projects                                                               |
+| **Depends on** | [63-import-existing-projects.md](63-import-existing-projects.md) — importflödet, den deterministiska analysen och `import_sources` som gör "importerad" känt · [66-start-command.md](66-start-command.md) — `/start`, kommandoformen och den §0-amendering `/cleanup` måste passa in i · [65-authored-documents.md](65-authored-documents.md) — äger `TOOLCHAIN_SLOTS` och prosan som `/cleanup` skriver om |
+
+**Short on time?** Read _User story_ and _Acceptance criteria_ — that's the whole point of the change and
+how you'll know it's done. Everything after those is detail for whoever implements and reviews it.
+
+<!--
+Canonical single-file spec format for Airrow. One file per issue: specs/NNN-kort.md. It holds the WHAT,
+the HOW (exact file:line changes), acceptance criteria, verification and edge cases together — do NOT
+split into separate plan.md / tasks.md files.
+Status legend: ⏳ Not started · 🔄 In progress · ✅ Done
+Mark anything undecided inline with [NEEDS CLARIFICATION: …] so /clarify can find it.
+Keep the section names as they are — the slash commands and the constitution refer to them by name.
+-->
+
+---
+
+## User story
+
+_Who wants this, and what they get out of it._
+
+As a **grundare som importerat en kodbas som redan kör** I want **ett kommando som läser mitt projekt
+och skräddarsyr foundationens dokument efter det som faktiskt finns** so that **mina framtida specs
+skrivs mot verkligheten i mitt repo — i stället för att jag får ett `/start` som vill scaffolda en
+stack ovanpå den jag redan har.**
+
+---
+
+## Background
+
+_How things work today and what's wrong with that — grounded in real code (`file:line` links added
+during `/implement`)._
+
+- **Idag:** två spår har byggts parallellt och möts inte. Intervju + LLM-författande (#65, #10) och
+  `/start` ([`template/.claude/commands/start.md`](../template/.claude/commands/start.md), #66) på ena
+  sidan; import av existerande projekt (#63) på den andra. Båda går genom samma
+  `generate(templateFiles, projectModel)`.
+- **Problemet:** motorn kan inte skilja fallen åt. `ProjectModel`
+  ([`types.ts:78`](../packages/schemas/src/types.ts#L78)) har inget ursprungsfält, och `validate()`
+  kräver `.claude/commands/start.md` i **varje** foundation
+  ([`index.ts:75`](../packages/engine/src/index.ts#L75)). En founder som importerar ett projekt som
+  redan kör får därför ett kommando vars första steg är `create-next-app` och en toolchain-install
+  ovanpå en kodbas som redan har båda.
+- **Redan på plats:** "importerad" är känt i appen via `getImportSource()`
+  ([`store.ts`](../apps/web/src/lib/data/store.ts), satt i
+  [`import/actions.ts:71`](../apps/web/src/features/import/actions.ts#L71)); `shipsPath(model, path)`
+  ([`scaffold.ts:382`](../packages/engine/src/scaffold.ts#L382)) är den befintliga kroken för "vilka
+  filer ingår för den här modellen" (används redan för `.github/` vs. `azure-pipelines`); och
+  kommandoformen finns — sju filer under `template/.claude/commands/`, varav `/start` är den senaste.
+- **Inte på plats:** motorn får inte läsa databasen (§I, "the engine stays pure"), så ursprunget måste
+  in i modellen — det kan inte härledas i genereringen.
+
+---
+
+## Design decision
+
+_The approach we picked, and what we deliberately leave alone._
+
+Ursprunget blir data på projektmodellen, satt där projektet skapas och aldrig gissat i motorn.
+`shipsPath()` väljer kommandofil per ursprung, och `validate()` kräver rätt kommando i stället för
+`start.md` villkorslöst. `/cleanup` är instruktionstext av samma slag som `/start` — den körs av
+foundern, i founderns repo, med founderns assistent, och den skriver bara dokument.
+
+Att `/cleanup` körs hos foundern är hela poängen: importanalysen i #63 är avsiktligt deterministisk
+och manifestbaserad, och kundens kod lämnar aldrig requesten som analyserade den. `/cleanup` kan läsa
+allt — utan att något av det passerar Airrows servrar.
+
+**Ursprunget är ett fält på `ProjectModel`, härlett vid genereringstillfället.** Server-koden slår upp
+`import_sources` när jobbet startar och sätter fältet; motorn läser det och gissar aldrig. Ingen
+migration — `import_sources` är redan sanningen om att projektet importerades, och att spegla den i en
+kolumn på `projects` vore två källor till samma faktum (§IV, "a fact lives in exactly one file").
+
+**Analysen avgör vilket kommando ett importerat projekt får.** Ett importerat projekt utan
+kodsignal — inget manifest, ingen källkod, bara dokument — har ingenting att kartlägga, så det får
+`/start` i stället. Det gör kommandovalet beroende av analysen, vilket är avsiktligt: den är
+deterministisk och testbar (#63), och alternativet är att skicka ett `/cleanup` till en founder som
+inte har något att städa. Fortfarande **exakt ett** kommando per foundation.
+
+Följden för modellen: ursprunget behöver bära både varifrån projektet kom och om analysen såg en
+stack. Skrivs som en diskriminerad union enligt §I — `{ kind: "new" } | { kind: "imported";
+stackDetected: boolean }` — inte som två lösa booleaner. `analyzeImport()` får motsvarande fält på
+`ImportAnalysis` så att predikatet är ett, deterministiskt och testbart på samma ställe som resten av
+analysen.
+
+**Not touched:** `/start` självt — dess innehåll och beteende är oförändrat, det ändras bara vem som
+får det. Importanalysen (#63), LLM-författandet (#65) och genereringsmotorns kontrakt. Ingen parallell
+genereringsväg: samma `generate()`, samma modell, ett fält mer.
+
+---
+
+## Acceptance criteria
+
+_What "done" means. Every line is something a reviewer can check._
+
+- [x] Projektmodellen bär ursprunget som en diskriminerad union (`{ kind: "new" }` /
+      `{ kind: "imported"; stackDetected: boolean }`), validerat med Zod, satt av server-koden från
+      `import_sources` vid genereringstillfället — och aldrig gissat i motorn.
+- [x] `analyzeImport()` avgör deterministiskt om det importerade trädet innehåller en kodsignal
+      (manifest eller källkod; dokument och redaktörskonfiguration räknas inte), och exponerar det på
+      `ImportAnalysis`.
+- [x] En foundation genererad från intervjun innehåller `.claude/commands/start.md` och **inte**
+      `cleanup.md`.
+- [x] En foundation genererad från en import **med** kodsignal innehåller `.claude/commands/cleanup.md`
+      och **inte** `start.md`.
+- [x] En foundation genererad från en import **utan** kodsignal innehåller `start.md` och inte
+      `cleanup.md` — samma utfall som ett nytt projekt, eftersom det inte finns något att kartlägga.
+- [x] Exakt ett av de två kommandona ingår i varje foundation. Aldrig båda, aldrig inget.
+- [x] `validate()` kräver rätt kommando per ursprung i stället för `start.md` villkorslöst
+      ([`index.ts:75`](../packages/engine/src/index.ts#L75)); en foundation utan sitt kommando
+      underkänns.
+- [x] `START_HERE.md` beskriver rätt ordning för sitt ursprung, och varje kommando den nämner finns i
+      det genererade repot. Inget dokument i en importerad foundation nämner `/start`.
+- [x] `/cleanup` kartlägger den faktiska stacken i det importerade projektet — språk, ramverk,
+      pakethanterare, testrunner, mappstruktur, konventioner, CI, deploy — och skriver om `CLAUDE.md`,
+      `docs/**` och `START_HERE.md` efter den.
+- [x] De `CMD_*` som dokumenten nämner efter `/cleanup` motsvarar scripts som faktiskt finns i det
+      importerade projektet.
+- [x] `/cleanup` hittar gammal AI-slop — föråldrade och motstridiga instruktionsfiler
+      (`.cursorrules`, gamla `AGENTS.md`, `.github/copilot-instructions.md` och liknande) — och
+      **rapporterar dem för foundern att ta ställning till. Den raderar aldrig en fil.**
+- [x] Där Airrows dokument tog en sökväg projektet redan använde återskapas founderns version ur
+      git-historiken och behålls som `.old` (`README.md` → `README.old.md`), aldrig raderad, och
+      `/cleanup` säger i klartext att den gamla filen finns kvar och kan användas — men att Airrows
+      version är den som arbetssättet utgår från. _(Omformulerat under `/implement`: två filer kan
+      inte ha samma sökväg samtidigt — se Implementation notes.)_
+- [x] Omdöpningen är den **enda** ändring `/cleanup` gör utanför Airrows egna dokument, och innehållet
+      i den omdöpta filen är byte för byte oförändrat.
+- [x] `/cleanup` skriver bara om Airrows genererade dokument — `CLAUDE.md`, `docs/**`, `START_HERE.md`,
+      `specs/README.md`. Founderns egna dokument läses för kontext men skrivs aldrig om, och
+      `.claude/spec-kit/constitution.md` lämnas orörd: den är filen som styr alla andra.
+- [x] `/cleanup` ändrar ingen applikationskod, inga beroenden, ingen konfiguration, inga migrationer
+      och ingen CI-logik — granskbart i kommandots text och verifierat i en manuell körning.
+- [x] `/cleanup` stannar vid maskingränsen: ingen remote, ingen provisionering, inga secrets — samma
+      regel som `/start`.
+- [x] `/cleanup` kört två gånger klobbar inget: andra körningen hoppar över det som redan är gjort och
+      lämnar founderns egna redigeringar orörda.
+- [x] `/cleanup` rapporterar vad den ändrade, vad den lämnade och vad den inte kunde härleda — det
+      sista som `[NEEDS CLARIFICATION: …]` i dokumentet, aldrig som en gissning.
+- [x] `pnpm engine:smoke` täcker båda vägarna: en fixture med importursprung och en utan, med rätt
+      kommandofil i respektive.
+- [x] Konstitutionen §0 och den genererade motsvarigheten säger vad `/cleanup` får och inte får, i
+      samma ändring som koden (§IV).
+- [x] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures).
+
+### Verification
+
+_How each criterion above is proven._
+
+- **New tests** — `packages/engine/src/cleanup-command.test.ts`: `cleanup.md` renderas per modell,
+  rätt kommando ingår för alla tre fallen (nytt / importerat med kodsignal / importerat utan), aldrig
+  båda och aldrig inget, inget `{{SLOT}}` lämnas orenderat, och ingen `/cleanup`-foundation nämner
+  `/start` i något dokument.
+- **Extended** — `packages/engine/src/import.test.ts`: kodsignal-predikatet — manifest och källkod ger
+  `true`, ett träd med bara dokument ger `false`, och resultatet är oberoende av filordningen (samma
+  determinismkrav som resten av analysen).
+- **`validate()` och `shipsPath()`** → samma nya fil, `cleanup-command.test.ts`, inte en egen. Planen
+  sa `index.test.ts` / `scaffold.test.ts`; motorn har ingen `index.test.ts`, och båda beteendena är
+  samma påstående som resten av filen testar — vilket kommando ett ursprung ger. Att sprida det över
+  tre filer hade gjort regeln svårare att läsa, inte bättre bevisad.
+- **Extended** — `scripts/engine-smoke.mjs`: en importfixture utöver de fyra befintliga.
+- **Kriterierna om `.old`-omdöpning och filomfång** → granskad egenskap av texten i `cleanup.md`, plus
+  den manuella körningen: `git status` efter körningen visar omdöpningar och ändrade dokument, inget
+  annat, och `git show` bekräftar att den omdöpta filens innehåll är oförändrat.
+- **Kriterierna om vad `/cleanup` gör och inte gör** → manuell körning, i specen: importera ett
+  riktigt projekt, generera, kör `/cleanup` i det, och redovisa vad som ändrades och vad som lämnades.
+  Samma resonemang som spec 66 — kommandot är instruktionstext, och de fyra buggarna där hittades av
+  körningen, inte av 90 gröna enhetstester.
+- **Kriteriet "ändrar ingen kod"** → granskad egenskap av texten i `cleanup.md` vid review, plus
+  `git status` efter den manuella körningen: inga ändringar utanför dokument.
+- Full suite result + typecheck/lint status.
+
+#### Resultat — 2026-07-27
+
+| Kommando | Resultat |
+| --- | --- |
+| `pnpm -r typecheck` | rent (3 projekt) |
+| `pnpm -r lint` | rent, inga nya anmärkningar (3 projekt) |
+| `pnpm -r test` | **419 gröna**, 27 skippade — schemas 35, engine 192, web 192 |
+| `pnpm test:scripts` | 13 gröna |
+| `pnpm engine:smoke` | SMOKE PASSED — 5 fixtures (Ledgerly är den nya importvägen) |
+| `pnpm --filter web build` | rent |
+
+De 27 skippade är pre-existerande: `*.db.test.ts`- och RLS-sviterna skippar utan lokal Supabase.
+Inga nya fel, inga pre-existerande fel.
+
+Nya tester: `cleanup-command.test.ts` (21) och `import.test.ts` (+8, kodsignal-predikatet).
+
+---
+
+## Exact changes (file:line)
+
+_The plan, for whoever implements it. Every change grounded in current code; expanded by `/implement`._
+
+**Kontrakt (`packages/schemas/src/`)**
+
+1. **`types.ts`** — `ProjectOrigin` (`{ kind: "new" } | { kind: "imported"; stackDetected: boolean }`)
+   och `ProjectModel.origin`. `ImportAnalysis.stackDetected` — analysens svar på "fanns det kod att
+   läsa".
+2. **`index.ts`** — `projectOriginSchema` (`z.discriminatedUnion`). Ursprunget korsar en gräns:
+   det härleds ur `import_sources.analysis`, en jsonb-kolumn som läses tillbaka utan validering idag.
+
+**Motor (`packages/engine/src/`)**
+
+3. **`import.ts`** — `hasCodeSignal(paths)`: manifest eller källkod ⇒ `true`; dokument, licenser och
+   redaktörskonfiguration ⇒ `false`. `analyzeImport()` sätter `stackDetected` från den.
+4. **`model.ts`** — `ResolveInput.origin`, valfritt och defaultat till `{ kind: "new" }`; ett projekt
+   utan importkälla *är* nytt, så defaulten är inte en gissning. `commandFor(model)` och
+   `commandPath(model)` — den enda platsen som avgör vilket kommando en foundation får.
+5. **`scaffold.ts`** ([:382](../packages/engine/src/scaffold.ts#L382)) — `shipsPath()` filtrerar bort
+   det kommando projektet inte ska ha. Nya renderare: `firstStep()` (START_HEREs steg 1 per
+   ursprung), `commandRule()` (konstitutionsregeln), `cleanupClaim()` och `cleanupScope()`.
+   `ciReadyCheck()` / `ciReadyCheckAzure()` och `setupSteps()` / `repoSetupSteps()` slutar namnge
+   `/start` i en importerad foundation.
+6. **`index.ts`** ([:75](../packages/engine/src/index.ts#L75)) — `validate(files, model)` kräver
+   `commandPath(model)` i stället för `start.md` villkorslöst.
+
+**Genererad output (`template/`)**
+
+7. **`.claude/commands/cleanup.md`** — ny; form och front-matter enligt
+   [`start.md`](../template/.claude/commands/start.md).
+8. **`START_HERE.md`** — steg 1 blir `{{FIRST_STEP}}`; `/start` i steg 2 blir `{{FIRST_COMMAND}}`;
+   meningen i steg 4 som namngav `/start` skrivs om kommandoneutralt.
+9. **`.claude/spec-kit/constitution.md`** — §IV-punkten blir `{{COMMAND_RULE}}`.
+10. **`.github/workflows/ci.yml`** och **`azure-pipelines.yml`** — grindens rubrik slutar namnge ett
+    kommando ("Is there a stack to verify?"); själva texten kommer redan från `CI_READY_CHECK`.
+11. **`.airrow-template.json`** — de fem nya tokens.
+
+**App (`apps/web/src/`)**
+
+12. **`features/interview/actions.ts`** ([:46](../apps/web/src/features/interview/actions.ts#L46)) —
+    slår upp `getImportSource()` och skickar in ursprunget när modellen resolvas. Det är den enda
+    platsen en `ProjectModel` skapas.
+13. **`lib/data/store.ts`** — normaliserar två jsonb-kolumner skrivna före den här ändringen:
+    `import_sources.analysis` utan `stackDetected` och `project_models.model` utan `origin`.
+
+**Verifiering**
+
+14. **`packages/engine/src/cleanup-command.test.ts`** — ny.
+15. **`packages/engine/src/import.test.ts`** — kodsignal-predikatet.
+16. **`scripts/engine-smoke.mjs`** — importfixture.
+
+**Airrows egna regler**
+
+17. **`.claude/spec-kit/constitution.md`** §0, **`CLAUDE.md`** och
+    **`docs/architecture/SYSTEM_OVERVIEW.md`** — `/cleanup` vid sidan av `/start`, i samma ändring
+    som koden (§IV).
+
+**No change needed:** genereringspipelinen i övrigt, LLM-författandet och konfliktflödet. `/cleanup`
+är en ny kommandofil och ett fält på modellen — inte en ny väg genom motorn.
+
+---
+
+## Data model
+
+**No schema changes.** Ursprunget härleds från `import_sources` vid genereringstillfället — raden
+finns redan (#63) och är den enda sanningen om att projektet importerades. En kolumn på `projects`
+hade blivit ett andra ställe som säger samma sak, med risk att de säger olika (§IV).
+
+---
+
+## Security
+
+`/cleanup` är instruktionstext som körs i founderns eget arbetsträd: den skriver inga secrets, når
+ingen resurs vi kontrollerar, och skapar inget utanför katalogen. Den läser kundens källkod — men hos
+foundern, aldrig på Airrows servrar, vilket är samma gräns som #63 satte när den valde att lagra
+digests i stället för innehåll.
+
+Inget av det `/cleanup` härleder rapporteras tillbaka till Airrow. Det följer av §II ("customer IP is
+protected", loggar bär ID och metadata — aldrig innehåll) och av valet i #63 att bara lagra digests:
+en telemetriväg härifrån vore första gången kundens kodinnehåll lämnade maskinen, och den vägen byggs
+inte.
+
+---
+
+## Edge cases
+
+_Unusual inputs or states, and what should happen._
+
+- **Importerat projekt utan någon kodsignal** (bara dokument, tomt repo) → foundationen får `/start`
+  i stället, per analysen. Se _Design decision_.
+- **Kodsignal finns men analysen kan inte namnge stacken** (t.ex. ett språk vi inte härleder) →
+  fortfarande `/cleanup`. Predikatet är "finns det kod att läsa", inte "vet vi vad det är".
+- **Importen kunde inte härleda stacken** (#63 tillåter det) → `/cleanup` kartlägger själv i repot;
+  det den fortfarande inte kan avgöra skrivs som `[NEEDS CLARIFICATION: …]`.
+- **Founderns dokument motsäger koden** → dokumentet vinner aldrig över koden; `/cleanup` skriver om
+  dokumentet och säger i rapporten att den gjorde det.
+- **`/cleanup` körs i ett repo som inte är det importerade** → ingen identitetskontroll, samma
+  precedens som `/start` (#66): kommandot kollar vad som finns och hoppar över det som redan är gjort,
+  det verifierar inte vilket repo det står i. Det enda det kräver är att foundationens dokument finns
+  där — annars har den inget att skriva om och säger det.
+- **Founderns fil och Airrows dokument har samma sökväg** → founderns döps om till `.old`, aldrig
+  raderas, och rapporteras. Uppstår när foundern packat upp leveransen ovanpå sitt projekt; valde de
+  "Keep mine" i konfliktsteget (#63) levererades Airrows version aldrig och kollisionen finns inte.
+- **`README.old.md` finns redan sedan en tidigare körning** → rör den inte, och skapa ingen andra
+  omdöpning. Kollisionen är redan löst.
+- **Monorepo med flera stackar** → dokumenten måste beskriva flera, inte välja en.
+- **Konfliktbeslut från #63 outredda vid nedladdning** → founderns filer levereras inte, så
+  foundationen `/cleanup` kör i kan sakna filer den förväntar sig. Får inte krascha kommandot.
+- **`/cleanup` körd i ett projekt där foundern redan skrivit egna specs** → rör dem inte.
+
+---
+
+## Implementation notes
+
+### Avvikelse: två filer kan inte ha samma sökväg
+
+Specen sa att founderns fil skulle döpas om "där founderns fil och Airrows dokument har samma
+sökväg". Det tillståndet finns inte: när leveransen skriver `README.md` är founderns `README.md`
+borta i samma ögonblick. Regeln blev därför **återskapa i stället för att döpa om** — founderns
+version hämtas ur git-historiken (`git show HEAD:README.md > README.old.md`, commiten före
+foundationen kom) och behålls som `.old`. Innehållet är byte för byte identiskt, verifierat i den
+manuella körningen.
+
+Konsekvensen är värd att stå för: i ett repo utan git, eller för en fil utan historik, finns inget
+att återskapa. `/cleanup` säger då det i rapporten och rör ingenting — den hittar inte på en gammal
+version. Det andra fallet är när foundern valde **"Keep mine"** i konfliktsteget (#63): då levererades
+Airrows version aldrig, det finns ingen kollision, och beslutet är founderns — `/cleanup` överprövar
+det inte.
+
+### Den manuella körningen hittade ett hål: CI namnger kommandon `/cleanup` inte får röra
+
+Kört mot ett riktigt "existerande projekt" (Vite + React + Stripe, scripts `dev` / `build` / `check` /
+`test` — alltså **ingen** `lint` och en typecheck som heter något annat), importanalyserat på riktigt
+(`stackDetected = true`, prefill `framework: vite`), foundationen levererad ovanpå, och kommandots
+steg följda bokstavligt.
+
+Sju filer namngav `npm run typecheck` och `npm run lint`, som inte finns i projektet. Fem av dem är
+dokument `/cleanup` får skriva om. De andra två är `.github/workflows/ci.yml` och
+`.claude/spec-kit/constitution.md` — och **båda ligger utanför kommandots gräns**. CI hade alltså gått
+röd på första pushen, vilket är exakt den defekt spec 66 skrevs för att få bort, och kommandot hade
+enligt sina egna regler inte fått laga den.
+
+Rättat i `cleanup.md` steg 3: en egen punkt som säger att CI namnger samma kommandon, att den är
+pipeline-konfiguration och otillåten att ändra, och att avvikelsen därför ska ligga **överst i
+rapporten** med de två vägarna ut — lägg till scripten i projektet, eller ändra workflowet — och att
+foundern väljer. Varken tyst fix eller tyst tystnad. Ingen enhetstest kunde se det här: det är en
+egenskap av vad kommandot är förbjudet att göra, inte av vad renderaren skriver.
+
+### Vad den manuella körningen visade i övrigt
+
+| Steg | Resultat |
+| --- | --- |
+| Importanalys av det riktiga projektet | ✅ `stackDetected = true`, prefill `{framework: vite, capabilities: [payments]}` |
+| Foundation levererad (22 filer), `cleanup.md` med — `start.md` inte | ✅ |
+| Founderns `README.md` återskapad som `README.old.md` | ✅ byte för byte identisk med `HEAD` |
+| Dokumentens kommandon rättade till projektets riktiga (`npm run check`, ingen linter) | ✅ |
+| Saknad linter skriven som `[NEEDS CLARIFICATION]` i stället för uppfunnen | ✅ |
+| `.cursorrules` och `AGENTS.md` kvar på disk | ✅ hittade och rapporterade, aldrig raderade |
+| `git status` för `src/`, `tests/`, `package.json`, `.gitignore` | ✅ tomt — ingen kod rörd |
+| Andra körningen | ✅ `.old` lämnad orörd, kommandofixen idempotent, founderns egen redigering i `CLAUDE.md` kvar |
+
+### `/analyze` — 2026-07-27
+
+Korskontroll spec ↔ kod ↔ konstitution: godkänd. Ett fynd, rättat i specen enligt §IV ("when code and
+spec disagree, fix the spec first"): _Verification_ namngav `packages/engine/src/index.test.ts`, som
+inte finns i motorn — `validate()`- och `shipsPath()`-fallen ligger i `cleanup-command.test.ts`
+tillsammans med resten av samma påstående. Sektionen säger nu det.
+
+Verifieringsbaren kördes om i sin helhet efter de sista ändringarna i `cleanup.md`: typecheck rent,
+lint rent, 419 gröna (27 pre-existerande skippade), `test:scripts` 13 gröna, `engine:smoke` PASSED.
+
+Motorn förblir ren: `hasCodeSignal()` och `commandFor()` är rena funktioner över modellen,
+databasuppslaget ligger i `apps/web/src/features/import/origin.ts`, och inget i `packages/**` läser
+`process.env` eller importerar från `apps/*`. Ingen schemaändring, alltså ingen ny RLS-yta.
+
+### `.env.example` finns inte i ett importerat projekt
+
+Följdfynd från samma körning. `SETUP_STEPS` sa "Copy `.env.example` to `.env.local`" — men den filen
+skrivs av `/start`, som ett importerat projekt aldrig kör. Samma defektklass som spec 66:s "fyra
+dokument bad foundern kopiera en fil som aldrig fanns". `setupSteps()` talar nu om *värden* och "this
+project's environment file" för den importerade vägen, och databassteget inleds med "If you do not
+already have one".
+
+## Out of scope
+
+_Deliberately excluded, so nobody wonders whether it was forgotten._
+
+- Att `/cleanup` skriver eller ändrar applikationskod, beroenden eller konfiguration. Gränsen är
+  poängen — §0 tillåter `/start` att sätta upp det minsta som kör, inte att skriva om något som redan
+  finns.
+- Ändringar i `/start`:s eget beteende (#66) — bara vem som får kommandot ändras.
+- Att radera något i founderns repo. `/cleanup` rapporterar och döper om, aldrig mer än så — §0,
+  "nothing destructive or irreversible runs automatically".
+- Att skriva om founderns egna dokument eller `.claude/spec-kit/constitution.md`. De läses för
+  kontext; omfånget är Airrows genererade dokument.
+- Repo-import via GitHub App och PR-leverans — ligger på
+  [#67](https://github.com/MS-Flow/airrow/issues/67).
+- Ändringar i importanalysen (#63) eller i LLM-författandet (#65). `/cleanup` kompletterar dem.
+- Att köra `/cleanup` automatiskt. Kommandot är founder-triggat, precis som `/start` (§0,
+  "founder-in-control").

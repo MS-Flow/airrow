@@ -27,11 +27,11 @@ variables:
   TZ: UTC
 
 stages:
-  # A foundation is documents until `/start` has run, and there is nothing to typecheck in a
-  # repository with no stack in it. Without this gate the very first push goes red before a line has
-  # been written — which says nothing true about the code and trains everyone to ignore the badge.
+  # There is nothing to typecheck in a repository with no stack in it. Without this gate the very
+  # first push goes red before a line has been written — which says nothing true about the code and
+  # trains everyone to ignore the badge.
   - stage: detect
-    displayName: Has /start run yet?
+    displayName: Is there a stack to verify?
     jobs:
       - job: check
         steps:

@@ -9,7 +9,10 @@ Airrow turns an adaptive CTO interview into a complete, production-grade **engin
 project. Founders then build locally with VS Code + Claude Code. **Airrow prepares projects for
 AI-assisted development — it never writes the application code itself.** The `/start` command it
 ships *inside* a generated repo is the deliberate exception (spec 66): the founder runs it there, and
-it takes that repo to the bare minimum that runs. Airrow's own servers still generate documents only.
+it takes that repo to the bare minimum that runs. A foundation generated for an **imported** project
+ships `/cleanup` instead (spec 91) — it reads the code that is already there and rewrites the
+documents to match it, and changes no code at all. Exactly one of the two, decided by the project's
+origin. Airrow's own servers still generate documents only.
 
 ## Shape
 pnpm workspaces monorepo (pnpm 9, Node ≥20):

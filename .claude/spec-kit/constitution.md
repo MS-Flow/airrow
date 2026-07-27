@@ -24,9 +24,13 @@ Every feature, screen, and generated file is judged against these.
   machine, it scaffolds the stack and sets the project up to the bare minimum that runs, using the
   information already in the repo. **Bare minimum is the ceiling** — enough to open, change and
   continue from, never a guess at the product. Everything past that goes through the spec loop.
-  Airrow's servers still never write application code, and ZIP delivery is still a complete foundation
-  on its own. (Amended by [spec 66](../../specs/66-start-command.md), which records the previous
-  wording.)
+  A foundation generated for a project that **already exists** ships `/cleanup` in its place: run the
+  same way, it reads the codebase that is there and rewrites the foundation's documents to describe
+  it. Its ceiling is narrower — it changes no code and deletes nothing. A foundation ships exactly one
+  of the two, decided by where the project came from. Airrow's servers still never write application
+  code, and ZIP delivery is still a complete foundation on its own. (Amended by
+  [spec 66](../../specs/66-start-command.md), which records the previous wording, and extended by
+  [spec 91](../../specs/91-cleanup-command.md).)
 - **The output is the product.** Generated repos must read like a senior CTO wrote them for *this*
   project — never like a filled-in template. Generic output is a top-severity bug.
 - **Adaptive, never bureaucratic.** The interview asks only questions whose answers change the output.

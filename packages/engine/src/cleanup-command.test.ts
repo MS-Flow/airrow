@@ -1,0 +1,230 @@
+// Tests for which first-run command a foundation ships, and for the `/cleanup` it ships to an
+// imported project (spec 91).
+//
+// Like `/start`, `/cleanup` is instruction text an assistant executes, so what is testable here is
+// what the renderer puts in the repository: that exactly one of the two commands is present, that it
+// is the one this project's origin calls for, and that no document names the command the founder
+// does not have. Whether the assistant then behaves is the manual check recorded in the spec.
+import { describe, it, expect } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { GenerationError, generate } from "./index.ts";
+import { commandPath, resolveProjectModel } from "./model.ts";
+import { renderScaffold, type TemplateFile } from "./scaffold.ts";
+import type { InterviewAnswers, ProjectOrigin } from "../../schemas/src/types.ts";
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const TEMPLATE_DIR = path.join(REPO_ROOT, "template");
+
+function loadTemplate(): TemplateFile[] {
+  const files: TemplateFile[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(abs);
+      else {
+        const rel = path.relative(TEMPLATE_DIR, abs).split(path.sep).join("/");
+        if (rel === ".airrow-template.json") continue;
+        files.push({ path: rel, content: fs.readFileSync(abs, "utf8") });
+      }
+    }
+  };
+  walk(TEMPLATE_DIR);
+  return files;
+}
+
+const TEMPLATE = loadTemplate();
+const START = ".claude/commands/start.md";
+const CLEANUP = ".claude/commands/cleanup.md";
+
+const BASE: InterviewAnswers = {
+  productType: "saas",
+  vision: "The system of record every agency runs on.",
+  mvpFocus: "Log a client and never miss a follow-up.",
+  coreEntities: "Agencies own Clients; a Client has many Follow-ups.",
+  tenancy: "organizations",
+  authModel: ["email_password"],
+  capabilities: [],
+  dataSensitivity: "standard",
+  scale: "validate",
+  framework: "nextjs",
+  database: "supabase",
+  hosting: "vercel",
+  repoProvider: "github",
+  team: "solo"
+};
+
+const NEW: ProjectOrigin = { kind: "new" };
+const IMPORTED: ProjectOrigin = { kind: "imported", stackDetected: true };
+const IMPORTED_EMPTY: ProjectOrigin = { kind: "imported", stackDetected: false };
+
+function model(origin: ProjectOrigin, answers: InterviewAnswers = BASE) {
+  return resolveProjectModel({
+    name: "Loop CRM",
+    description: "A lightweight CRM for small agencies.",
+    answers,
+    origin
+  });
+}
+
+function render(origin: ProjectOrigin, answers: InterviewAnswers = BASE) {
+  const { files } = renderScaffold(TEMPLATE, model(origin, answers));
+  const byPath = (p: string) => files.find((f) => f.path === p)?.content ?? "";
+  return { files, byPath, paths: files.map((f) => f.path), text: files.map((f) => f.content).join("\n") };
+}
+
+describe("a foundation ships exactly one first-run command", () => {
+  it("gives a project started from nothing /start, and not /cleanup", () => {
+    const { paths } = render(NEW);
+    expect(paths).toContain(START);
+    expect(paths).not.toContain(CLEANUP);
+  });
+
+  it("gives an imported project with code /cleanup, and not /start", () => {
+    const { paths } = render(IMPORTED);
+    expect(paths).toContain(CLEANUP);
+    expect(paths).not.toContain(START);
+  });
+
+  it("gives an import that held no code /start — there is nothing to read", () => {
+    const { paths } = render(IMPORTED_EMPTY);
+    expect(paths).toContain(START);
+    expect(paths).not.toContain(CLEANUP);
+  });
+
+  it("never ships both and never ships neither, whatever the origin", () => {
+    for (const origin of [NEW, IMPORTED, IMPORTED_EMPTY]) {
+      const { paths } = render(origin);
+      const shipped = paths.filter((p) => p === START || p === CLEANUP);
+      expect(shipped).toEqual([commandPath(model(origin))]);
+    }
+  });
+
+  it("rejects a foundation missing the command its origin calls for", () => {
+    const issuesFrom = (template: TemplateFile[], origin: ProjectOrigin): string[] => {
+      try {
+        generate(template, model(origin));
+      } catch (err) {
+        return err instanceof GenerationError ? err.issues : [String(err)];
+      }
+      return [];
+    };
+    expect(issuesFrom(TEMPLATE.filter((f) => f.path !== CLEANUP), IMPORTED)).toContain(
+      `missing required file: ${CLEANUP}`
+    );
+    expect(issuesFrom(TEMPLATE.filter((f) => f.path !== START), NEW)).toContain(
+      `missing required file: ${START}`
+    );
+  });
+});
+
+describe("the /cleanup command", () => {
+  it("renders with no unresolved token, for every stack", () => {
+    const custom = { ...BASE, framework: "custom", frameworkOther: "Rails 8 with Postgres" } satisfies InterviewAnswers;
+    for (const answers of [BASE, { ...BASE, framework: "vite" } satisfies InterviewAnswers, custom]) {
+      const cleanup = render(IMPORTED, answers).byPath(CLEANUP);
+      expect(cleanup).not.toBe("");
+      expect(cleanup).not.toMatch(/\{\{[A-Z0-9_]+\}\}/);
+    }
+  });
+
+  it("names the project rather than reading like a template", () => {
+    expect(render(IMPORTED).byPath(CLEANUP)).toContain("Loop CRM");
+  });
+
+  it("states the claims it must check against the repository", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    // The stack in these documents came from an interview, not from reading the code — saying so is
+    // what makes /cleanup a check rather than a proofread.
+    expect(cleanup).toContain("not from reading it");
+    expect(cleanup).toContain("the repository is right");
+    for (const command of ["pnpm dev", "pnpm build", "pnpm typecheck", "pnpm lint", "pnpm test"]) {
+      expect(cleanup).toContain(command);
+    }
+  });
+
+  it("forbids changing code, and says so about each kind of file", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(cleanup).toContain("It changes no code.");
+    for (const kind of ["dependency", "config file", "migration"]) {
+      expect(cleanup).toContain(kind);
+    }
+  });
+
+  it("renames a colliding file rather than deleting it, and leaves its contents alone", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(cleanup).toContain("README.old.md");
+    expect(cleanup).toContain("byte for byte unchanged");
+    expect(cleanup).toContain("It deletes nothing.");
+  });
+
+  it("reports old assistant instructions instead of removing them", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(cleanup).toContain(".cursorrules");
+    expect(cleanup).toContain("report them, delete nothing");
+  });
+
+  it("keeps the founder's own documents and the constitution out of its scope", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(cleanup).toContain("Read, never rewrite");
+    expect(cleanup).toContain(".claude/spec-kit/constitution.md");
+  });
+
+  it("leaves what it cannot establish as a marker rather than a guess", () => {
+    expect(render(IMPORTED).byPath(CLEANUP)).toContain("[NEEDS CLARIFICATION:");
+  });
+
+  it("stops at this machine, like /start does", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(cleanup).toContain("No remote");
+    expect(cleanup).toContain("no secrets written");
+  });
+});
+
+describe("the documents match the command the founder actually has", () => {
+  it("never names /start anywhere in an imported foundation", () => {
+    const { text } = render(IMPORTED);
+    expect(text).not.toContain("/start");
+  });
+
+  it("never names /cleanup anywhere in a new project's foundation", () => {
+    const { text } = render(NEW);
+    expect(text).not.toContain("/cleanup");
+  });
+
+  it("opens START_HERE.md with the command this project ships", () => {
+    expect(render(IMPORTED).byPath("START_HERE.md")).toContain("/cleanup");
+    expect(render(NEW).byPath("START_HERE.md")).toContain("/start");
+  });
+
+  it("keeps the verification bar in START_HERE.md for both origins", () => {
+    for (const origin of [NEW, IMPORTED]) {
+      const here = render(origin).byPath("START_HERE.md");
+      for (const command of ["pnpm dev", "pnpm typecheck", "pnpm lint", "pnpm test"]) {
+        expect(here).toContain(command);
+      }
+    }
+  });
+
+  it("carries the ceiling for its own command into the generated constitution", () => {
+    expect(render(IMPORTED).byPath(".claude/spec-kit/constitution.md")).toContain(
+      "`/cleanup` describes, the spec loop builds"
+    );
+    expect(render(NEW).byPath(".claude/spec-kit/constitution.md")).toContain(
+      "`/start` sets up, the spec loop builds"
+    );
+  });
+
+  it("does not tell an imported project to push a develop branch a command never created", () => {
+    const here = render(IMPORTED).byPath("START_HERE.md");
+    expect(here).toContain("existing GitHub repository");
+    expect(here).not.toContain("Create an empty repository");
+  });
+
+  it("does not tell CI to run a command this repository does not have", () => {
+    const ci = render(IMPORTED).byPath(".github/workflows/ci.yml");
+    expect(ci).toContain("push that project's code alongside these documents");
+    expect(ci).not.toContain("run /start");
+  });
+});

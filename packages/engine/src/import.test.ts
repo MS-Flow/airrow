@@ -11,6 +11,7 @@ import {
   pathOverlap,
   diffAgainstExisting,
   digestImported,
+  hasCodeSignal,
   isIgnoredImportPath,
   stripCommonRoot,
   IMPORT_LIMITS
@@ -140,6 +141,51 @@ describe("analyzeImport", () => {
     const analysis = analyzeImport([pkg({ next: "15.0.0" }), file("node_modules/next/package.json")]);
     expect(analysis.filesAnalyzed).toBe(1);
     expect(analysis.filesIgnored).toBe(1);
+  });
+
+  it("reports whether the archive held code at all", () => {
+    expect(analyzeImport([pkg({ next: "15.0.0" })]).stackDetected).toBe(true);
+    expect(analyzeImport([file("README.md", "# Notes")]).stackDetected).toBe(false);
+  });
+});
+
+// Which of the two first-run commands a foundation ships hangs on this one answer (spec 91), so it
+// is tested as its own predicate rather than only through the analysis that reports it.
+describe("hasCodeSignal", () => {
+  it("is true for a manifest, whatever language it belongs to", () => {
+    for (const path of ["package.json", "go.mod", "Cargo.toml", "pyproject.toml", "src/Api/Api.csproj", "Dockerfile"]) {
+      expect(hasCodeSignal([path])).toBe(true);
+    }
+  });
+
+  it("is true for source files, including stacks the analysis cannot name", () => {
+    for (const path of ["src/app.ts", "app/models/user.rb", "cmd/main.go", "lib/parser.ex", "db/schema.sql"]) {
+      expect(hasCodeSignal([path])).toBe(true);
+    }
+  });
+
+  it("is false for an archive of documents", () => {
+    expect(
+      hasCodeSignal(["README.md", "docs/vision.md", "LICENSE", ".gitignore", ".editorconfig", "notes.txt"])
+    ).toBe(false);
+  });
+
+  it("is false for an empty archive", () => {
+    expect(hasCodeSignal([])).toBe(false);
+  });
+
+  it("ignores dependencies and build output — vendored code is not this project's stack", () => {
+    expect(hasCodeSignal(["node_modules/next/package.json", "dist/bundle.js", ".next/server/page.js"])).toBe(false);
+  });
+
+  it("does not depend on the order of the files", () => {
+    const paths = ["README.md", "src/main.py", "docs/setup.md"];
+    expect(hasCodeSignal(paths)).toBe(hasCodeSignal([...paths].reverse()));
+  });
+
+  it("matches regardless of case, so an uppercase MAKEFILE still counts", () => {
+    expect(hasCodeSignal(["MAKEFILE"])).toBe(true);
+    expect(hasCodeSignal(["src/App.TSX"])).toBe(true);
   });
 });
 

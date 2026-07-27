@@ -20,6 +20,7 @@ import {
   setProjectStatus
 } from "@/lib/data/store";
 import { ALLOWANCE_REACHED_MESSAGE, checkAllowance } from "@/features/generation/allowance";
+import { projectOrigin } from "@/features/import/origin";
 
 export async function saveAnswersAction(projectId: string, raw: unknown): Promise<{ ok: boolean }> {
   const { org } = await requireSession();
@@ -46,7 +47,10 @@ export async function submitInterviewAction(projectId: string, raw: unknown): Pr
   const model = resolveProjectModel({
     name: project.name,
     description: project.description,
-    answers: validated.answers as InterviewAnswers
+    answers: validated.answers as InterviewAnswers,
+    // The only place a ProjectModel is built, so the only place the origin can be stamped on it —
+    // and it decides whether the foundation ships `/start` or `/cleanup` (spec 91).
+    origin: await projectOrigin(projectId)
   });
   const modelVersion = await createModelVersion(projectId, model);
 

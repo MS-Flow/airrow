@@ -132,6 +132,58 @@ function dependencyNames(content: string): Set<string> {
 
 const basename = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
+/** Package manifests and build files — one of these is a project, whatever language it is in. */
+const MANIFEST_FILES = [
+  "package.json",
+  "requirements.txt",
+  "pyproject.toml",
+  "pipfile",
+  "gemfile",
+  "go.mod",
+  "cargo.toml",
+  "pom.xml",
+  "build.gradle",
+  "build.gradle.kts",
+  "composer.json",
+  "mix.exs",
+  "pubspec.yaml",
+  "dockerfile",
+  "makefile"
+] as const;
+
+const MANIFEST_EXTENSIONS = [".csproj", ".sln", ".fsproj", ".vbproj", ".gemspec", ".cabal"] as const;
+
+/** Extensions that are somebody's source code rather than somebody's documentation. */
+const SOURCE_EXTENSIONS = [
+  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte",
+  ".py", ".rb", ".go", ".rs", ".java", ".kt", ".kts", ".swift", ".cs", ".fs", ".vb",
+  ".php", ".ex", ".exs", ".dart", ".scala", ".clj", ".c", ".h", ".cc", ".cpp", ".hpp", ".m", ".mm",
+  ".sql", ".sh", ".ps1"
+] as const;
+
+/**
+ * Did this archive hold a project, or only documents?
+ *
+ * The one question that decides which command the foundation ships (spec 91). `/cleanup` reads an
+ * existing codebase and rewrites the documents to match it; handed a repository with no code it has
+ * nothing to read, so that import gets `/start` instead — same as any project beginning from nothing.
+ *
+ * Paths only, deliberately: it must give the same answer for the archive being imported and for the
+ * digests stored from it, and the content of those files is never kept (§II). Deliberately *not*
+ * "did we recognise the stack" — a Rails or .NET project is code we cannot name, and a founder with
+ * one still has a codebase for `/cleanup` to read.
+ */
+export function hasCodeSignal(paths: readonly string[]): boolean {
+  return paths.some((path) => {
+    if (isIgnoredImportPath(path)) return false;
+    const name = basename(path).toLowerCase();
+    const manifests: readonly string[] = MANIFEST_FILES;
+    if (manifests.includes(name)) return true;
+    const suffixes: readonly string[] = [...MANIFEST_EXTENSIONS, ...SOURCE_EXTENSIONS];
+    return suffixes.some((ext) => name.endsWith(ext));
+  });
+}
+
 /* ── Analysis ─────────────────────────────────────────────────────────────── */
 
 /**
@@ -241,6 +293,7 @@ export function analyzeImport(files: ImportedFile[], alreadyIgnored = 0): Import
 
   return {
     answers,
+    stackDetected: hasCodeSignal(paths),
     evidence,
     notes,
     filesAnalyzed: kept.length,

@@ -79,6 +79,17 @@ export const importedFileSchema = z.object({
   content: z.string()
 });
 
+/**
+ * Where the project came from (spec 91). Validated rather than cast because it is derived from
+ * `import_sources.analysis` — a jsonb column, and rows written before `stackDetected` existed carry
+ * no answer at all. A missing field must fail here and be defaulted deliberately by the caller, not
+ * arrive in the engine as `undefined` and silently pick a command.
+ */
+export const projectOriginSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("new") }),
+  z.object({ kind: z.literal("imported"), stackDetected: z.boolean() })
+]);
+
 export const conflictResolutionSchema = z.enum(["keep_existing", "use_generated"]);
 
 /**
