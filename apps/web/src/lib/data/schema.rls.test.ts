@@ -29,6 +29,8 @@ const DELIVERY_A = "00000000-0000-0000-0000-0000000000a7";
 const DELIVERY_B = "00000000-0000-0000-0000-0000000000b7";
 const REPO_A = "00000000-0000-0000-0000-0000000000a8";
 const REPO_B = "00000000-0000-0000-0000-0000000000b8";
+const USAGE_A = "00000000-0000-0000-0000-0000000000a9";
+const USAGE_B = "00000000-0000-0000-0000-0000000000b9";
 
 async function reachable(): Promise<boolean> {
   const probe = new Client({ connectionString: DB_URL, connectionTimeoutMillis: 1500 });
@@ -58,7 +60,10 @@ const cases: Case[] = [
   { name: "generation_jobs", table: "generation_jobs", idA: JOB_A, idB: JOB_B },
   { name: "artifacts", table: "artifacts", idA: ARTIFACT_A, idB: ARTIFACT_B },
   { name: "deliveries", table: "deliveries", idA: DELIVERY_A, idB: DELIVERY_B },
-  { name: "repo_connections", table: "repo_connections", idA: REPO_A, idB: REPO_B }
+  { name: "repo_connections", table: "repo_connections", idA: REPO_A, idB: REPO_B },
+  // The allowance ledger. It outlives the projects it refers to, so it is the one org-scoped table
+  // whose rows can carry a null project_id — all the more reason its own policy has to hold.
+  { name: "generation_usage", table: "generation_usage", idA: USAGE_A, idB: USAGE_B }
   // `profiles` RLS is covered by auth.trigger.test.ts, which creates a real auth user
   // (profiles.id is FK'd to auth.users as of #18, so synthetic ids can't be seeded here).
 ];
@@ -94,6 +99,11 @@ describe.skipIf(!dbUp)("full schema RLS (local Supabase)", () => {
     await db.query(
       "insert into public.repo_connections (id, organization_id, provider, installation_id) values ($1,$2,'github','i1'),($3,$4,'github','i2')",
       [REPO_A, ORG_A, REPO_B, ORG_B]);
+    // The generation_jobs insert above already fired the usage trigger; these are the rows with
+    // known ids that the per-table assertions select on.
+    await db.query(
+      "insert into public.generation_usage (id, organization_id, project_id) values ($1,$2,$3),($4,$5,$6)",
+      [USAGE_A, ORG_A, PROJECT_A, USAGE_B, ORG_B, PROJECT_B]);
   });
 
   afterAll(async () => {

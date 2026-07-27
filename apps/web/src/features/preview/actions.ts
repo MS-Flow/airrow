@@ -6,6 +6,7 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { getProject, latestJob, loadArtifact, updateArtifactFile } from "@/lib/data/store";
+import { highlight } from "./highlight";
 
 export async function saveGeneratedFileAction(
   projectId: string,
@@ -32,4 +33,31 @@ export async function saveGeneratedFileAction(
 
   revalidatePath(`/app/projects/${projectId}/preview`);
   return {};
+}
+
+/**
+ * Syntax highlighting for one code file, on demand.
+ *
+ * Switching files used to be a full page navigation so the server could highlight the new one, which
+ * meant re-running auth, two queries and an artifact load before anything appeared — for a markdown
+ * file that needs no highlighting at all. The reader now switches instantly from the files it already
+ * has, and calls this only for code, showing plain text until it answers. Nothing waits on it.
+ *
+ * The path is re-checked against the stored artifact rather than trusted, and the content comes from
+ * there rather than from the caller: the same rule as `saveGeneratedFileAction`.
+ */
+export async function highlightFileAction(
+  projectId: string,
+  filePath: string
+): Promise<{ html?: string }> {
+  const { org } = await requireSession();
+  if (!(await getProject(org.id, projectId))) return {};
+
+  const job = await latestJob(projectId);
+  if (!job || job.status !== "completed") return {};
+
+  const file = (await loadArtifact(job.id))?.files.find((f) => f.path === filePath);
+  if (!file) return {};
+
+  return { html: (await highlight(file.content, filePath)) ?? undefined };
 }

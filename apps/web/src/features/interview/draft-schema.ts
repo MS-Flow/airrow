@@ -5,7 +5,7 @@ import { interviewAnswersSchema, projectCreateSchema } from "@airrow/schemas";
  * Bump when the question set changes shape. `z.literal` then rejects older drafts
  * outright, so a visitor starts clean instead of resuming a half-restored interview.
  */
-export const GUEST_DRAFT_VERSION = 1;
+export const GUEST_DRAFT_VERSION = 4;
 
 /**
  * The signed-out interview, as it sits in the browser. Reused on both sides of the

@@ -11,6 +11,12 @@ This file provides guidance to Claude Code when working with code in the {{PROJE
 
 Build toward that, not just toward the current ticket. Full picture: `docs/VISION.md`.
 
+## Not our problem
+These are deliberate exclusions, not gaps waiting to be filled. Don't build them, don't scaffold for
+them, and don't suggest them unless asked directly.
+
+{{NON_GOALS}}
+
 ## Communication style
 Be concise but clear. Short responses save tokens — avoid restating what was asked, keep summaries
 at the bare minimum, and omit filler. One clear sentence beats a paragraph.
@@ -37,7 +43,7 @@ plus `/pr-check` before a PR) governed by `.claude/spec-kit/constitution.md`. Se
 Update the corresponding spec in `/specs` — check off acceptance criteria, note any deviations.
 
 ## Branching & workflow
-We work via GitHub: a **feature** is a GitHub Project, **issues** are linked to it. Branch hierarchy:
+We work via {{REPO_PROVIDER}}: a **feature** is a {{BOARD_TERM}}, **{{ISSUE_TERM}}s** are linked to it. Branch hierarchy:
 `main` ← `develop` ← `feature/<name>` ← `<nr>-kort` (issue branch, no `issue/` prefix). PR direction
 is strict and never skipped: `<nr>-kort` → its `feature/<name>` → `develop` → `main`. **Never** PR an
 issue branch to `main`/`develop`. Full detail in `docs/architecture/BRANCHING.md`.

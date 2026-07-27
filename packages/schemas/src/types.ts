@@ -27,7 +27,8 @@ export type FeatureId =
   | "admin"
   | "audit_logs";
 
-export type Framework = "nextjs" | "vite";
+/** `custom` means the founder described their own stack in `frameworkOther`. */
+export type Framework = "nextjs" | "vite" | "custom";
 export type RepoProvider = "github" | "azure_devops";
 export type TeamShape = "solo" | "small_team" | "startup" | "agency";
 export type SecurityLevel = "standard" | "elevated";
@@ -49,10 +50,12 @@ export type Database = "supabase" | "postgres";
 /** Raw interview answers, keyed by question id. Order mirrors the interview flow. */
 export interface InterviewAnswers {
   productType?: ProductType;
+  problem?: string;
   vision?: string;
   mvpFocus?: string;
   audience?: Audience;
   coreEntities?: string;
+  nonGoals?: string;
   tenancy?: Tenancy;
   authModel?: AuthMethod[];
   roles?: "simple" | "granular";
@@ -63,6 +66,8 @@ export interface InterviewAnswers {
   dataSensitivity?: DataSensitivity;
   scale?: ScaleExpectation;
   framework?: Framework;
+  /** Free-text stack, when `framework` is `custom`. */
+  frameworkOther?: string;
   database?: Database;
   hosting?: Hosting;
   repoProvider?: RepoProvider;
@@ -88,6 +93,12 @@ export interface ProjectModel {
   hosting: Hosting;
   stack: {
     framework: Framework;
+    /**
+     * The founder's own words for their stack, when `framework` is `custom`; empty otherwise.
+     * Nothing derives commands or setup steps from it — those are authored (`TOOLCHAIN_SLOTS`),
+     * because no amount of string matching knows what `manage.py` is.
+     */
+    customFramework: string;
     language: "typescript";
     styling: "tailwind";
     ui: "shadcn/ui";
@@ -105,6 +116,10 @@ export interface ProjectModel {
   scale: ScaleExpectation;
   mvpFocus: string;
   coreEntities: string;
+  /** The problem and who has it. Empty when unanswered — never inferred. */
+  problem: string;
+  /** What the product deliberately is not doing. Empty when unanswered. */
+  nonGoals: string;
   derived: {
     multiTenant: boolean;
     hasPayments: boolean;
@@ -123,12 +138,29 @@ export interface GeneratedFile {
   templateId: string;
 }
 
+/**
+ * What wrote the prose in this generation (spec 65). `null` when nothing did — no API key, a failed
+ * call, a rejected response — and every file is then deterministic.
+ *
+ * Recorded because a generated file has to be attributable (constitution §II): the same answers put
+ * through a different prompt or a different model produce different documents, and without this a
+ * regression months from now has nothing to point at.
+ */
+export interface AuthoringRecord {
+  /** Bumped when the prompt changes in a way that would produce different prose from same answers. */
+  promptVersion: string;
+  /** Model id as sent to the API, e.g. `claude-haiku-4-5`. */
+  model: string;
+}
+
 export interface Manifest {
   engineVersion: string;
   schemaVersion: string;
   generatedAt: string;
   projectSlug: string;
   fileCount: number;
+  /** Provenance for every file marked `authored` below. */
+  authoring: AuthoringRecord | null;
   files: Array<{
     path: string;
     source: "static" | "authored";

@@ -17,13 +17,17 @@ Day-to-day local database work lives in [`DEVELOPER_GUIDE.md`](./DEVELOPER_GUIDE
 2. When it finishes provisioning, open **Project Settings → API** and note:
    - **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
    - **anon / public key** → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - **service_role key** → `SUPABASE_SERVICE_ROLE_KEY` *(server-only — never ship to the client)*
+   - **service_role key** → `SUPABASE_SERVICE_ROLE_KEY` _(server-only — never ship to the client)_
 3. Link the repo's local CLI config to the cloud project and push the migration:
    ```bash
    pnpm dlx supabase login                    # opens a browser to authorize the CLI
    pnpm dlx supabase link --project-ref <ref> # <ref> is in the dashboard URL / Settings → General
    pnpm dlx supabase db push                  # applies supabase/migrations to the cloud DB
    ```
+
+   - If `supabase link` fails with `Your account does not have the necessary privileges`, the CLI
+     is authenticated as an account that cannot see the project. Log out, log back in with the
+     Supabase owner/admin account, or ask the project owner to grant access, then rerun the link.
 4. Verify RLS in the dashboard: **Table Editor** shows `organizations` and `organization_members`;
    **Authentication → Policies** shows each has RLS **enabled** with the read policies from the
    migration. (This is the proof-of-concept schema; the full product schema is a separate issue.)
@@ -38,15 +42,20 @@ Day-to-day local database work lives in [`DEVELOPER_GUIDE.md`](./DEVELOPER_GUIDE
      installs from the repo root automatically. `apps/web/vercel.json` pins the framework.
    - **Framework Preset:** Next.js (auto-detected).
    - Leave Build/Install commands on their defaults unless a build error says otherwise.
-3. **Environment Variables** — add all four for **Production** *and* **Preview** (same values unless
+3. **Environment Variables** — add all four for **Production** _and_ **Preview** (same values unless
    you run a separate staging Supabase project):
    | Variable | Value |
    |---|---|
    | `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL |
    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon key |
    | `SUPABASE_SERVICE_ROLE_KEY` | service_role key |
+   | `ANTHROPIC_API_KEY` | Claude API key — enables authored prose (spec 65) |
    - `NEXT_PUBLIC_*` are exposed to the browser by design; the **service_role key must NOT** carry a
      `NEXT_PUBLIC_` prefix so it stays server-only.
+   - Without `ANTHROPIC_API_KEY` a deploy still generates — `authorFoundation` returns `null` and the
+     engine derives every document from the answers instead. That is a supported outcome, so nothing
+     errors and nothing in the UI says the prose was not written. The tell is in the database: a job
+     whose `prompt_version` is null was not authored.
 4. **Deploy.** The first production deploy runs off the branch you set as Production Branch.
 
 ---
@@ -76,13 +85,22 @@ Every push deploys automatically once the project is connected.
    dashboard setting — no extra step needed once both hostnames are attached.
 4. Wait for the status to read **Valid Configuration** before calling production done (DNS can lag).
 
+> **Blocked as of 2026-07-27.** `airrow.app` was bought under a Vercel team that was later deleted,
+> which leaves the domain registered (Name.com, expires 2027-07-23, still on `*.vercel-dns.com`) but
+> unreachable from every scope this account can access — so steps 1–4 cannot be completed yet. It
+> needs a Vercel Support ticket to be moved into the `airrow` team. Full diagnosis and the two
+> recovery routes: [`specs/12-vercel-domains.md`](../../specs/12-vercel-domains.md) § _Domain recovery_.
+>
+> **Never delete a Vercel team that owns a purchased domain** — the domain does not follow you, and
+> there is no self-service way to get it back. Move the domain out first.
+
 ### Branch → URL mapping
 
-| Branch | URL | Stability |
-|---|---|---|
-| `main` | `https://airrow.app` (+ `www.airrow.app` redirect) | Production — never changes |
-| `develop` | `https://dev.airrow.app` | Stable alias — same URL every deploy |
-| `feature/**`, `<nr>-<short>` | Vercel-generated preview URL | Throwaway — new URL per deploy |
+| Branch                       | URL                                                | Stability                            |
+| ---------------------------- | -------------------------------------------------- | ------------------------------------ |
+| `main`                       | `https://airrow.app` (+ `www.airrow.app` redirect) | Production — never changes           |
+| `develop`                    | `https://dev.airrow.app`                           | Stable alias — same URL every deploy |
+| `feature/**`, `<nr>-<short>` | Vercel-generated preview URL                       | Throwaway — new URL per deploy       |
 
 ---
 
@@ -111,8 +129,8 @@ Every push deploys automatically once the project is connected.
   `apps/web/.env.example` documents the names with no values. The location matters: Next.js reads
   `.env*` only from the directory it runs in, so a file at the repo root is ignored and the app looks
   permanently signed out.
-- **Email confirmation:** a hosted Supabase project ships with *Confirm email* **on**, so signup
+- **Email confirmation:** a hosted Supabase project ships with _Confirm email_ **on**, so signup
   creates the account but no session — the UI sends you to "Confirm your email" instead of the
   dashboard. `supabase/config.toml` (`enable_confirmations = false`) only governs a **local** stack.
-  Turn it off for the dev project under *Authentication → Sign In / Providers → Email* if you want
+  Turn it off for the dev project under _Authentication → Sign In / Providers → Email_ if you want
   signup to log you straight in.
