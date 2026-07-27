@@ -446,6 +446,108 @@ describe"* — with the added cost that `CLAUDE.md` is the first thing an assist
 so the contradiction would have been inherited by every future one. Both now carry the `/start`
 exception and point at this spec.
 
+### Follow-up: a mobile app was never asked which stack it was built in
+
+Reported by a founder who generated a mobile app, was never shown the stack question, and found
+`npm run dev` in every document of what turned out to be a Vite web SPA.
+
+The gate was real code, not a misreading:
+[`questions.ts`](../packages/schemas/src/questions.ts) hid the `framework` question behind
+`showIf: productType in [saas, marketplace, ai_agent, internal_tool, hobby]`, and
+[`model.ts`](../packages/engine/src/model.ts) resolved the unanswered case to `vite` for
+`mobile_app` and `browser_extension`. Two lists that were meant to be the same idea had drifted —
+the neighbouring `audience` question gates on `WEB_PRODUCT_TYPES`, which *includes* all three of the
+product types the stack question excluded. Everything downstream was correct: Vite means npm, npm
+means `npm run dev`. **A default nobody is shown is a decision nobody made.**
+
+Fixed by asking everyone, and by moving the recommendation into data:
+
+- **`STANDARD_STACK`** (`questions.ts`) — one row per product type: the recommended `framework`
+  option, plus a `describe` string for the types the engine cannot scaffold itself (mobile app →
+  Expo, API → Node + Hono, browser extension → Vite + CRXJS). `model.ts` resolves an unanswered
+  stack from the same table, so an old draft lands where the founder would have been pointed.
+- **`Question.suggest`** — a generic `{ from, value }` map: for a `single` question it names the
+  option to mark **Recommended**, for a `text` one the text to prefill. `withSuggestions()` applies
+  it on every answer change and never writes over what the founder typed. That is what puts Expo in
+  front of a mobile founder without taking the choice away from them.
+- **`QuestionOption.recommended`** — for the questions whose golden path is the same for everyone.
+  The `— recommended` suffixes came out of the labels; the badge is rendered from these two rules
+  instead, because which option is recommended now depends on an earlier answer.
+
+**Deliberately not done:** Expo did not become a fourth `Framework`. Three more golden paths
+(scaffolder, package manager, CI setup, deploy target) is a different spec, and the `custom` route
+already exists for exactly this — the toolchain is authored from the description, which is the
+treatment spec 65 chose for any stack we cannot derive. The known cost is that a mobile app now
+takes that route, so with no authoring key its `CMD_*` render as `[NEEDS CLARIFICATION]` markers and
+CI gates itself off. That is the honest failure, and it is the one already designed for.
+
+### Follow-up: `/start` did not install the stack `CLAUDE.md` names
+
+Same founder, next step. `/start` ran, the app came up, and the assistant closed with: *"Not
+installed: Tailwind and shadcn/ui, which CLAUDE.md names as the stack. /start's section 1 doesn't
+list them and its ceiling forbids components ahead of a spec, so the screen is plain CSS."*
+
+It was right on both counts, and both were our defect — the same class as the commands that could
+not run:
+
+1. **The install step was missing.** `STACK_SUMMARY` has always said "TypeScript · Tailwind +
+   shadcn/ui" for both golden paths. `create-next-app --tailwind` gets halfway there and
+   `create-vite` not at all, and nothing anywhere installed shadcn/ui. → New
+   `designSystemStep()` in `scaffold.ts` as `/start` step 4: `shadcn@latest init` on Next.js;
+   Tailwind v4 (`@tailwindcss/vite`), the `@/*` alias shadcn resolves through, and then `init` on
+   Vite. `init` only — it writes `components.json` and the `cn` helper and installs no components,
+   and it names the `add` command without running it.
+2. **The ceiling forbade the design system.** `startMinimum()` said "no components built ahead of a
+   spec", which an assistant correctly reads as covering the UI library it was just handed. Styling
+   is the stack, not a feature. The ceiling now says so explicitly, and differently for a custom
+   stack, where nothing claims Tailwind in the first place.
+
+Also folded in: `dlx()`, so the one-off tools run with the founder's package manager (`pnpm dlx` /
+`npx`) — `deploySteps()` had grown its own copy of that expression.
+
+### Follow-up: two more places the stack was assumed rather than read
+
+Both found by reading a rendered mobile-app foundation, and both older than this change — the
+mobile route just made them visible.
+
+- **`.env.example` handed every project Next.js's variable prefix.** `envExample()` emitted
+  `NEXT_PUBLIC_SUPABASE_URL` for any Supabase project, so a **Vite** app — a golden path, chosen by
+  founders today — got two variables its bundler does not expose. The failure is silent: `undefined`
+  at runtime, no error, in the file the founder fills in first. Now `NEXT_PUBLIC_` / `VITE_` per
+  framework, and unprefixed for a described stack with the rule stated rather than guessed. The
+  service-role key stays server-only in all three.
+- **A doubled period in the first instruction.** `startBootstrap()` appended `.` to the stack name,
+  which is free text a founder may already have ended with one — "…jest-expo for tests.." reads as a
+  typo in step 1. `sentence()` now adds one only where one is missing, and the prefilled standard
+  stacks are written as fragments so they also read correctly inline in `STACK_SUMMARY`.
+
+**This changes `startBootstrap()`, so the manual check below is due again** — see the note that
+closes this file. Not yet re-run: the design-system step is the third-party behaviour these tests
+cannot see, exactly like the four bugs the first manual run found.
+
+#### Verification — the three follow-ups above, 2026-07-27
+
+New tests: `packages/schemas/src/questions.test.ts` (14) — every product type reaches the stack
+question, the recommendation is per product type and never Vite for a mobile app, prefills stay
+inside `ANSWER_MAX_CHARS` and are never written over. `model.test.ts` (+3) — an unanswered stack
+resolves from `STANDARD_STACK`, and an answered one wins over it. `start-command.test.ts` (+9) — the
+design system its documents name is installed, `init` without components, the right package-manager
+runner, the public-variable prefix the chosen stack actually reads, the sentence fix, and a mobile
+app foundation that claims no design system it did not install.
+
+| Command | Result |
+|---|---|
+| `pnpm -r typecheck` | clean (3 projects) |
+| `pnpm -r lint` | clean, no new issues |
+| `pnpm -r test` | **288 passed**, 24 skipped — schemas 35, engine 121, web 132 |
+| `pnpm test:scripts` | 13 passed |
+| `pnpm engine:smoke` | SMOKE PASSED — 4 fixtures |
+| `pnpm build` | clean |
+
+The 24 skipped are the pre-existing Supabase-dependent suites. No fixture was added for the mobile
+route: the smoke script asserts a derived `pnpm`/`npm run` command per file, which a described stack
+deliberately does not have.
+
 ### What this says about the verification decision
 
 `/clarify` chose unit tests plus one manual check over a real end-to-end run in CI, to keep §V's "no

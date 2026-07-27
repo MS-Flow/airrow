@@ -128,6 +128,11 @@ function cmds(
   return { commands, fromModel };
 }
 
+/** How the chosen package manager runs a one-off tool it has not installed. */
+function dlx(model: ProjectModel): string {
+  return packageManager(model) === "npm" ? "npx" : "pnpm dlx";
+}
+
 /** `install` for the chosen package manager — the reproducible, lockfile-respecting form. */
 function installCommand(model: ProjectModel, ci: boolean): string {
   if (packageManager(model) === "npm") return ci ? "npm ci" : "npm install";
@@ -291,7 +296,7 @@ function deploySteps(model: ProjectModel): string {
       "          exit 0"
     ].join("\n");
   }
-  const dlx = packageManager(model) === "npm" ? "npx" : "pnpm dlx";
+  const run = dlx(model);
   return [
     "      - name: Deploy to Vercel (DEV)",
     "        env:",
@@ -301,9 +306,9 @@ function deploySteps(model: ProjectModel): string {
     '            echo "::warning::VERCEL_TOKEN missing — skipping DEV deploy until secrets are set."',
     "            exit 0",
     "          fi",
-    `          ${dlx} vercel@latest pull --yes --environment=preview --token="$VERCEL_TOKEN"`,
-    `          ${dlx} vercel@latest build --token="$VERCEL_TOKEN"`,
-    `          ${dlx} vercel@latest deploy --prebuilt --token="$VERCEL_TOKEN"`
+    `          ${run} vercel@latest pull --yes --environment=preview --token="$VERCEL_TOKEN"`,
+    `          ${run} vercel@latest build --token="$VERCEL_TOKEN"`,
+    `          ${run} vercel@latest deploy --prebuilt --token="$VERCEL_TOKEN"`
   ].join("\n");
 }
 
@@ -402,6 +407,60 @@ const scaffoldDir = (model: ProjectModel): string => `${model.slug}-scaffold`;
 const VITEST_MAJOR = "^3";
 
 /**
+ * Step 4: the design system the generated documents already name (spec 66 follow-up).
+ *
+ * `CLAUDE.md`, `SYSTEM_OVERVIEW.md` and the README all state this project's stack as "TypeScript ·
+ * Tailwind + shadcn/ui", and neither scaffolder produces that: `create-next-app --tailwind` gets
+ * halfway there, `create-vite` not at all. A founder's first run of `/start` therefore ended with
+ * their assistant reporting that the stack in `CLAUDE.md` was not the stack on disk and asking which
+ * of the two was wrong. Neither was — the install step was simply missing.
+ *
+ * `init` only: it writes `components.json` and the `cn` helper and adds no components. A design
+ * system is the stack, not a feature, so it belongs here; components are product and stay behind a
+ * spec, which is why the one that adds them is named and left unrun.
+ */
+function designSystemStep(model: ProjectModel): string[] {
+  const run = dlx(model);
+  const init = `${run} shadcn@latest init --yes --base-color neutral`;
+  const closing = [
+    `   That writes \`components.json\` and the \`cn\` helper, and installs **no components**.`,
+    `   Components arrive one at a time, when a spec calls for one: \`${run} shadcn@latest add <name>\`.`
+  ];
+  if (model.stack.framework === "vite") {
+    return [
+      "4. **Add Tailwind and shadcn/ui.** `create-vite` ships neither, and this project's documents",
+      "   name both as its stack:",
+      "",
+      "   ```bash",
+      "   npm install tailwindcss @tailwindcss/vite",
+      "   npm install -D @types/node",
+      "   ```",
+      "",
+      '   Then make them work: `src/index.css` becomes `@import "tailwindcss";`, `tailwindcss()` joins',
+      "   `plugins` in `vite.config.ts`, and the `@/*` path alias goes into `tsconfig.json`,",
+      "   `tsconfig.app.json` and `vite.config.ts` (`resolve.alias`) — shadcn/ui resolves its imports",
+      "   through that alias and its init fails without it. Then:",
+      "",
+      "   ```bash",
+      `   ${init}`,
+      "   ```",
+      "",
+      ...closing
+    ];
+  }
+  return [
+    "4. **Initialise shadcn/ui.** Tailwind came with the scaffolder (`--tailwind`); shadcn/ui did not,",
+    "   and this project's documents name both as its stack:",
+    "",
+    "   ```bash",
+    `   ${init}`,
+    "   ```",
+    "",
+    ...closing
+  ];
+}
+
+/**
  * The bootstrap steps `/start` runs, per framework (spec 66).
  *
  * Every flag the official scaffolder understands is passed explicitly. That is the whole point:
@@ -418,7 +477,7 @@ function startBootstrap(model: ProjectModel, stackName: string): string {
   // them an afternoon of undoing it. Same treatment the CI setup steps already give a custom stack.
   if (isCustomStack(model)) {
     return [
-      `1. **Scaffold ${stackName}.** Use its official project generator, in this directory. This`,
+      `1. **Scaffold ${sentence(stackName)}** Use its official project generator, in this directory. This`,
       "   foundation cannot name the command for you — it is your stack, and a wrong guess here is",
       "   worse than an honest gap. Keep every file that is already here.",
       "2. **Wire the toolchain** so the commands below are real: a type check, a linter, and a test",
@@ -460,16 +519,18 @@ function startBootstrap(model: ProjectModel, stackName: string): string {
     "",
     `3. **Install dependencies:** \`${installCommand(model, false)}\`.`,
     "",
-    `4. **Add the test runner:** \`${add} vitest@${VITEST_MAJOR}\`. Pinned to a major deliberately —`,
+    ...designSystemStep(model),
+    "",
+    `5. **Add the test runner:** \`${add} vitest@${VITEST_MAJOR}\`. Pinned to a major deliberately —`,
     "   unpinned, this lands whatever shipped today, and a test runner that will not start is the",
     `   exact failure this command exists to prevent. A project whose \`${cmdName(model, "test")}\``,
     "   does nothing is worse than one without tests: it reports green having checked nothing.",
     "",
-    "5. **Make the five commands real.** The `scripts` block in `package.json` must define `dev`,",
+    "6. **Make the five commands real.** The `scripts` block in `package.json` must define `dev`,",
     "   `build`, `typecheck`, `lint` and `test`, because `START_HERE.md` and `.github/workflows/ci.yml`",
     "   already name them. `typecheck` is `tsc --noEmit`; TypeScript runs `strict`.",
     "",
-    "6. **Create `.env.example`, then copy it to `.env.local`.** The foundation names this file but",
+    "7. **Create `.env.example`, then copy it to `.env.local`.** The foundation names this file but",
     "   does not ship it — nothing here knows your keys, and a committed file that might hold one is",
     "   not worth the risk. It carries variable *names* only, never values:",
     "",
@@ -490,15 +551,35 @@ function startBootstrap(model: ProjectModel, stackName: string): string {
  * `git add .` away from being committed.
  */
 function envExample(model: ProjectModel): string[] {
-  const lines = usesSupabase(model)
-    ? [
-        "NEXT_PUBLIC_SUPABASE_URL=",
-        "NEXT_PUBLIC_SUPABASE_ANON_KEY=",
-        "SUPABASE_SERVICE_ROLE_KEY=   # server-only — never prefix this one with NEXT_PUBLIC_"
-      ]
-    : [`DATABASE_URL=   # ${databaseLabel(model)} connection string, server-only`];
+  if (!usesSupabase(model)) {
+    const lines = [`DATABASE_URL=   # ${databaseLabel(model)} connection string, server-only`];
+    if (model.derived.hasAi) lines.push("# plus the API key for whichever model provider you settle on");
+    return lines;
+  }
+  // The prefix is what decides whether a variable reaches the browser at all, and every bundler
+  // spells it differently — a Vite app given `NEXT_PUBLIC_` reads `undefined` at runtime with no
+  // error anywhere. Unprefixed for a stack we do not know, with the rule stated instead of guessed.
+  const publicPrefix = { nextjs: "NEXT_PUBLIC_", vite: "VITE_", custom: "" }[model.stack.framework];
+  const lines = [
+    `${publicPrefix}SUPABASE_URL=`,
+    `${publicPrefix}SUPABASE_ANON_KEY=`,
+    publicPrefix === ""
+      ? "SUPABASE_SERVICE_ROLE_KEY=   # server-only — the two above are browser-safe and need your stack's public prefix; this one must never get it"
+      : `SUPABASE_SERVICE_ROLE_KEY=   # server-only — never prefix this one with ${publicPrefix}`
+  ];
   if (model.derived.hasAi) lines.push("# plus the API key for whichever model provider you settle on");
   return lines;
+}
+
+/**
+ * End a founder-written phrase as a sentence.
+ *
+ * The stack description is free text: some founders end it with a period, some do not, and the
+ * prefilled standard stacks are written as fragments. Appending one unconditionally produced
+ * "…jest-expo for tests..", which reads as a typo in the first instruction they follow.
+ */
+function sentence(text: string): string {
+  return /[.!?]$/.test(text) ? text : `${text}.`;
 }
 
 /** The command as the founder types it, for prose that names one. */
@@ -518,14 +599,23 @@ function startMinimum(model: ProjectModel): string {
   const entities = model.coreEntities
     ? `The core objects this product is about: ${model.coreEntities} Name them where they belong — a type, a folder, a heading. Do not model them, do not persist them, do not build screens for them.`
     : "No core objects were described in the interview, so do not invent any.";
+  // Styling is the stack, not a feature. Left unsaid, an assistant reads the ceiling below as
+  // forbidding the design system section 1 just installed and ships a plain-CSS screen — then
+  // reports that the stack in CLAUDE.md is not the stack on disk, which was a real founder's first
+  // experience of /start.
+  const styling = isCustomStack(model)
+    ? "Style it the way this stack styles things — plainly, using what section 1 set up. Add no UI library that was not already there."
+    : "Style it with Tailwind, using the shadcn/ui primitives section 1 installed where one fits. That is this project's design system and using it is not a feature — but do not add components ahead of a spec that calls for them.";
   return [
     "Replace the generator's placeholder home page with one screen that is recognisably this",
     `project: **${model.name}** — ${what}`,
     "",
     entities,
     "",
+    styling,
+    "",
     "**This is the ceiling, not a starting budget.** No features, no routes nobody asked for, no",
-    "database, no auth, no components built ahead of a spec that calls for them. The founder should",
+    "database, no auth, nothing built ahead of a spec that calls for it. The founder should",
     "open the page, recognise their product, and see plainly where to change it next. Everything",
     "past that goes through `/createspec` — that is what the rest of this foundation is for."
   ].join("\n");

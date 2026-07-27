@@ -137,11 +137,48 @@ describe("the bootstrap matches the framework the founder chose", () => {
     }
   });
 
+  // A founder's first real /start ended with their assistant reporting that CLAUDE.md named
+  // Tailwind and shadcn/ui while the screen it had just built was plain CSS. Neither document was
+  // wrong — the install step was missing.
+  it("installs the design system its own documents name as the stack", () => {
+    for (const answers of [nextjs, vite]) {
+      const { start, byPath } = render(answers);
+      expect(byPath("CLAUDE.md")).toContain("Tailwind + shadcn/ui");
+      expect(start).toContain("shadcn@latest init");
+      expect(start).toContain("Tailwind");
+    }
+    // create-vite ships neither; create-next-app ships Tailwind and stops there.
+    expect(render(vite).start).toContain("npm install tailwindcss @tailwindcss/vite");
+    expect(render(nextjs).start).toContain("--tailwind");
+  });
+
+  it("initialises the design system without installing components ahead of a spec", () => {
+    const { start } = render(nextjs);
+    expect(start).toContain("installs **no components**");
+    expect(start).toContain("when a spec calls for one");
+  });
+
+  it("runs the one-off tools with the package manager the stack actually uses", () => {
+    expect(render(nextjs).start).toContain("pnpm dlx shadcn@latest");
+    expect(render(vite).start).toContain("npx shadcn@latest");
+  });
+
   it("admits it cannot bootstrap a stack the founder described, rather than guessing", () => {
     const { start } = render(custom);
     expect(start).toContain("Django 5 with Postgres, managed by uv");
     expect(start).not.toContain("create next-app@latest");
     expect(start).not.toContain("create vite@latest");
+  });
+
+  // A founder's stack description may or may not end in a period, and the prefilled standard ones
+  // are fragments. Appending one blindly put "for tests.." in the first instruction they follow.
+  it("closes the stack it names as one sentence, whichever way the founder wrote it", () => {
+    const scaffoldStep = (answers: InterviewAnswers) =>
+      render(answers).start.split("\n").find((line) => line.includes("**Scaffold ")) ?? "";
+    expect(scaffoldStep(custom)).toContain("managed by uv.**");
+    const ended = { ...custom, frameworkOther: "Django 5 with Postgres, managed by uv." };
+    expect(scaffoldStep(ended)).toContain("managed by uv.**");
+    expect(scaffoldStep(ended)).not.toContain("..");
   });
 });
 
@@ -174,6 +211,13 @@ describe("bare minimum is stated as a ceiling, not a starting budget", () => {
     expect(start).toContain("/createspec");
   });
 
+  // Without this the ceiling reads as forbidding the design system section 1 just installed, and
+  // the founder gets a plain-CSS screen plus a question about which document to believe.
+  it("puts styling inside the ceiling rather than leaving it to be guessed at", () => {
+    expect(render(nextjs).start).toContain("design system and using it is not a feature");
+    expect(render(custom).start).toMatch(/Style it the way this stack styles things/);
+  });
+
   it("draws the minimum from the founder's own answers", () => {
     const { start } = render(nextjs);
     expect(start).toContain("Log a client and never miss a follow-up.");
@@ -183,6 +227,26 @@ describe("bare minimum is stated as a ceiling, not a starting budget", () => {
   it("invents no core objects when the founder named none", () => {
     const { start } = render({ ...nextjs, coreEntities: "" });
     expect(start).toContain("do not invent any");
+  });
+});
+
+describe("a product type the golden path does not cover", () => {
+  // The stack question is now asked of everyone; this covers the answer set that predates it, which
+  // used to resolve to Vite and hand a mobile founder a web SPA.
+  const mobile = { ...BASE, productType: "mobile_app", framework: undefined } satisfies InterviewAnswers;
+
+  it("writes the foundation for the standard stack of that product type", () => {
+    const { start, byPath } = render(mobile);
+    expect(start).toContain("Expo");
+    expect(byPath("CLAUDE.md")).toContain("Expo");
+  });
+
+  it("scaffolds nothing it cannot scaffold, and claims no design system it did not install", () => {
+    const { start, byPath } = render(mobile);
+    expect(start).not.toContain("create vite@latest");
+    expect(start).not.toContain("create next-app@latest");
+    expect(start).not.toContain("shadcn@latest init");
+    expect(byPath("CLAUDE.md")).not.toContain("Tailwind + shadcn/ui");
   });
 });
 
@@ -199,6 +263,22 @@ describe(".env.example is created, not assumed", () => {
     const postgres = render({ ...nextjs, database: "postgres" }).start;
     expect(postgres).toContain("DATABASE_URL=");
     expect(postgres).not.toContain("SUPABASE");
+  });
+
+  // The prefix is what decides whether a variable reaches the browser, and each bundler spells it
+  // differently. A Vite app handed `NEXT_PUBLIC_` reads `undefined` at runtime with no error.
+  it("uses the public-variable prefix the chosen stack actually reads", () => {
+    expect(render(vite).start).toContain("VITE_SUPABASE_URL=");
+    expect(render(vite).start).not.toContain("NEXT_PUBLIC_");
+    const described = render(custom).start;
+    expect(described).toContain("SUPABASE_URL=");
+    expect(described).not.toMatch(/NEXT_PUBLIC_SUPABASE_URL|VITE_SUPABASE_URL/);
+  });
+
+  it("keeps the service-role key off the browser whatever the stack", () => {
+    for (const answers of [nextjs, vite, custom]) {
+      expect(render(answers).start).toMatch(/SUPABASE_SERVICE_ROLE_KEY=\s+# server-only/);
+    }
   });
 });
 
