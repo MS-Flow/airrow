@@ -18,9 +18,6 @@ Airrow is where founders **prepare to build** — not where they build. An adapt
 
 ## What Airrow Is Not
 
-- Not a code generator or app builder (no v0/Lovable/Bolt competition)
-- Not a project management tool
-- Not an IDE or AI chat product
 - Not a boilerplate marketplace — output is generated per project, not copied
 
 ## Who It's For
@@ -43,10 +40,10 @@ The strategic moat is the methodology plus the living connection to the repo —
 
 ## Success Criteria
 
-- A founder goes from idea to a cloned, AI-ready repo in under 30 minutes.
+- A founder goes from idea to a cloned, AI-ready repo in under 10 minutes.
 - Claude Code sessions in Airrow-generated repos measurably outperform sessions in bare repos (fewer corrections, less rework, consistent output).
 - "Run it through Airrow first" becomes standard advice for starting an AI-native project.
 
 ## North-Star Metric
 
-Projects generated that reach an active repository (cloned + commits within 14 
+Projects generated that reach an active repository (cloned + commits within 14

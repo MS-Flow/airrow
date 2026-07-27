@@ -195,10 +195,19 @@ html {
 
 /* Content that must not move with the rail: step back out of the shell's offset and centre
    on the viewport instead, so collapsing the rail widens the margins rather than sliding
-   the page. A no-op outside the shell, where `--rail` is 0. */
-.viewport-column {
-  margin-left: calc(var(--rail) * -1);
-  width: calc(100% + var(--rail));
+   the page. A no-op outside the shell, where `--rail` is 0.
+
+   Only from 98rem up, and that number is the whole point: centred on the viewport, the
+   widest page column (72rem) clears a 13rem rail exactly at 72 + 13 + 13 = 98rem. Below
+   it there is nothing to centre *in* without tucking the column under the fixed rail —
+   which is what used to happen, hiding 184px of text behind the sidebar at 900px. So
+   below 98rem the column centres in the space beside the rail and moves with it, which
+   costs the no-shift nicety and buys never overlapping. */
+@media (min-width: 98rem) {
+  .viewport-column {
+    margin-left: calc(var(--rail) * -1);
+    width: calc(100% + var(--rail));
+  }
 }
 
 /* The preview reader keeps its text column in the same place while the rail and the file

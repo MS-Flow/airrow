@@ -26,7 +26,28 @@ export interface Question {
   placeholder?: string;
   required: boolean;
   showIf?: Condition[];
+  /** Character ceiling for a `text` answer — see `ANSWER_MAX_CHARS`. */
+  maxChars?: number;
 }
+
+/**
+ * How long a free-text answer may be, per question (spec 65). One source for three consumers: the
+ * textarea's `maxLength`, the Zod schema at the write boundary, and the authoring prompt's budget.
+ *
+ * Sized to what each question asks for rather than one blanket number. Two reasons they are this
+ * tight: these answers are forwarded to an LLM, so their length is a cost the founder neither pays
+ * nor sees; and the interview can be answered without an account, so the input is not necessarily
+ * the founder's own.
+ */
+export const ANSWER_MAX_CHARS = {
+  problem: 400,
+  vision: 300,
+  mvpFocus: 300,
+  coreEntities: 600,
+  nonGoals: 400,
+  frameworkOther: 300,
+  integrations: 300
+} as const;
 
 const WEB_PRODUCT_TYPES = ["saas", "marketplace", "ai_agent", "mobile_app", "api", "browser_extension"];
 
@@ -49,11 +70,25 @@ export const interviewQuestions: Question[] = [
     ]
   },
   {
+    // Asked first among the written answers, and asked separately from the vision: without it every
+    // document describes features with no account of why any of them matter, and an agent reading
+    // them has nothing to weigh a decision against.
+    id: "problem",
+    title: "What problem are you solving, and who has it?",
+    help: "The situation today, and who it hurts. This is the single most useful thing you can tell your AI assistants.",
+    type: "text",
+    required: true,
+    maxChars: ANSWER_MAX_CHARS.problem,
+    placeholder:
+      "e.g. Independent property managers track applications across email and spreadsheets, so good tenants go days without an answer and get lost to bigger agencies."
+  },
+  {
     id: "vision",
     title: "Where is this heading long-term?",
     help: "One sentence on what it becomes if it succeeds. Your AI assistants build toward this.",
     type: "text",
     required: true,
+    maxChars: ANSWER_MAX_CHARS.vision,
     placeholder: "e.g. The default operating system for independent property managers."
   },
   {
@@ -62,6 +97,7 @@ export const interviewQuestions: Question[] = [
     help: "The one core action of the MVP — this drives your roadmap and first specs. One sentence.",
     type: "text",
     required: true,
+    maxChars: ANSWER_MAX_CHARS.mvpFocus,
     placeholder: "e.g. Let a property manager create a listing and receive tenant applications online."
   },
   {
@@ -83,7 +119,21 @@ export const interviewQuestions: Question[] = [
     help: "The 3–7 most important things and how they relate. Skip it if you're not sure yet — you can fill it in later.",
     type: "text",
     required: false,
+    maxChars: ANSWER_MAX_CHARS.coreEntities,
     placeholder: "e.g. Landlords own Properties; a Property has many Listings; a Listing receives Applications from Tenants."
+  },
+  {
+    // Written into the generated CLAUDE.md, where it is the only thing standing between a coding
+    // agent and a week of work nobody asked for. Optional, because a founder who has none yet
+    // should not be made to invent them.
+    id: "nonGoals",
+    title: "What is this explicitly not doing?",
+    help: "The things you keep being tempted by and are deliberately leaving out. Your AI assistants will respect these.",
+    type: "text",
+    required: false,
+    maxChars: ANSWER_MAX_CHARS.nonGoals,
+    placeholder:
+      "e.g. No accounting or rent collection — those stay in the tools people already pay for. No native mobile app in year one."
   },
   {
     id: "tenancy",
@@ -165,6 +215,7 @@ export const interviewQuestions: Question[] = [
     type: "text",
     required: false,
     showIf: [{ questionId: "capabilities", in: ["payments", "email", "notifications", "analytics", "ai"] }],
+    maxChars: ANSWER_MAX_CHARS.integrations,
     placeholder: "e.g. Stripe for billing, Resend for email, Slack for alerts, HubSpot for CRM."
   },
   {
@@ -191,38 +242,88 @@ export const interviewQuestions: Question[] = [
     ]
   },
   {
+    // Every stack question states what it *changes* in the output, not just what it means. A founder
+    // picked Vite, got `npm run dev` in START_HERE, and read it as a bug — the choice was clear, its
+    // consequence was invisible. TypeScript, Tailwind and shadcn/ui are fixed and not asked about.
     id: "framework",
     title: "Which web framework?",
-    help: "Airrow's golden path is Next.js on Vercel. Vite fits pure SPAs.",
+    help: "Recommended: Next.js. Either way you get TypeScript, Tailwind and shadcn/ui — this choice decides the package manager, so it sets every command in your generated docs and CI.",
     type: "single",
     required: true,
     showIf: [{ questionId: "productType", in: ["saas", "marketplace", "ai_agent", "internal_tool", "hobby"] }],
     options: [
-      { value: "nextjs", label: "Next.js", description: "Recommended — App Router, server actions, Vercel-native" },
-      { value: "vite", label: "Vite + React", description: "Lightweight SPA, backend via Supabase only" }
+      {
+        value: "nextjs",
+        label: "Next.js — recommended",
+        description: "App Router, server actions, server-side rendering. Uses pnpm, so your docs say `pnpm dev`. Pick this unless you know you want an SPA."
+      },
+      {
+        value: "vite",
+        label: "Vite + React",
+        description: "A pure single-page app with no server of its own — all data goes through Supabase from the browser. Uses npm, so your docs say `npm run dev`."
+      },
+      {
+        value: "custom",
+        label: "Something else — describe it",
+        description: "Django, Rails, SvelteKit, Go, Laravel — anything. Your docs are written for the stack you name, commands included."
+      }
     ]
+  },
+  {
+    // Only the two golden-path frameworks have commands anyone here can derive; for everything else
+    // the toolchain is authored from this answer (see TOOLCHAIN_SLOTS). Naming the language and
+    // package manager matters more than the framework: it is what decides `pnpm dev` from
+    // `python manage.py runserver`.
+    id: "frameworkOther",
+    title: "Describe your stack",
+    help: "Language, framework and package manager at minimum. Everything generated for you — setup steps, the commands in START_HERE.md, the architecture docs — is written for what you put here.",
+    type: "text",
+    required: true,
+    showIf: [{ questionId: "framework", in: ["custom"] }],
+    maxChars: ANSWER_MAX_CHARS.frameworkOther,
+    placeholder: "e.g. Django 5 with Python 3.12 and uv for dependencies, HTMX and Tailwind on the front end, pytest for tests."
   },
   {
     id: "database",
     title: "Which database?",
-    help: "All options are PostgreSQL — you keep RLS, SQL migrations, and the same schema. Supabase is the golden path (it also bundles Auth, Storage & Realtime).",
+    help: "Recommended: Supabase. Both are PostgreSQL — you keep RLS, SQL migrations and the same schema either way. This decides how much you wire up yourself.",
     type: "single",
     required: true,
     options: [
-      { value: "supabase", label: "Supabase", description: "Recommended — Postgres with Auth, Storage, Realtime & RLS built in" },
-      { value: "postgres", label: "Self-hosted Postgres", description: "Your own Postgres server — wire auth & storage yourself" }
+      {
+        value: "supabase",
+        label: "Supabase — recommended",
+        description: "Postgres with Auth, Storage, Realtime and RLS already wired. Your setup steps become 'create a project, paste two keys'."
+      },
+      {
+        value: "postgres",
+        label: "Self-hosted Postgres",
+        description: "Your own Postgres. Same schema and migrations, but auth and file storage are yours to build — your setup steps say so."
+      }
     ]
   },
   {
     id: "hosting",
     title: "Where will you deploy?",
-    help: "Vercel is the golden path and the generated CI targets it. Other targets need the deploy workflow adjusted.",
+    help: "Recommended: Vercel. This decides the deploy workflow you get in .github/workflows — Vercel ships ready to run; the others ship as a marked placeholder for you to finish.",
     type: "single",
     required: true,
     options: [
-      { value: "vercel", label: "Vercel", description: "Recommended — zero-config for Next.js, preview per PR" },
-      { value: "azure", label: "Azure", description: "For Microsoft-centric organizations" },
-      { value: "self_host", label: "Self-host", description: "Your own servers / containers" }
+      {
+        value: "vercel",
+        label: "Vercel — recommended",
+        description: "Zero-config for Next.js, a preview URL per pull request. The generated deploy workflow targets it and works as shipped."
+      },
+      {
+        value: "azure",
+        label: "Azure",
+        description: "For Microsoft-centric organizations. The deploy workflow ships as a placeholder you complete."
+      },
+      {
+        value: "self_host",
+        label: "Self-host",
+        description: "Your own servers or containers. The deploy workflow ships as a placeholder you complete."
+      }
     ]
   },
   {

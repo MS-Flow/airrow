@@ -90,6 +90,7 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
     hosting: a.hosting ?? "vercel",
     stack: {
       framework,
+      customFramework: framework === "custom" ? (a.frameworkOther ?? "").trim() : "",
       language: "typescript",
       styling: "tailwind",
       ui: "shadcn/ui",
@@ -106,6 +107,8 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
     scale: a.scale ?? "validate",
     mvpFocus: (a.mvpFocus ?? "").trim(),
     coreEntities: (a.coreEntities ?? "").trim(),
+    problem: (a.problem ?? "").trim(),
+    nonGoals: (a.nonGoals ?? "").trim(),
     derived: {
       multiTenant,
       hasPayments: features.includes("payments"),
@@ -162,7 +165,15 @@ export const teamLabel: Record<ProjectModel["team"], string> = {
 };
 
 export function frameworkLabel(m: ProjectModel): string {
+  // A custom stack is named by the founder, so it is echoed rather than mapped — the whole point is
+  // that the documents say what they actually build in.
+  if (m.stack.framework === "custom") return m.stack.customFramework || "your stack";
   return m.stack.framework === "nextjs" ? "Next.js (App Router)" : "Vite + React";
+}
+
+/** True when the founder described their own stack, so nothing about its toolchain can be derived. */
+export function isCustomStack(m: ProjectModel): boolean {
+  return m.stack.framework === "custom";
 }
 
 export function repoLabel(m: ProjectModel): string {

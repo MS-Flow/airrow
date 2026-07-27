@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Menu, PanelLeftClose, PanelLeftOpen, Settings, X } from "lucide-react";
+import { LayoutGrid, Menu, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
 import { AirrowLogo } from "@/components/brand/logo";
 import { AirrowMark } from "@/components/brand/mark";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -69,6 +69,17 @@ export function Sidebar() {
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const closeDrawer = React.useCallback(() => setDrawerOpen(false), []);
 
+  // The drawer has no close button of its own, so Escape has to work — tapping the page
+  // behind it should not be the only way out.
+  React.useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDrawerOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawerOpen]);
+
   return (
     <>
       {/* Mobile: a button in the flow of the top bar opens the drawer. */}
@@ -93,11 +104,7 @@ export function Sidebar() {
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 flex flex-col border-r border-border bg-bg-subtle transition-[width,transform] duration-200 ease-out-quart",
-          // As a drawer the header also carries a close button, which `w-52` cannot fit
-          // beside a full-size lockup: the logo lost ~12px and the wordmark shrank with it.
-          // The drawer overlays the page (`--rail` is 0 below `md`), so widening it there
-          // costs no content width.
-          collapsed ? "w-16" : "w-60 md:w-52",
+          collapsed ? "w-16" : "w-52",
           drawerOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
@@ -106,9 +113,12 @@ export function Sidebar() {
             mirrors the nav's insets — the rail's `px-3` plus each link's `px-2.5` — so it also
             lines up with "Projects" and "Settings" below it. */}
         {/* The bottom border continues the top bar's, so one line crosses the whole viewport. */}
+        {/* No close button beside the logo, even as a drawer: it left the lockup nowhere to
+            sit straight, and the drawer already closes by tapping the page behind it or
+            pressing Escape. The header is the logo and nothing else, at every width. */}
         <div
           className={cn(
-            "flex h-17 items-center justify-between border-b border-border px-3",
+            "flex h-17 items-center border-b border-border px-3",
             collapsed && "justify-center px-0"
           )}
         >
@@ -125,14 +135,6 @@ export function Sidebar() {
                 resizing the logo. */}
             {collapsed ? <AirrowMark priority className="h-10" /> : <AirrowLogo size="lg" priority />}
           </Link>
-          <button
-            type="button"
-            onClick={closeDrawer}
-            aria-label="Close navigation"
-            className="cursor-pointer rounded-md p-1 text-fg-faint transition-colors hover:text-fg md:hidden"
-          >
-            <X className="size-4" />
-          </button>
         </div>
 
         <nav className="flex-1 space-y-1 px-3 pt-2">
