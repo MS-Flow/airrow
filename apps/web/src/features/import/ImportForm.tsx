@@ -7,9 +7,11 @@
 // action returns, so after a rejected archive the founder would have found both fields wiped —
 // and, since they are required, the form silently refused to submit again. Controlled values
 // survive the reset. The file input can't be controlled (browsers forbid it), so it does clear;
-// the hint below says so rather than leaving a required-but-empty field to explain itself.
+// the dropzone is handed that error and shows it as its own state rather than leaving a
+// required-but-empty field to explain itself.
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { FileDropzone } from "@/components/ui/file-dropzone";
 import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { InlineError } from "@/components/ui/states";
@@ -90,24 +92,25 @@ export function ImportForm() {
 
       <div>
         <Label htmlFor="archive">Your project as a .zip</Label>
-        <Input
+        <FileDropzone
           id="archive"
           name="archive"
-          type="file"
           accept=".zip,application/zip"
           required
-          onChange={(e) => setArchive(e.target.files?.[0] ?? null)}
+          prompt="Drop your project here"
+          noun="archive"
+          error={state.error ? "Choose your archive again — the file field clears after an error." : undefined}
+          onFileChange={setArchive}
+          hint={
+            <>
+              Up to 50 MB and 5,000 files. <code className="font-mono text-2xs">node_modules</code>,{" "}
+              <code className="font-mono text-2xs">.git</code>,{" "}
+              <code className="font-mono text-2xs">dist</code> and{" "}
+              <code className="font-mono text-2xs">.next</code> are skipped, so you don&rsquo;t have
+              to clean up first.
+            </>
+          }
         />
-        {state.error ? (
-          <p className="mt-2 text-sm text-fg-muted">Choose your archive again — the file field clears after an error.</p>
-        ) : null}
-        <p className="mt-2 text-sm text-fg-faint">
-          Up to 50 MB and 5,000 files. <code className="font-mono text-2xs">node_modules</code>,{" "}
-          <code className="font-mono text-2xs">.git</code>,{" "}
-          <code className="font-mono text-2xs">dist</code> and{" "}
-          <code className="font-mono text-2xs">.next</code> are skipped, so you don&rsquo;t have to
-          clean up first.
-        </p>
       </div>
 
       <input type="hidden" name="source" value="zip" />
