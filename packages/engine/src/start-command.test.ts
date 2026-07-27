@@ -248,6 +248,38 @@ describe("a product type the golden path does not cover", () => {
     expect(start).not.toContain("shadcn@latest init");
     expect(byPath("CLAUDE.md")).not.toContain("Tailwind + shadcn/ui");
   });
+
+  // The reported case, verbatim: a founder chose "Something else" and typed one line. Every command
+  // in every generated file came out as a clarification marker.
+  it("runs on a one-line stack description rather than filling the files with markers", () => {
+    const { start, byPath } = render({
+      ...BASE,
+      productType: "mobile_app",
+      framework: "custom",
+      frameworkOther: "stack for mobileapp ios"
+    });
+    for (const file of [start, byPath("START_HERE.md"), byPath("CLAUDE.md")]) {
+      expect(file).not.toContain("[NEEDS CLARIFICATION: CMD_");
+    }
+    expect(byPath("START_HERE.md")).toContain("npx expo start");
+    expect(start).toContain("npx create-expo-app@latest");
+  });
+
+  it("names the ecosystem's own generator once it recognises one", () => {
+    const django = render({
+      ...BASE,
+      framework: "custom",
+      frameworkOther: "Django 5 with Python 3.12 and uv"
+    });
+    expect(django.start).toContain("django-admin startproject");
+    // And still refuses to invent one for a stack it does not know.
+    const unknown = render({
+      ...BASE,
+      framework: "custom",
+      frameworkOther: "something entirely of my own devising"
+    });
+    expect(unknown.start).toContain("foundation cannot name the command for you");
+  });
 });
 
 describe(".env.example is created, not assumed", () => {
@@ -319,9 +351,18 @@ describe("CI does not go red on a repo that has not run /start", () => {
     expect(ci).toContain("needs.detect.outputs.ready == 'true'");
   });
 
-  it("gates a custom stack on its commands being real, since no file marks it", () => {
-    const ci = render(custom).byPath(".github/workflows/ci.yml");
-    expect(ci).not.toContain("if [ -f package.json ]; then");
+  // No file marks a described stack the way `package.json` marks a Node one, so the gate asks
+  // whether this job can do the whole thing — install included. Real commands run on a runner where
+  // nothing was installed is the same red first push, arriving from the other side.
+  it("runs a described stack it can set up, and stands down on one it cannot", () => {
+    const known = render(custom).byPath(".github/workflows/ci.yml");
+    expect(known).not.toContain("if [ -f package.json ]; then");
+    expect(known).toContain('echo "ready=true"');
+    expect(known).toContain("actions/setup-python");
+
+    const unknown = render({ ...custom, frameworkOther: "something entirely of my own devising" });
+    const ci = unknown.byPath(".github/workflows/ci.yml");
     expect(ci).toContain('echo "ready=false"');
+    expect(ci).toContain("::warning::");
   });
 });

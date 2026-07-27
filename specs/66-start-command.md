@@ -548,6 +548,75 @@ The 24 skipped are the pre-existing Supabase-dependent suites. No fixture was ad
 route: the smoke script asserts a derived `pnpm`/`npm run` command per file, which a described stack
 deliberately does not have.
 
+### Follow-up: a described stack now gets commands, not four blanks
+
+Reported from the run that followed: the founder chose "Something else" and typed **"stack for
+mobileapp ios"**. Every command in `START_HERE.md`, `CLAUDE.md` and `/start` came out as
+`[NEEDS CLARIFICATION: CMD_*]`.
+
+Nothing was broken. Spec 65 gave a described stack exactly two rungs — the authoring model writes
+the commands, or a marker admits we do not know — and on a one-line description the model returned
+nothing to write. The floor was honest and useless: **the file exists to be run.**
+
+**A third rung, between the two:** [`toolchain.ts`](../packages/engine/src/toolchain.ts) —
+`inferStack(description)`, a pure ordered table of ecosystem profiles. Each carries what that
+ecosystem's own getting-started page gives: its five commands, its reproducible CI install, its
+runtime, and its official generator where one exists. Fourteen profiles, most specific first, so
+naming Swift, Kotlin or Flutter always beats the bare word "ios" — which lands on Expo, the same
+stack [`STANDARD_STACK`](../packages/schemas/src/questions.ts) recommends a mobile app.
+
+The ladder is now **authored → inferred → marker**. What the model wrote still wins; the marker
+still ships for a description nothing recognises ("something entirely of my own devising"), because
+inventing a command there is the defect this all started from.
+
+Three things had to move with it, or the change would have traded one broken first push for another:
+
+- **CI setup steps.** With real commands, the custom-stack CI placeholder (`echo ::warning`, `exit
+  0`) became a red build: real commands run on a runner where nothing was installed. `RUNTIME_SETUP`
+  maps each profile's runtime to its GitHub action and its Azure Pipelines task, then runs the
+  profile's install. This closed a hole that predates the change — an authored toolchain has always
+  shipped alongside that placeholder.
+- **The CI gate.** `ciReadyCheck` asked only whether the commands were real. It now asks whether the
+  job can do the whole thing, install included (`ciCanRun`). Swift answers no on purpose: it wants
+  macOS, and the Linux runner the generated workflow uses cannot pass.
+- **`/start` section 1.** Where the ecosystem is recognised, its own generator is named — `npx
+  create-expo-app@latest`, `django-admin startproject`, `rails new`. That is the difference between
+  a command a founder runs and a paragraph telling them to go and find one.
+
+Plus the authoring prompt (`PROMPT_VERSION` 6 → 7): a thin description is still an answer, and
+`productType` says what is being built, so resolve it and give that stack's commands rather than
+handing back five blanks.
+
+**Considered and rejected: replacing the founder's words with the profile's name.** "stack for
+mobileapp ios" would read better as "Expo (React Native)" in `STACK_SUMMARY` — but the same rule
+turns "Django 5 on Python 3.12, uv for dependencies" into "Django", and "SvelteKit with TypeScript"
+into "Node with TypeScript". Four existing tests assert we keep their words, and they are right to:
+the authored `STACK_NAME` slot exists to tidy that sentence, and losing information is a worse
+default than an untidy one.
+
+#### Verification — 2026-07-27
+
+| Command | Result |
+|---|---|
+| `pnpm -r typecheck` | clean (3 projects) |
+| `pnpm -r lint` | clean, no new issues |
+| `pnpm -r test` | **297 passed**, 24 skipped — schemas 35, engine 130, web 132 |
+| `pnpm test:scripts` | 13 passed |
+| `pnpm engine:smoke` | SMOKE PASSED — 4 fixtures |
+| `pnpm build` | clean |
+
+New: `toolchain.test.ts` (7) — the reported sentence, a named framework beating the words around it,
+nine ecosystems, the package manager the founder named, no partial toolchains, and no ecosystem
+given the same command for its type check and its linter. `start-command.test.ts` (+2) — the
+reported case end to end (no `CMD_` marker in any file, `npx expo start` in `START_HERE.md`), and
+the generator named only where one is known.
+
+Four existing tests changed rather than were deleted, because the behaviour moved: three in
+`authored.test.ts` (a missing command is now filled from the description, the marker is asserted
+against a genuinely unrecognisable stack, and custom-stack CI ships Python's setup rather than a
+placeholder) and one in `start-command.test.ts` (the gate now stands down on a stack it cannot set
+up, rather than on commands alone).
+
 ### What this says about the verification decision
 
 `/clarify` chose unit tests plus one manual check over a real end-to-end run in CI, to keep §V's "no
