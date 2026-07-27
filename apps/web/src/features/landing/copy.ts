@@ -71,10 +71,11 @@ export const DELIVERABLES: {
   },
   {
     icon: "pipeline",
-    // Retitled with the branch model, which is the half founders feel first: the pipeline is what
-    // catches a bad commit, the branch structure is what stops two agents writing over each other.
+    // Two clauses, one promise each: the pipeline catches a bad commit, the branch structure stops
+    // two agents writing over each other. Kept to the length of the other five cards — this one ran
+    // to twice that and the claim got lost in it.
     title: "CI/CD and branching",
-    body: "GitHub Actions that lint, typecheck, test and deploy from your first commit, on a branch model your commands set up for you, so parallel work merges instead of turning into conflicts",
+    body: "GitHub Actions that lint, typecheck, test and deploy, plus an automated branch structure that prevents merge conflicts",
   },
   {
     icon: "standards",

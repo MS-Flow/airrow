@@ -640,9 +640,15 @@ Three places carried the old framing:
 **And the deliverables grid gained the half it was missing.** "CI/CD pipeline" listed the checks and
 said nothing about the branch model, which is the part a founder running several agents feels first:
 a pipeline catches a bad commit, the branch structure is what stops two agents writing over each
-other. Retitled to "CI/CD and branching", with the merge-conflict promise made explicit. The landing
-voice rules from spec 23 still apply and `copy.test.ts` still enforces them: no em dash, no double
-hyphen, no named assistant.
+other. Retitled to "CI/CD and branching", body cut to two clauses with one promise each:
+
+> GitHub Actions that lint, typecheck, test and deploy, plus an automated branch structure that
+> prevents merge conflicts
+
+The first attempt ran to twice the length of the other five cards and the claim got lost inside it.
+Card copy in that grid is a fragment, not a sentence, and the merge-conflict promise only lands if it
+is the last thing read. The landing voice rules from spec 23 still apply and `copy.test.ts` still
+enforces them: no em dash, no double hyphen, no named assistant.
 
 ### What this says about the verification decision
 
