@@ -1,7 +1,7 @@
 "use client";
 
 // Repository preview (F-402): tree + rendered content, deep-linkable.
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Check, ChevronDown, ChevronRight, FileText, Pencil, X } from "lucide-react";
 import { marked } from "marked";
@@ -9,7 +9,8 @@ import DOMPurify from "dompurify";
 import { Button } from "@/components/ui/button";
 import { InlineError } from "@/components/ui/states";
 import { cn } from "@/lib/utils";
-import { saveGeneratedFileAction } from "./actions";
+import { highlightFileAction, saveGeneratedFileAction } from "./actions";
+import { resolvePreviewLink } from "./links";
 
 export interface PreviewFile {
   path: string;
@@ -121,9 +122,24 @@ export function PreviewBrowser({
   const searchParams = useSearchParams();
   const byPath = useMemo(() => new Map(files.map((f) => [f.path, f.content])), [files]);
   const tree = useMemo(() => buildTree(files), [files]);
+  // Generated documents link to directories as well as files — `../specs/`, `../.claude/commands/`.
+  // Those are real destinations in a repository, so they open the folder rather than doing nothing.
+  const dirs = useMemo(() => {
+    const s = new Set<string>();
+    for (const f of files) {
+      const parts = f.path.split("/");
+      for (let i = 1; i < parts.length; i++) s.add(parts.slice(0, i).join("/"));
+    }
+    return s;
+  }, [files]);
 
+  // The active file is client state, not a URL read. Every file's content is already here, so a
+  // switch is a re-render; routing to it made the server re-run auth, two queries and an artifact
+  // load before anything appeared. The URL is still updated below so a link to a file keeps working.
   const requested = searchParams.get("file");
-  const active = requested && byPath.has(requested) ? requested : "README.md";
+  const [active, setActive] = useState(() =>
+    requested && byPath.has(requested) ? requested : "README.md"
+  );
 
   const [openSet, setOpenSet] = useState<Set<string>>(() => {
     const s = new Set<string>();
@@ -148,31 +164,82 @@ export function PreviewBrowser({
     });
   }, []);
 
+  const reader = useRef<HTMLDivElement>(null);
+
   const select = useCallback(
     (p: string) => {
-      const params = new URLSearchParams(searchParams.toString());
+      if (!byPath.has(p)) return;
+      setActive(p);
+      // Deep links keep working without a navigation: no RSC round-trip, no scroll restoration.
+      const params = new URLSearchParams(window.location.search);
       params.set("file", p);
-      router.replace(`?${params.toString()}`, { scroll: false });
+      window.history.replaceState(null, "", `?${params.toString()}`);
+      reader.current?.scrollTo({ top: 0 });
     },
-    [router, searchParams]
+    [byPath]
   );
 
   const content = byPath.get(active) ?? "";
   const isMarkdown = active.endsWith(".md");
-  const [html, setHtml] = useState("");
+  const html = useMemo(() => {
+    if (!isMarkdown) return "";
+    const raw = marked.parse(content, { async: false });
+    return DOMPurify.sanitize(typeof raw === "string" ? raw : "");
+  }, [content, isMarkdown]);
+
+  /**
+   * A generated document is mostly links to its siblings, and rendered markdown gives them plain
+   * relative hrefs — which the browser resolves against the *route*, landing on a 404. So clicks are
+   * caught here and turned into a selection. A link to something the foundation does not contain does
+   * nothing at all, which is the honest outcome: better a dead link than a 404 page.
+   */
+  const onReaderClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+      const anchor = (e.target as HTMLElement).closest("a");
+      const href = anchor?.getAttribute("href");
+      if (!href) return;
+
+      const link = resolvePreviewLink(active, href);
+      if (link.kind === "external" || link.kind === "anchor") return;
+      e.preventDefault();
+      if (byPath.has(link.path)) {
+        select(link.path);
+        return;
+      }
+      if (dirs.has(link.path)) {
+        setOpenSet((prev) => {
+          const s = new Set(prev);
+          const parts = link.path.split("/");
+          for (let i = 1; i <= parts.length; i++) s.add(parts.slice(0, i).join("/"));
+          return s;
+        });
+      }
+    },
+    [active, byPath, dirs, select]
+  );
+
+  // Highlighting is the one thing the client cannot do for itself. The server rendered the file the
+  // page opened on; any other code file asks for it here and shows plain text until it arrives.
+  const [fetched, setFetched] = useState<{ path: string; html: string } | null>(null);
+  useEffect(() => {
+    if (isMarkdown || highlightedFor === active) return;
+    let live = true;
+    void highlightFileAction(projectId, active).then((r) => {
+      if (live && r.html) setFetched({ path: active, html: r.html });
+    });
+    return () => {
+      live = false;
+    };
+  }, [active, isMarkdown, highlightedFor, projectId]);
 
   // Shiki's markup is built from untrusted file content, so it is sanitized here rather
   // than on the server — same point of injection, same sanitizer as the markdown above.
-  const safeHighlighted = useMemo(
-    () => (highlightedHtml ? DOMPurify.sanitize(highlightedHtml) : null),
-    [highlightedHtml]
-  );
-
-  useEffect(() => {
-    if (!isMarkdown) return;
-    const raw = marked.parse(content, { async: false });
-    setHtml(DOMPurify.sanitize(typeof raw === "string" ? raw : ""));
-  }, [content, isMarkdown]);
+  const codeHtml = useMemo(() => {
+    const raw =
+      highlightedFor === active ? highlightedHtml : fetched?.path === active ? fetched.html : null;
+    return raw ? DOMPurify.sanitize(raw) : null;
+  }, [active, highlightedHtml, highlightedFor, fetched]);
 
   // ── Editing ───────────────────────────────────────────────────────────────
   const [draft, setDraft] = useState<string | null>(null);
@@ -206,7 +273,7 @@ export function PreviewBrowser({
       <aside className="w-72 shrink-0 overflow-y-auto border-r border-border bg-bg-subtle p-3 max-md:hidden">
         <Dir dir={tree} depth={0} active={active} onSelect={select} openSet={openSet} toggle={toggle} />
       </aside>
-      <div className="flex-1 overflow-y-auto">
+      <div ref={reader} className="flex-1 overflow-y-auto">
         {/* The tree moves with the rail; the text does not. `.preview-reader` insets the
             column to wherever the viewport's centre is, so collapsing the rail leaves the
             file exactly where it was. */}
@@ -242,11 +309,18 @@ export function PreviewBrowser({
               className="h-[60vh] w-full resize-y rounded-lg border border-border bg-bg-subtle p-4 font-mono text-sm leading-relaxed text-fg outline-none focus:border-accent"
             />
           ) : isMarkdown ? (
-            <div className="prose-airrow" dangerouslySetInnerHTML={{ __html: html }} />
-          ) : highlightedFor === active && safeHighlighted ? (
+            // Delegated rather than bound per link: the anchors come from `dangerouslySetInnerHTML`,
+            // so there is nothing to attach a handler to. Keyboard access is unaffected — the real
+            // elements underneath are anchors, and Enter on a focused one fires this same click.
+            <div
+              className="prose-airrow"
+              onClick={onReaderClick}
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+          ) : codeHtml ? (
             <div
               className="overflow-x-auto rounded-lg border border-border text-sm leading-relaxed [&_pre]:p-4"
-              dangerouslySetInnerHTML={{ __html: safeHighlighted }}
+              dangerouslySetInnerHTML={{ __html: codeHtml }}
             />
           ) : (
             <pre className="overflow-x-auto rounded-lg border border-border bg-bg-subtle p-4 font-mono text-sm leading-relaxed text-fg">

@@ -79,10 +79,10 @@ runbook.
 - [x] **[manual]** Production Branch is set to `main` in Vercel Git settings. Verified: latest
       Production deployment carries the alias `airrow-git-main-lwstr.vercel.app`.
 - [ ] **[manual]** `airrow.app` and `www.airrow.app` are attached to the project; `www` redirects to
-      the apex. **Blocked** — the domain was bought under a Vercel team that was later deleted;
-      it no longer appears under any team/personal scope reachable by this account (confirmed via
-      `vercel domains ls` under the only remaining team, `lwstr`, and via `vercel teams switch`).
-      Requires a Vercel Support ticket to reattach; not fixable from code or CLI.
+      the apex. **Blocked** — the domain was bought under a Vercel team (`MSFlow`) that was later
+      deleted; it no longer appears under any scope reachable by this account. Requires a Vercel
+      Support ticket to reattach; not fixable from code or CLI. See _Domain recovery_ below for the
+      full diagnosis.
 - [ ] **[manual]** HTTPS certificate is issued and `https://airrow.app` resolves with no redirect loop.
       Blocked on the same domain-recovery ticket above.
 - [ ] **[manual]** `dev.airrow.app` is added as a branch domain bound to `develop`. Blocked on the
@@ -168,6 +168,44 @@ the `/createspec` fix agreed during `/clarify` (`--branch-name` → `--name`; ad
 if `feature/<name>` is behind `develop` instead of merging `develop` into the issue branch directly).
 `pnpm -r typecheck` ✓ · `pnpm -r lint` ✓ · `pnpm -r test` ✓ (engine 36/36; web 60/60, 15 skipped
 without local Supabase).
+
+---
+
+## Domain recovery (2026-07-27)
+
+_Diagnosis of the blocker above, so the next person doesn't re-derive it._
+
+**The registration is intact — nothing was lost.** Public DNS and WHOIS both confirm it:
+
+| Fact              | Value                                                       |
+| ----------------- | ----------------------------------------------------------- |
+| Nameservers       | `ns1.vercel-dns.com`, `ns2.vercel-dns.com`                  |
+| Apex A records    | `216.198.79.1`, `216.198.79.65` (Vercel's anycast IPs)      |
+| Registrar of record | Name.com, Inc. (Vercel resells through them)               |
+| Created / expires | 2026-07-23 / 2027-07-23                                     |
+| WHOIS status      | `addPeriod`, `clientTransferProhibited`                     |
+
+So the DNS zone still exists inside Vercel and is still bound to the deleted team. What is broken is
+authorization, not the registration — there is no expiry deadline to race.
+
+**Confirmed unreachable from every scope** (`vercel` CLI as `melvinedlund`): `vercel domains ls`
+lists only `hejsot.lol` under `lwstr` and **0 domains** under the newer `airrow` team
+(`airrow-9bf0bd13`); `vercel domains inspect airrow.app` returns *"You don't have access"* under
+both. Personal scope cannot be selected at all. This is a known Vercel behavior with several open
+community reports — domains stay trapped in the deleted team.
+
+**Two ways out:**
+
+1. **Vercel Support moves it** into team `airrow` (`airrow-9bf0bd13`). The only route available now.
+2. **Transfer out to a third-party registrar** using an EPP/auth code — the better long-term fix,
+   since it removes the dependency on Vercel team scoping entirely. **Not available until roughly
+   2026-09-21:** ICANN's Transfer Policy lets the registrar deny an inter-registrar transfer within
+   60 days of initial registration, and `clientTransferProhibited` is set. Worth requesting in the
+   same ticket as a fallback so the unlock is queued.
+
+Ticket text is drafted and ready to send. Escalate in **both** places — `vercel.com/help` *and* a
+topic in `community.vercel.com` Help, where staff visibly upgrade these tickets; on a Hobby plan the
+support form alone tends to sit unanswered.
 
 ---
 
