@@ -216,11 +216,18 @@ html {
 .preview-reader {
   --tree: 0rem;
   --measure: 48rem;
+  /* The gutter a phone can afford. From `sm` up it is the 2.5rem the reader was designed with. */
+  --gutter: 1.25rem;
   /* content-box, so the measure stays 48rem however large the centring inset grows. */
   box-sizing: content-box;
   max-width: var(--measure);
-  padding-left: max(2.5rem, calc((100vw - var(--measure)) / 2 - var(--rail) - var(--tree)));
-  padding-right: 2.5rem;
+  padding-left: max(var(--gutter), calc((100vw - var(--measure)) / 2 - var(--rail) - var(--tree)));
+  padding-right: var(--gutter);
+}
+@media (min-width: 40rem) {
+  .preview-reader {
+    --gutter: 2.5rem;
+  }
 }
 @media (min-width: 48rem) {
   .preview-reader {
