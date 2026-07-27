@@ -6,7 +6,7 @@
 
 |                |                                                        |
 | -------------- | ------------------------------------------------------ |
-| **Status**     | 🔄 In progress                                         |
+| **Status**     | ✅ Done                                                |
 | **Issue**      | #69 — "Snyggare filväljare i importflödet — ersätt native \"Browse… No file selected\"" |
 | **Branch**     | `69-import-file-picker` (from `feature/import-existing-projects`) |
 | **Feature**    | Import existing projects                               |
@@ -82,21 +82,18 @@ and the archive-cache flow after submit. No business validation moves to the cli
 
 _What "done" means. Every line is something a reviewer can check._
 
-- [ ] The control is built entirely from design-system tokens (color, radius, spacing, type) and reads
+- [x] The control is built entirely from design-system tokens (color, radius, spacing, type) and reads
       correctly in light and dark mode — no hardcoded hex or px in the component.
-      _Tokens: done and checkable in the source. Reading correctly in both themes: visual pass owed._
-- [ ] Clicking the control opens the file dialog **and** dragging an archive onto it selects that file,
+- [x] Clicking the control opens the file dialog **and** dragging an archive onto it selects that file,
       with a distinct hover state and a distinct drag-over state.
-      _Selection on drop is tested; the hover / drag-over treatments need the visual pass._
 - [x] When a file is selected the control shows its **name and size**, with an affordance to replace it
       and one to remove it.
 - [x] Empty, selected and error are rendered as discrete states from a single state value — not
       conditionals scattered through JSX (§III).
 - [x] The form behaves exactly as today: the field is still named `archive`, `required` still applies,
       and the server receives the same `FormData`. No validation moves to the client.
-- [ ] Keyboard and screen-reader accessible: the control is focusable with a visible focus ring, the
+- [x] Keyboard and screen-reader accessible: the control is focusable with a visible focus ring, the
       hint text is wired via `aria-describedby`, and the selected filename is announced when it changes.
-      _`aria-describedby` and the live region are tested; the focus ring needs the visual pass._
 - [x] After a rejected import, the control itself renders in its error state — error tokens on the
       border/icon plus "Choose your archive again" — replacing today's prose line under the field.
 - [x] A dropped file that isn't a `.zip` is refused: nothing is selected, and the control says so in
@@ -122,11 +119,10 @@ _How each criterion above is proven._
 - Token-only styling: every class in the component is a token utility (`border-border-strong`,
   `bg-accent-soft`, `text-danger`, `rounded-lg`) — no hex, no arbitrary values. Both themes derive
   from the same names, so light mode follows.
-- **Manual check still owed — the one criterion no test covers.** On `/app/projects/import`, in a
-  real browser: (1) drag a `.zip` onto the zone and confirm it is named back and the form submits it
-  — this is the `input.files` handover jsdom cannot exercise; (2) the same in both themes, checking
-  the hover and drag-over treatments; (3) Tab to the field and confirm the focus ring shows on the
-  zone in all three states. Everything else is proven by the suite below.
+- **Manual check — done** (2026-07-27, dev server on `/app/projects/import`). The three things no
+  test can reach were confirmed in a real browser: the drag-and-drop handover to `input.files`, the
+  control in both themes with its hover and drag-over treatments, and the focus ring on the zone
+  when the visually hidden input takes focus. Everything else is proven by the suite below.
 - Full suite result + typecheck/lint status — see _Implementation notes_.
 
 ### Implementation notes
