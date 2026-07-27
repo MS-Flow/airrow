@@ -131,15 +131,24 @@ export const WHY_SDD = [
   "You spend far fewer tokens when the agent knows exactly what to build. Guessing, exploring and undoing the wrong thing is the expensive part.",
 ];
 
-/* Everything is free for now. No invented tiers and no "TBD" — if a price isn't decided,
-   the honest thing is to say the product is free, not to imply a paywall that isn't built. */
+/* Two tiers, and only one of them is real. Pro is labelled "coming soon" and carries no price
+   because it has none yet — naming a figure we have not decided would be a promise, and the free
+   tier is what someone can actually have today. */
 export const INCLUDED = [
-  "Three generated foundations",
+  "Two generated foundations",
   "The full CTO interview",
   "Documents written for your product, not filled in from a template",
   "ZIP delivery of your repository",
   "Every document type Airrow produces",
   "Yours to keep, with no lock-in",
+];
+
+/** What Pro adds. Deliberately short: everything here is unbuilt, and a long list would read as one. */
+export const PRO_INCLUDED = [
+  "Unlimited generated foundations",
+  "Push straight to a GitHub repository",
+  "Regenerate as your product changes",
+  "Priority on new document types",
 ];
 
 export const SECTIONS = {
@@ -159,9 +168,22 @@ export const SECTIONS = {
   },
   pricing: {
     title: "Pricing",
-    body: "Airrow is free while it's in early access. Three generated foundations per account, every feature, no card.",
-    amount: "$0",
-    note: "Three foundations, everything included.",
+    body: "Start free: two complete foundations, every feature, no card. Pro lifts the limit when it lands.",
+    free: {
+      name: "Free",
+      amount: "$0",
+      note: "Two foundations, everything included.",
+      action: "Create your project",
+    },
+    pro: {
+      name: "Pro",
+      badge: "Coming soon",
+      /* No figure, because none is decided. Naming one would be a promise, and "TBD" at the size
+         of a price is just a shrug. The word says what the card is for. */
+      amount: "Monthly",
+      note: "Unlimited foundations, and the features that follow.",
+      action: "Not available yet",
+    },
   },
   cta: {
     title: "Start with the foundation.",

@@ -365,14 +365,39 @@ export async function createJob(projectId: string, modelVersionId: string): Prom
  * bad response, an outage — must not cost the founder part of their allowance. Queued and running
  * jobs *do* count, so the limit cannot be sidestepped by starting several at once.
  */
+/**
+ * Generations this organization has spent, from the durable ledger.
+ *
+ * This used to count live `generation_jobs`, which cascade away with their project — so deleting a
+ * project refunded the allowance, and the ceiling could be reset at will. `generation_usage` rows
+ * are written by a trigger and survive their project, because a Claude call is paid for whether or
+ * not what it produced still exists.
+ *
+ * Failed jobs are still not charged for: an outage on our side must never cost a founder part of
+ * their allowance, so the ledger is joined back to the job to exclude them. A job whose row is gone
+ * counts — it completed, was delivered, and was then deleted.
+ */
 export async function countGenerations(orgId: string): Promise<number> {
-  const res = await db()
-    .from("generation_jobs")
-    .select("id, projects!inner(organization_id)", { count: "exact", head: true })
-    .eq("projects.organization_id", orgId)
-    .neq("status", "failed");
-  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
-  return res.count ?? 0;
+  const usage = rows<{ generation_job_id: string | null }>(
+    await db().from("generation_usage").select("generation_job_id").eq("organization_id", orgId)
+  );
+  if (usage.length === 0) return 0;
+
+  const jobIds = usage.map((u) => u.generation_job_id).filter((id): id is string => id !== null);
+  if (jobIds.length === 0) return usage.length;
+
+  const failed = rows<{ id: string }>(
+    await db().from("generation_jobs").select("id").in("id", jobIds).eq("status", "failed")
+  );
+  return usage.length - failed.length;
+}
+
+/** True when this account bypasses the free allowance. Set by migration only — never from the app. */
+export async function isAdminUser(userId: string): Promise<boolean> {
+  const row = maybe<{ is_admin: boolean }>(
+    await db().from("profiles").select("is_admin").eq("id", userId).maybeSingle()
+  );
+  return row?.is_admin === true;
 }
 
 export async function getJob(jobId: string): Promise<JobRecord | null> {

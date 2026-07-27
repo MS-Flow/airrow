@@ -7,7 +7,7 @@ import { createJob, getProject, latestModelVersion, setProjectStatus } from "@/l
 import { ALLOWANCE_REACHED_MESSAGE, checkAllowance } from "./allowance";
 
 export async function retryGenerationAction(projectId: string): Promise<{ error?: string }> {
-  const { org } = await requireSession();
+  const { org, user } = await requireSession();
   const project = await getProject(org.id, projectId);
   if (!project) return { error: "Project not found." };
   const mv = await latestModelVersion(projectId);
@@ -15,7 +15,7 @@ export async function retryGenerationAction(projectId: string): Promise<{ error?
 
   // Retrying after a failure does not consume allowance — `countGenerations` excludes failed jobs,
   // so a founder is never charged for a generation that fell over on our side.
-  const allowance = await checkAllowance(org.id);
+  const allowance = await checkAllowance(org.id, user.id);
   if (!allowance.allowed) return { error: ALLOWANCE_REACHED_MESSAGE };
 
   await createJob(projectId, mv.id);
