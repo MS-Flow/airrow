@@ -105,7 +105,7 @@ export const FOUNDATION_HIGHLIGHTS = [
   {
     path: ".claude/spec-kit/constitution.md",
     reason:
-      "The rules your agents cannot drift from, written once and enforced in review.",
+      "Clear rules for your project, taken straight from your interview answers and followed in every file after.",
   },
   {
     path: "CLAUDE.md",
