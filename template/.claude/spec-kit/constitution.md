@@ -22,11 +22,14 @@ Canonical sources: [`CLAUDE.md`](../../CLAUDE.md) ·
 {{DESIGN_INVARIANTS}}
 
 ## IV. Process invariants  (PORTABLE — the {{PROJECT_NAME}} workflow, do not weaken)
-- We work via GitHub: a **feature** is a GitHub Project, and **issues** are linked to that feature.
-  Each issue gets a spec and a branch.
-- **Spec before code.** Every issue gets a `specs/NNN-kort.md` before implementation; the spec is the
+- We work via {{REPO_PROVIDER}}: a **feature** is a {{BOARD_TERM}}, and **{{ISSUE_TERM}}s** are
+  linked to that feature. Each {{ISSUE_TERM}} gets a spec and a branch.
+- **Spec before code.** Every {{ISSUE_TERM}} gets a `specs/NNN-kort.md` before implementation; the spec is the
   source of truth and code is reviewed *against* it. One feature at a time. When code and spec
   disagree, stop and **fix the spec first**.
+- **`/start` sets up, the spec loop builds.** `/start` takes this project to the bare minimum that
+  runs — enough to open, change and continue from. That is its ceiling, not a starting budget.
+  Everything past it goes through a spec: no spec, no feature.
 - Branch `NNN-kort` (issue number + short name, **no** `issue/` prefix) is cut from its
   `feature/<name>`. **PR direction is strict and never skipped:** issue branch → its `feature/<name>`
   → `develop` → `main`. An issue branch is **never** PR'd to `main` or `develop`.

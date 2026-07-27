@@ -1,0 +1,32 @@
+# DEV deploy for {{PROJECT_NAME}} — Azure Pipelines.
+#
+# Register as a second pipeline: Pipelines → New pipeline → Existing YAML file →
+# /azure-pipelines-deploy-dev.yml.
+#
+# Every push to `develop` and to a `feature/*` branch deploys to DEV — see
+# docs/architecture/BRANCHING.md. Issue branches do not deploy; they are tested via their feature.
+#
+# Credentials come from {{SECRETS_HOME}}. Never hardcode a key in this file.
+
+trigger:
+  branches:
+    include:
+      - develop
+      - feature/*
+pr: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  TZ: UTC
+
+jobs:
+  - job: deploy
+    displayName: Deploy to {{DEPLOY_TARGET}} (DEV)
+    steps:
+      - checkout: self
+{{CI_SETUP_STEPS_AZ}}
+      - bash: {{CMD_BUILD}}
+        displayName: Build
+{{DEPLOY_STEPS}}

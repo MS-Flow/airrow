@@ -21,7 +21,7 @@ import type { TemplateFile } from "./scaffold.ts";
 export { ENGINE_VERSION, resolveProjectModel, slugify };
 export type { ResolveInput };
 
-export { renderScaffold, deriveScaffoldValues } from "./scaffold.ts";
+export { renderScaffold, deriveScaffoldValues, shipsPath } from "./scaffold.ts";
 export type { TemplateFile, ScaffoldDecision, ScaffoldPlan, RenderedScaffold } from "./scaffold.ts";
 
 export class GenerationError extends Error {
@@ -48,7 +48,9 @@ function validate(files: GeneratedFile[]): void {
     "docs/guides/DEVELOPER_GUIDE.md",
     "specs/README.md",
     ".claude/spec-kit/constitution.md",
-    ".claude/spec-kit/spec-template.md"
+    ".claude/spec-kit/spec-template.md",
+    // Without it the foundation is documents describing commands that do not exist (spec 66).
+    ".claude/commands/start.md"
   ];
 
   for (const f of files) {
