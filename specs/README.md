@@ -42,6 +42,7 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Project structure in the workspace + merged download | [68-workspace-tree-merged-zip.md](68-workspace-tree-merged-zip.md) | ✅ Done |
 | Preview shows the whole structure — the founder's files and Airrow's | [75-preview-full-tree.md](75-preview-full-tree.md) | ✅ Done |
 | A file picker that looks like Airrow — drop-to-import | [69-import-file-picker.md](69-import-file-picker.md) | ✅ Done |
+| Upload warnings + responsibility for uploaded content | [70-import-warnings-legal.md](70-import-warnings-legal.md) | ✅ Done |
 | Auto-generate the PR description when a PR is opened | [53-pr-description.md](53-pr-description.md) | ✅ Done |
 | Redesign interview into architecture-first question set | [6-fix-interview-template.md](6-fix-interview-template.md) | ✅ Done |
 | Fix UI design flaws — shell corrections + anonymous interview | [11-ui-design-flaws.md](11-ui-design-flaws.md) | ✅ Done |
