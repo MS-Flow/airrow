@@ -106,6 +106,8 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
     scale: a.scale ?? "validate",
     mvpFocus: (a.mvpFocus ?? "").trim(),
     coreEntities: (a.coreEntities ?? "").trim(),
+    problem: (a.problem ?? "").trim(),
+    nonGoals: (a.nonGoals ?? "").trim(),
     derived: {
       multiTenant,
       hasPayments: features.includes("payments"),

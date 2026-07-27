@@ -10,6 +10,7 @@ import { GUEST_DRAFT_VERSION } from "./draft-schema";
  */
 const COMPLETE_ANSWERS: InterviewAnswers = {
   productType: "saas",
+  problem: "Small agencies track clients in spreadsheets and lose follow-ups.",
   vision: "Give small agencies a CRM they actually keep using.",
   mvpFocus: "Track clients and never miss a follow-up.",
   audience: "b2b",

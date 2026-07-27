@@ -40,9 +40,11 @@ export interface Question {
  * the founder's own.
  */
 export const ANSWER_MAX_CHARS = {
+  problem: 400,
   vision: 300,
   mvpFocus: 300,
   coreEntities: 600,
+  nonGoals: 400,
   integrations: 300
 } as const;
 
@@ -65,6 +67,19 @@ export const interviewQuestions: Question[] = [
       { value: "browser_extension", label: "Browser extension", description: "Lives inside the browser" },
       { value: "hobby", label: "Side project / for fun", description: "A passion project or experiment — not (yet) a business" }
     ]
+  },
+  {
+    // Asked first among the written answers, and asked separately from the vision: without it every
+    // document describes features with no account of why any of them matter, and an agent reading
+    // them has nothing to weigh a decision against.
+    id: "problem",
+    title: "What problem are you solving, and who has it?",
+    help: "The situation today, and who it hurts. This is the single most useful thing you can tell your AI assistants.",
+    type: "text",
+    required: true,
+    maxChars: ANSWER_MAX_CHARS.problem,
+    placeholder:
+      "e.g. Independent property managers track applications across email and spreadsheets, so good tenants go days without an answer and get lost to bigger agencies."
   },
   {
     id: "vision",
@@ -105,6 +120,19 @@ export const interviewQuestions: Question[] = [
     required: false,
     maxChars: ANSWER_MAX_CHARS.coreEntities,
     placeholder: "e.g. Landlords own Properties; a Property has many Listings; a Listing receives Applications from Tenants."
+  },
+  {
+    // Written into the generated CLAUDE.md, where it is the only thing standing between a coding
+    // agent and a week of work nobody asked for. Optional, because a founder who has none yet
+    // should not be made to invent them.
+    id: "nonGoals",
+    title: "What is this explicitly not doing?",
+    help: "The things you keep being tempted by and are deliberately leaving out. Your AI assistants will respect these.",
+    type: "text",
+    required: false,
+    maxChars: ANSWER_MAX_CHARS.nonGoals,
+    placeholder:
+      "e.g. No accounting or rent collection — those stay in the tools people already pay for. No native mobile app in year one."
   },
   {
     id: "tenancy",

@@ -42,10 +42,12 @@ const textAnswer = (max: number) => z.string().trim().min(1).max(max);
 export const interviewAnswersSchema = z
   .object({
     productType: productTypeSchema,
+    problem: textAnswer(ANSWER_MAX_CHARS.problem),
     vision: textAnswer(ANSWER_MAX_CHARS.vision),
     mvpFocus: textAnswer(ANSWER_MAX_CHARS.mvpFocus),
     audience: z.enum(["b2b", "b2c", "both", "internal"]),
     coreEntities: textAnswer(ANSWER_MAX_CHARS.coreEntities),
+    nonGoals: textAnswer(ANSWER_MAX_CHARS.nonGoals),
     tenancy: z.enum(["single_user", "organizations", "marketplace", "internal"]),
     authModel: z.array(z.enum(["email_password", "magic_link", "social", "sso", "public"])).min(1).max(5),
     roles: z.enum(["simple", "granular"]),

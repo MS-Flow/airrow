@@ -14,9 +14,17 @@
 // detail nobody could read at that speed.
 import { generate } from "@airrow/engine";
 import type { JobStage, ProjectModel } from "@airrow/schemas";
-import { saveArtifact, setProjectStatus, updateJob, getJob } from "@/lib/data/store";
+import {
+  findAuthoredByInputs,
+  getJob,
+  saveArtifact,
+  saveAuthoringProvenance,
+  setProjectStatus,
+  updateJob
+} from "@/lib/data/store";
 import { loadTemplate } from "@/lib/template/load";
-import { authorFoundation } from "./author";
+import { AUTHORING_MODEL, PROMPT_VERSION, authorFoundation } from "./author";
+import { inputsHash, reviveAuthored } from "./memo";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -36,20 +44,43 @@ export async function runGenerationJob(jobId: string, model: ProjectModel): Prom
     done.push("resolve");
 
     await updateJob(jobId, { stagesDone: [...done], stage: "author" });
+
+    // Nothing that shapes the prose has changed, so there is nothing to pay for: reuse the previous
+    // run's payload rather than spending another ~45s call and another slice of the founder's
+    // allowance. Founders regenerate constantly while tuning one answer.
+    const hash = inputsHash(model, PROMPT_VERSION, AUTHORING_MODEL);
+    const reused = reviveAuthored(
+      await findAuthoredByInputs(job.projectId, hash, PROMPT_VERSION, AUTHORING_MODEL)
+    );
+
     // The one network call in generation. It returns null rather than throwing — no key, a timeout,
     // a contract violation — and the engine then derives everything, so a founder without an
     // integration still gets a foundation and a ZIP.
-    const authored = await authorFoundation(model);
+    const authored = reused ?? (await authorFoundation(model));
+
+    if (authored) {
+      // Written on a reused payload too: this job's files were produced by that prompt and model,
+      // so its provenance is the same and the manifest must say so.
+      await saveAuthoringProvenance(jobId, {
+        inputsHash: hash,
+        promptVersion: PROMPT_VERSION,
+        authoringModel: AUTHORING_MODEL,
+        authored
+      });
+    }
+
     let totalFiles = 0;
     const result = generate(loadTemplate(), model, {
       authored: authored?.slots,
       authoredDocuments: authored?.documents,
+      authoring: { promptVersion: PROMPT_VERSION, model: AUTHORING_MODEL },
       onFile: (_path, index, total) => {
         if (index === 1) totalFiles = total;
       }
     });
-    // The authoring call is the real work of this stage; it no longer needs padding to be legible.
-    if (!authored) await sleep(BEAT * 2);
+    // A live call is the real work of this stage and needs no padding. Reused prose and the
+    // deterministic path both resolve in milliseconds, and the stage has to be legible either way.
+    if (reused || !authored) await sleep(BEAT * 2);
     done.push("author");
 
     await updateJob(jobId, {

@@ -416,6 +416,63 @@ export async function updateJob(jobId: string, patch: Partial<JobRecord>): Promi
   if (res.error) throw new Error(`Supabase: ${res.error.message}`);
 }
 
+/* ── Authoring provenance & memoisation ───────────────────────────────────── */
+
+/** What produced a job's prose. Written once, when authoring succeeds. */
+export interface AuthoringProvenance {
+  inputsHash: string;
+  promptVersion: string;
+  authoringModel: string;
+  /** The validated `{ slots, documents }` payload, kept so an unchanged rerun can reuse it. */
+  authored: unknown;
+}
+
+export async function saveAuthoringProvenance(
+  jobId: string,
+  provenance: AuthoringProvenance
+): Promise<void> {
+  const res = await db()
+    .from("generation_jobs")
+    .update({
+      inputs_hash: provenance.inputsHash,
+      prompt_version: provenance.promptVersion,
+      authoring_model: provenance.authoringModel,
+      authored: provenance.authored
+    })
+    .eq("id", jobId);
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
+}
+
+/**
+ * Prose from a previous run of the same inputs, or null.
+ *
+ * Scoped to the project, matched on all three of hash, prompt version and model — change any one and
+ * this misses, which is the safe direction. Only `completed` jobs qualify: a failed or in-flight job
+ * may have written a partial payload, and serving that would be worse than paying for the call.
+ */
+export async function findAuthoredByInputs(
+  projectId: string,
+  inputsHash: string,
+  promptVersion: string,
+  authoringModel: string
+): Promise<unknown | null> {
+  const row = maybe<{ authored: unknown }>(
+    await db()
+      .from("generation_jobs")
+      .select("authored")
+      .eq("project_id", projectId)
+      .eq("inputs_hash", inputsHash)
+      .eq("prompt_version", promptVersion)
+      .eq("authoring_model", authoringModel)
+      .eq("status", "completed")
+      .not("authored", "is", null)
+      .order("finished_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  );
+  return row?.authored ?? null;
+}
+
 /* ── Artifacts (GenerationResult as jsonb; one per job) ───────────────────── */
 
 export async function saveArtifact(jobId: string, result: GenerationResult): Promise<void> {

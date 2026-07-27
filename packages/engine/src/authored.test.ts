@@ -8,6 +8,7 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { generate } from "./index.ts";
 import { resolveProjectModel } from "./model.ts";
 import { deriveScaffoldValues, renderScaffold, type TemplateFile } from "./scaffold.ts";
 import type { AuthoredSlots } from "../../schemas/src/authoring.ts";
@@ -183,5 +184,84 @@ describe("authored prose cannot reach facts or procedures", () => {
 
     expect(values.NOT_A_SLOT).toBeUndefined();
     expect(values).toEqual(deterministic);
+  });
+});
+
+// Constitution §II: the manifest is the record of what was generated. Prose from a model is the one
+// part of a foundation that the same answers won't reproduce — change the prompt or the model and
+// the documents change — so without this a regression months from now has nothing to point at.
+describe("manifest provenance", () => {
+  const authoring = { promptVersion: "7", model: "claude-haiku-4-5" };
+  const slots: AuthoredSlots = { VISION: "A written vision, not a typed one." };
+
+  it("names the prompt and model that wrote the prose", () => {
+    const { manifest } = generate(TEMPLATE, model, { authored: slots, authoring });
+
+    expect(manifest.authoring).toEqual(authoring);
+  });
+
+  it("records no authoring when the foundation was derived", () => {
+    // The no-API-key path. Claiming a model wrote these files would be worse than saying nothing.
+    const { manifest } = generate(TEMPLATE, model, { authoring });
+
+    expect(manifest.authoring).toBeNull();
+    expect(manifest.files.every((f) => f.source === "static")).toBe(true);
+  });
+
+  it("marks the files the prose actually reached, and only those", () => {
+    const { manifest } = generate(TEMPLATE, model, { authored: slots, authoring });
+
+    const authored = manifest.files.filter((f) => f.source === "authored").map((f) => f.path);
+    expect(authored.length).toBeGreaterThan(0);
+    expect(authored.length).toBeLessThan(manifest.files.length);
+    // VISION is the only slot given, so every marked file has to be one that carries it.
+    const carriesVision = new Set(
+      TEMPLATE.filter((f) => f.content.includes("{{VISION}}")).map((f) => f.path)
+    );
+    expect(authored.every((p) => carriesVision.has(p))).toBe(true);
+  });
+
+  it("marks a whole document the model wrote", () => {
+    const { manifest } = generate(TEMPLATE, model, {
+      authoredDocuments: { "docs/VISION.md": "# Vision\n\nWritten end to end for this product." },
+      authoring
+    });
+
+    const vision = manifest.files.find((f) => f.path === "docs/VISION.md");
+    expect(vision?.source).toBe("authored");
+  });
+});
+
+// The two answers that most change what a foundation is worth reading. `problem` is what every
+// other document is justified against; `nonGoals` is the only thing in the generated CLAUDE.md that
+// stops a coding agent building what nobody asked for.
+describe("problem and non-goals reach the documents", () => {
+  it("carries the founder's own words into the generated files", () => {
+    const answered = resolveProjectModel({
+      name: "Loop CRM",
+      description: "A lightweight CRM for small agencies.",
+      answers: {
+        productType: "saas",
+        problem: "Agencies lose follow-ups between a spreadsheet and an inbox.",
+        nonGoals: "No invoicing, and no native mobile app in year one.",
+        framework: "nextjs",
+        hosting: "vercel"
+      }
+    });
+    const { files } = renderScaffold(TEMPLATE, answered);
+    const byPath = new Map(files.map((f) => [f.path, f.content]));
+
+    expect(byPath.get("docs/VISION.md")).toContain("lose follow-ups");
+    expect(byPath.get("CLAUDE.md")).toContain("No invoicing");
+  });
+
+  it("never leaves the non-goals blank, which would read as having none", () => {
+    // Unanswered is common and fine. An empty heading in the file an agent reads first is not: it
+    // says the founder ruled nothing out, which is the opposite of not having been asked.
+    const { files } = renderScaffold(TEMPLATE, model);
+    const claude = files.find((f) => f.path === "CLAUDE.md")?.content ?? "";
+
+    expect(claude).toContain("Not yet decided");
+    expect(claude).not.toContain("[NEEDS CLARIFICATION: NON_GOALS]");
   });
 });

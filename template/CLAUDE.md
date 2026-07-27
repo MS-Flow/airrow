@@ -11,6 +11,12 @@ This file provides guidance to Claude Code when working with code in the {{PROJE
 
 Build toward that, not just toward the current ticket. Full picture: `docs/VISION.md`.
 
+## Not our problem
+These are deliberate exclusions, not gaps waiting to be filled. Don't build them, don't scaffold for
+them, and don't suggest them unless asked directly.
+
+{{NON_GOALS}}
+
 ## Communication style
 Be concise but clear. Short responses save tokens — avoid restating what was asked, keep summaries
 at the bare minimum, and omit filler. One clear sentence beats a paragraph.

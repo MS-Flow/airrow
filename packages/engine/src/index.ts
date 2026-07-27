@@ -2,6 +2,7 @@
 // Stages: resolve → author → assemble → validate → manifest (SYSTEM_ARCHITECTURE).
 
 import type {
+  AuthoringRecord,
   GeneratedFile,
   GenerationResult,
   Manifest,
@@ -62,13 +63,18 @@ function validate(files: GeneratedFile[]): void {
 }
 
 /** Stage 5: manifest with per-file provenance. */
-function buildManifest(model: ProjectModel, files: GeneratedFile[]): Manifest {
+function buildManifest(
+  model: ProjectModel,
+  files: GeneratedFile[],
+  authoring: AuthoringRecord | null
+): Manifest {
   return {
     engineVersion: ENGINE_VERSION,
     schemaVersion: model.schemaVersion,
     generatedAt: new Date().toISOString(),
     projectSlug: model.slug,
     fileCount: files.length,
+    authoring,
     files: files.map((f) => ({
       path: f.path,
       source: f.source,
@@ -95,6 +101,12 @@ export interface GenerateOptions {
    * command renders from the template regardless of what is passed here.
    */
   authoredDocuments?: AuthoredDocuments;
+  /**
+   * Which prompt and model produced `authored`/`authoredDocuments`, recorded in the manifest. The
+   * engine never learns these on its own — it makes no calls — so a caller that passes prose must
+   * pass its provenance too, or the files it lands in are unattributable.
+   */
+  authoring?: AuthoringRecord;
 }
 
 /**
@@ -109,7 +121,9 @@ export function generate(
   const { files } = renderScaffold(template, model, options.authored, options.authoredDocuments);
   files.forEach((f, i) => options.onFile?.(f.path, i + 1, files.length));
   validate(files);
-  return { files, manifest: buildManifest(model, files) };
+  // No prose landed, so there is nothing to attribute even if a caller passed provenance in.
+  const authored = files.some((f) => f.source === "authored");
+  return { files, manifest: buildManifest(model, files, authored ? options.authoring ?? null : null) };
 }
 
 export interface GeneratedProject {

@@ -166,6 +166,8 @@ export function deriveScaffoldValues(
 ): {
   values: Record<string, string>;
   decisions: ScaffoldDecision[];
+  /** Tokens whose value came from the model rather than being derived — the manifest reports them. */
+  authoredTokens: Set<string>;
 } {
   const command = cmds(model);
   const hosting = hostingLabel[model.hosting];
@@ -180,6 +182,8 @@ export function deriveScaffoldValues(
     DOMAIN_OVERVIEW: `${model.name} is ${aOrAn(productTypeLabel[model.productType])} for ${audienceLabel[model.audience]}. ${model.description}`,
     VISION: model.vision,
     MVP_FOCUS: model.mvpFocus,
+    PROBLEM: model.problem,
+    NON_GOALS: nonGoalsText(model),
     CAPABILITY_SCOPE: capabilityScope(model),
     CAPABILITY_SPECS: capabilitySpecs(model),
     TENANCY_MODEL: tenancyModel(model),
@@ -207,12 +211,14 @@ export function deriveScaffoldValues(
     ...command
   };
 
+  const authoredTokens = new Set<string>();
   for (const [token, prose] of Object.entries(authored ?? {})) {
     if (!isProseSlot(token)) continue;
     if (typeof prose !== "string") continue;
     const trimmed = prose.trim();
     if (trimmed === "") continue;
     values[token] = trimmed;
+    authoredTokens.add(token);
   }
 
   const decisions: ScaffoldDecision[] = [
@@ -243,11 +249,20 @@ export function deriveScaffoldValues(
       ? dec("CORE_ENTITIES", model.coreEntities, "interview", "Core objects described in the interview.")
       : dec("CORE_ENTITIES", "(unset)", "default", "No core entities given — flagged for the founder to fill, never invented.")
   );
-  return { values, decisions };
+  return { values, decisions, authoredTokens };
 }
 
 function dec(token: string, value: string, source: "interview" | "default", rationale: string): ScaffoldDecision {
   return { token, value, source, rationale };
+}
+
+/**
+ * Non-goals are optional in the interview, but the slot is not: it lands in the generated CLAUDE.md,
+ * where an empty value would read as "there are none" — an invitation to build anything. Unanswered
+ * gets an explicit note to fill it in, matching how an unanswered vision is handled.
+ */
+function nonGoalsText(model: ProjectModel): string {
+  return model.nonGoals || "_Not yet decided — add what this product is deliberately not doing._";
 }
 
 function aOrAn(label: string): string {
@@ -475,7 +490,7 @@ export function renderScaffold(
   authored?: AuthoredSlots,
   authoredDocuments?: AuthoredDocuments
 ): RenderedScaffold {
-  const { values, decisions } = deriveScaffoldValues(model, authored);
+  const { values, decisions, authoredTokens } = deriveScaffoldValues(model, authored);
   const missing = new Set<string>();
 
   /**
@@ -492,13 +507,26 @@ export function renderScaffold(
     return typeof written === "string" && written.trim() !== "" ? written : tf.content;
   };
 
+  /**
+   * `authored` means the model's words are in this file — either it wrote the whole body, or the
+   * template left a slot open that the model filled. Asked against the template body, before
+   * substitution, because that is where the `{{TOKEN}}` still is.
+   *
+   * Everything else is `static`: the same words every project gets. The distinction is the point of
+   * recording it — it is what tells a reader months from now which files a prompt change can move.
+   */
   const files: GeneratedFile[] = template
-    .map((tf) => ({
-      path: tf.path,
-      content: substitute(bodyFor(tf), values, missing),
-      source: "static" as const,
-      templateId: `template/${tf.path}`
-    }))
+    .map((tf) => {
+      const body = bodyFor(tf);
+      const fromModel =
+        body !== tf.content || [...authoredTokens].some((t) => body.includes(`{{${t}}}`));
+      return {
+        path: tf.path,
+        content: substitute(body, values, missing),
+        source: fromModel ? ("authored" as const) : ("static" as const),
+        templateId: `template/${tf.path}`
+      };
+    })
     .sort((a, b) => a.path.localeCompare(b.path));
 
   const plan: ScaffoldPlan = {

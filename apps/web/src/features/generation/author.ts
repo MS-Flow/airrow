@@ -26,10 +26,10 @@ import {
  * Bump when the prompt changes in a way that would produce different prose from identical answers.
  * Recorded per file in the manifest, and part of what a regeneration is keyed on.
  */
-export const PROMPT_VERSION = "2";
+export const PROMPT_VERSION = "3";
 
 /** Haiku 4.5 is a 4.5-generation model: it takes no `effort` parameter, and sending one errors. */
-const MODEL = process.env.AIRROW_AUTHORING_MODEL ?? "claude-haiku-4-5";
+export const AUTHORING_MODEL = process.env.AIRROW_AUTHORING_MODEL ?? "claude-haiku-4-5";
 
 /**
  * A sentinel the model is never told to repeat. If it comes back, the system prompt leaked into the
@@ -70,6 +70,16 @@ TWO KINDS OF OUTPUT. "slots" are values dropped into fixed documents, so each on
 in a place you cannot see. "documents" are whole files you write end to end, headings and all: make
 each read as one piece written for this product, not as a form with the blanks filled. Where the same
 ground is covered in both, say it differently rather than repeating yourself — a reader meets both.
+
+START FROM THE PROBLEM. The problem answer says what is wrong today and who it hurts. It is the
+anchor: a capability is worth building because of it, an invariant is worth holding because of it.
+Documents that list features without it read as a wish list. If the answer is thin, stay with what it
+does say rather than inflating it.
+
+NON_GOALS lands in the file a coding agent reads before every session, and it is the only thing that
+stops a week of work nobody asked for. Write what the founder ruled out, in their terms. Never add a
+non-goal they did not state — an invented boundary is worse than a missing one. If they gave none,
+return null for it.
 
 PROJECT_TAGLINE, PROJECT_DESCRIPTION and DOMAIN_OVERVIEW open the project's README on GitHub. They are
 the first thing anyone sees. Make them land: concrete about what the product does and who it is for,
@@ -158,9 +168,11 @@ function userPrompt(model: ProjectModel): string {
     description: model.description,
     productType: model.productType,
     audience: model.audience,
+    problem: model.problem,
     vision: model.vision,
     mvpFocus: model.mvpFocus,
     coreEntities: model.coreEntities,
+    nonGoals: model.nonGoals,
     tenancy: model.tenancy,
     authModel: model.authModel,
     roles: model.roles,
@@ -200,7 +212,7 @@ export async function authorFoundation(model: ProjectModel): Promise<AuthoredFou
   try {
     const client = new Anthropic({ apiKey });
     const response = await client.messages.create({
-      model: MODEL,
+      model: AUTHORING_MODEL,
       max_tokens: MAX_TOKENS,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userPrompt(model) }]

@@ -169,11 +169,20 @@ _What "done" means. Every line is something a reviewer can check._
 - [x] Generation with no API key still succeeds and still delivers a ZIP.
 - [x] `generate()` is still synchronous and `packages/engine` still reads no env and does no I/O.
 - [x] Engine tests use a deterministic mock; no test touches the network.
-- [ ] Re-generating with unchanged answers, prompt version and model makes **no** API call.
+- [x] Re-generating with unchanged answers, prompt version and model makes **no** API call.
+      Keyed on a SHA-256 of the whole resolved `ProjectModel` plus the prompt version and model id,
+      stored on `generation_jobs` and matched against completed jobs for that project. The stored
+      payload is re-validated through the same contract on the way back in — caps tighten and slots
+      get removed, and "we wrote it" is not a property the read side can check.
 - [x] No `effort` parameter is sent — it errors on Haiku 4.5.
 - [ ] Prompt caching is verified empirically via `usage.cache_read_input_tokens` on a repeat
       generation, not assumed — a stable prefix under 4096 tokens caches nothing and reports no error.
-- [ ] Measured cost per generation on the fixture set is recorded here.
+- [x] Measured cost per generation on the fixture set is recorded here.
+      **Measured 2026-07-27** over three products (Padelkollen, Klinikjournal, Fraktkoll) on
+      `claude-haiku-4-5`: **1,152 input / 3,418 output tokens** on average → **$0.0182 per
+      generation**, 37s wall clock. **$18.24 per 1,000 generations.** Roughly $0.055 per founder at
+      the three-generation allowance, and above the ~$0.011 estimate this spec opened with — output
+      grew when whole documents were added to the slots.
 - [x] **Quality gate:** authored output for the fixtures is compared side by side against the
       deterministic output and against a higher-tier model on the same inputs. If Haiku's prose is not
       clearly better than the deterministic baseline, this does not ship on Haiku — the fallback
@@ -191,8 +200,17 @@ _What "done" means. Every line is something a reviewer can check._
       a request that bypasses the form is rejected the same way.
 - [x] Every authored slot has its own maximum length in the Zod contract, and `max_tokens` bounds the
       whole response.
-- [ ] The interview stays short: every retained question changes the output, per the constitution's
+- [x] The interview stays short: every retained question changes the output, per the constitution's
       *"if removing a question wouldn't change the result, remove the question."*
+      Two added, both earning their place by changing what the model writes rather than what it knows:
+      **`problem`** (required) — what is wrong today and who it hurts. Without it every document
+      lists capabilities with no account of why any of them matter, which is the difference between a
+      foundation an agent can weigh decisions against and a wish list. **`nonGoals`** (optional) —
+      what the founder deliberately ruled out, rendered into the generated `CLAUDE.md`, where it is
+      the only thing standing between a coding agent and a week of work nobody asked for.
+      **Verified live 2026-07-27:** given non-goals, the model wrote the founder's own boundaries
+      back (leagues, equipment, accounting); given none, it returned `null` and the deterministic
+      "not yet decided" note rendered — it invented no boundary, which is the failure that matters.
 - [ ] Fixtures updated for the product-type × feature matrix.
 - [x] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures);
       `pnpm test:scripts` green.
@@ -313,6 +331,18 @@ count, so the limit cannot be sidestepped by starting several at once. The landi
 limit rather than letting founders discover it. Turning this ceiling into a business model is
 [#74](https://github.com/MS-Flow/airrow/issues/74).
 
+**Amendment — memoisation, and what it is actually worth.** With cost measured at $0.0182 and 37s
+per generation, the case for reusing prose is not the money — it is the allowance and the clock. A
+founder tuning one sentence regenerates repeatedly, and without memoisation each attempt burns one of
+three and another 37s inside a 60s request budget. Keyed on the whole resolved `ProjectModel` rather
+than a hand-picked subset of fields: picking would mean remembering to add every new one, and
+forgetting would serve stale prose for changed answers — invisibly. An unnecessary cache miss costs a
+call; a stale hit costs the founder's trust in what the documents say.
+
+Deliberately **not** wired to the allowance: a reused generation still counts. The limit is about
+what an account can create, not what it costs us, and a founder who regenerates ten times has ten
+foundations either way.
+
 **Known gap:** `validateCompleteAnswers` re-parses stored answers at submit, so a signed-in founder
 who saved a long answer before this change is rejected at submit rather than silently truncated. The
 textarea now prevents new over-long answers. Whether to clamp on read is still the open question
@@ -341,7 +371,8 @@ _The plan, for whoever implements it. Every change grounded in current code; exp
 6. **`packages/schemas/src/questions.ts`** — rework the question set: keep the decision questions,
    drop or replace what no longer changes the output, add the few prose questions authoring needs.
 7. **Manifest** — record prompt version + model + inputs hash per file (§II manifest of record), which
-   is also what the memoisation keys on.
+   is also what the memoisation keys on. **Built:** `Manifest.authoring` plus a per-file
+   `source: "authored" | "static"` that is now meaningful — before this every file was `static`.
 8. **Fixtures** — update for the reworked questions.
 
 **No change needed:** the structural template files, and `renderScaffold`'s token substitution itself.
@@ -350,13 +381,23 @@ _The plan, for whoever implements it. Every change grounded in current code; exp
 
 ## Data model
 
-**No new tables.** The manifest already records per-file provenance (§II); this adds prompt version
-and model to what is stored, and the authored slots are persisted with the artifact so a regeneration
-with unchanged inputs can reuse them instead of paying for a second call.
+**No new tables** — resolved, and built that way. Four columns on `generation_jobs`
+(`inputs_hash`, `prompt_version`, `authoring_model`, `authored jsonb`) plus a partial index for
+the lookup, in `supabase/migrations/20260727090000_authoring_provenance.sql`.
 
-[NEEDS CLARIFICATION: are authored slots stored on the existing `artifacts` row, or does the
-memoisation cache want its own table keyed by inputs hash? The former is simpler; the latter survives
-artifact deletion.]
+The open question was whether the cache wanted its own table, keyed by inputs hash and surviving
+artifact deletion. It does not, and the deciding argument was access control rather than
+convenience: `generation_jobs` already carries the org boundary through `project_id` and already
+has an RLS policy scoped by `is_project_member`, so these columns inherit it. A separate table means
+a second policy that has to stay in step with the first, and every table needs RLS with denial tests
+(§II) — that is real ongoing cost to buy cache entries outliving the job that produced them, which is
+not a property anyone needs. Deleting the job that wrote the prose costing a Claude call is the right
+trade.
+
+The manifest carries the same facts outward: `Manifest.authoring` names the prompt version and model,
+`null` when the foundation was derived, and each file is marked `authored` or `static` by whether
+the model's words actually reached it — which is what tells a reader months later which files a
+prompt change can move.
 
 ---
 
