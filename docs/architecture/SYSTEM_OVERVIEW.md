@@ -7,7 +7,9 @@ short and current.
 Airrow turns an adaptive CTO interview into a complete, production-grade **engineering foundation**
 (architecture, specs, docs, roadmap, standards, prompt library, AI context) for a new software
 project. Founders then build locally with VS Code + Claude Code. **Airrow prepares projects for
-AI-assisted development — it never writes the application code itself.**
+AI-assisted development — it never writes the application code itself.** The `/start` command it
+ships *inside* a generated repo is the deliberate exception (spec 66): the founder runs it there, and
+it takes that repo to the bare minimum that runs. Airrow's own servers still generate documents only.
 
 ## Shape
 pnpm workspaces monorepo (pnpm 9, Node ≥20):

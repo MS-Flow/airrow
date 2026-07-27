@@ -180,6 +180,18 @@ export function repoLabel(m: ProjectModel): string {
   return m.stack.repoProvider === "github" ? "GitHub" : "Azure DevOps";
 }
 
+/**
+ * True when the founder's code, work items and pipelines live in Azure DevOps.
+ *
+ * This decides more than a label. The whole spec workflow is expressed in a provider's own
+ * vocabulary and CLI — issues vs work items, `gh` vs `az repos`, Actions vs Pipelines — and a
+ * foundation that ships GitHub Actions to an Azure DevOps team is documentation about someone
+ * else's project.
+ */
+export function usesAzureRepos(m: ProjectModel): boolean {
+  return m.stack.repoProvider === "azure_devops";
+}
+
 export const tenancyLabel: Record<Tenancy, string> = {
   single_user: "per-user (each person sees only their own data)",
   organizations: "multi-tenant with teams / organizations",

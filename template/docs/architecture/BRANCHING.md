@@ -1,7 +1,7 @@
 # Branch and workflow
 
-We work via {{REPO_PROVIDER}}. A **feature** is a project board, and **issues** are linked to that
-feature. Each issue gets a spec in [`../../specs/`](../../specs/) and its own branch.
+We work via {{REPO_PROVIDER}}. A **feature** is a {{BOARD_TERM}}, and **{{ISSUE_TERM}}s** are linked
+to that feature. Each {{ISSUE_TERM}} gets a spec in [`../../specs/`](../../specs/) and its own branch.
 
 ## Branch hierarchy
 ```
@@ -30,7 +30,7 @@ Issue branches are named `<nr>-<short>` (issue number + short name), **without**
 
 ## CI / DEV deploy
 - Every push to `feature/<name>` **and** `develop` runs a DEV deploy to {{DEPLOY_TARGET}}
-  (see `.github/workflows/deploy-dev.yml`).
+  (see `{{DEPLOY_FILE}}`).
 - `<nr>-<short>` branches do not deploy — they are tested via their feature.
 
 ## Keep branches in sync

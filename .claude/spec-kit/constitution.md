@@ -18,8 +18,15 @@ Canonical sources it governs: [`CLAUDE.md`](../../CLAUDE.md) ·
 
 ## 0. Product invariants (the promise)
 Every feature, screen, and generated file is judged against these.
-- **Preparation, not implementation.** Airrow generates everything needed *before* serious coding
-  begins — never the application code itself. A feature drifting toward being an app builder is out of scope.
+- **Preparation, and a starting point.** Airrow's hosted product generates engineering *foundations* —
+  documents, rules, workflow and CI — never application code. The `/start` command it ships **inside**
+  a generated repository is the deliberate exception: run explicitly by the founder, on their own
+  machine, it scaffolds the stack and sets the project up to the bare minimum that runs, using the
+  information already in the repo. **Bare minimum is the ceiling** — enough to open, change and
+  continue from, never a guess at the product. Everything past that goes through the spec loop.
+  Airrow's servers still never write application code, and ZIP delivery is still a complete foundation
+  on its own. (Amended by [spec 66](../../specs/66-start-command.md), which records the previous
+  wording.)
 - **The output is the product.** Generated repos must read like a senior CTO wrote them for *this*
   project — never like a filled-in template. Generic output is a top-severity bug.
 - **Adaptive, never bureaucratic.** The interview asks only questions whose answers change the output.

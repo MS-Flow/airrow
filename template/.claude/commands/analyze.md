@@ -24,5 +24,5 @@ If all pass:
    notes** block (verification result + deviations).
 7. Update [`../../specs/README.md`](../../specs/README.md): set this feature's row to ✅ Done.
 8. **Surface the PR command** — issue branch → its `feature/<name>`, e.g.
-   `gh pr create --base feature/<name> --head NNN-<kort>`. Never propose a PR to `main`/`develop`.
+   `{{CLI_PR_CREATE}}`. Never propose a PR to `main`/`develop`.
    Do not open the PR or push automatically — hand over the command, suggest `/pr-check` first.
