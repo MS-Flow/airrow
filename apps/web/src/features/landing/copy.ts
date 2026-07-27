@@ -19,7 +19,7 @@ export const HERO = {
   /* Split so the brand name can carry emphasis inside the muted lead line. */
   leadBrand: "Airrow",
   leadRest:
-    " generates the architecture, specifications, standards and AI context your project needs, so your AI agents build like a senior team instead of guessing.",
+    " generates the architecture, specifications, standards and AI context your project needs, then sets the project up on your machine until it runs. Your AI agents build like a senior team instead of guessing.",
   primaryCta: "Generate your foundation",
   secondaryCta: "See how it works",
   strapline: "Idea → Airrow → Code → Company",
@@ -45,7 +45,7 @@ export const STEPS = [
   {
     n: "03",
     title: "Build with your AI agents",
-    body: "Download your repository, open it in your editor and start implementing. Your agents finally have the context of a senior engineering team.",
+    body: "Download your repository, open it and run one command to take it from documents to a project that runs. You stay in control of what gets built after that, one spec at a time, and your agents finally have the context of a senior engineering team.",
   },
 ];
 
@@ -71,8 +71,10 @@ export const DELIVERABLES: {
   },
   {
     icon: "pipeline",
-    title: "CI/CD pipeline",
-    body: "GitHub Actions that lint, typecheck, test and deploy from your first commit",
+    // Retitled with the branch model, which is the half founders feel first: the pipeline is what
+    // catches a bad commit, the branch structure is what stops two agents writing over each other.
+    title: "CI/CD and branching",
+    body: "GitHub Actions that lint, typecheck, test and deploy from your first commit, on a branch model your commands set up for you, so parallel work merges instead of turning into conflicts",
   },
   {
     icon: "standards",

@@ -617,6 +617,33 @@ against a genuinely unrecognisable stack, and custom-stack CI ships Python's set
 placeholder) and one in `start-command.test.ts` (the gate now stands down on a stack it cannot set
 up, rather than on commands alone).
 
+### Follow-up: the copy still described the product from before `/start`
+
+`START_HERE.md` opened with *"It does not ship the application — you write that"*, written when the
+foundation was documents only. It is the first sentence of the first file a founder reads, and step 1
+of the same file now sets their project up until it runs. Two answers to "what did I just download",
+one paragraph apart.
+
+The fix is not to drop the boundary but to state the one that actually holds — §0's ceiling, in a
+founder's words: the foundation is set up for you, **you stay in control of what gets built after
+that**, one spec at a time. Same rule, described from the side the founder experiences it.
+
+Three places carried the old framing:
+
+- **`template/START_HERE.md`** — the opening paragraph, rewritten as above.
+- **`HERO.leadRest`** — the lead line stopped at "generates the … AI context your project needs".
+  It now continues to setting the project up until it runs, which is the part a visitor is buying.
+- **`STEPS[3]`** — "download your repository, open it in your editor and start implementing" was the
+  pre-`/start` instruction. Now: one command from documents to a project that runs, and control of
+  what comes after.
+
+**And the deliverables grid gained the half it was missing.** "CI/CD pipeline" listed the checks and
+said nothing about the branch model, which is the part a founder running several agents feels first:
+a pipeline catches a bad commit, the branch structure is what stops two agents writing over each
+other. Retitled to "CI/CD and branching", with the merge-conflict promise made explicit. The landing
+voice rules from spec 23 still apply and `copy.test.ts` still enforces them: no em dash, no double
+hyphen, no named assistant.
+
 ### What this says about the verification decision
 
 `/clarify` chose unit tests plus one manual check over a real end-to-end run in CI, to keep §V's "no
