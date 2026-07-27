@@ -2,9 +2,11 @@
 
 **{{PROJECT_TAGLINE}}**
 
-This foundation ships the rules, workflow and documentation for {{PROJECT_NAME}}. It does not ship the
-application — you write that, with an AI assistant, one spec at a time. The steps below are in the
-order that works: get something running, then connect the accounts, then start building.
+This foundation ships the rules, workflow and documentation for {{PROJECT_NAME}}, and step 1 sets the
+project up on your machine until it runs. You stay in control of the code from there: what gets built
+past that first running version is decided one spec at a time, by you, with an AI assistant doing the
+typing. The steps below are in the order that works: get something running, then connect the
+accounts, then start building.
 
 ---
 

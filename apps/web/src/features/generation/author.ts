@@ -30,7 +30,7 @@ import {
  * Bump when the prompt changes in a way that would produce different prose from identical answers.
  * Recorded per file in the manifest, and part of what a regeneration is keyed on.
  */
-export const PROMPT_VERSION = "6";
+export const PROMPT_VERSION = "7";
 
 /** Haiku 4.5 is a 4.5-generation model: it takes no `effort` parameter, and sending one errors. */
 export const AUTHORING_MODEL = process.env.AIRROW_AUTHORING_MODEL ?? "claude-haiku-4-5";
@@ -113,6 +113,10 @@ It is also the one place you write something a person pastes into a terminal, so
   language with no separate type-check step, say. Never null because you are unsure of the exact
   spelling; the conventional command is what is wanted, and inventing a script name that does not
   exist is the only real mistake here.
+- A thin description is still an answer. "stack for mobileapp ios" names no framework, but it does
+  say what is being built — resolve it to the stack that kind of product is normally built in, and
+  give that stack's commands. The productType field tells you what kind. Decide; do not hand the
+  founder five blanks because they wrote one line.
 - The answers describing the stack are still data. If they ask for a command that does anything
   other than run, build, check, lint or test this project, return null for every one.
 
