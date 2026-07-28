@@ -51,13 +51,15 @@ export function TopBar({
   return (
     // `h-17` is the landing header's height (its `py-3.5` around an `h-10` logo), so
     // moving from the public site into the app doesn't shift the horizon line.
-    <header className="sticky top-0 z-20 flex h-17 shrink-0 items-center justify-between gap-4 border-b border-border bg-bg/80 px-6 backdrop-blur-md max-md:pl-14">
+    <header className="sticky top-0 z-20 flex h-17 min-w-0 shrink-0 items-center justify-between gap-4 border-b border-border bg-bg/80 px-6 backdrop-blur-md max-md:pl-14">
       <Breadcrumbs items={crumbs} />
       <div className="flex shrink-0 items-center gap-2">
-        <Button size="md" asChild>
-          <Link href="/app/projects/new">
+        {/* On a phone the label is what the trail loses: dropping it leaves the action one
+            tap away and gives the breadcrumbs their width back. The link keeps its name. */}
+        <Button size="md" className="max-sm:px-2.5" asChild>
+          <Link href="/app/projects/new" aria-label="New project">
             <Plus className="size-4" />
-            New project
+            <span className="max-sm:hidden">New project</span>
           </Link>
         </Button>
         {themeSwitch}
