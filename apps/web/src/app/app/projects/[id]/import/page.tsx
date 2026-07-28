@@ -136,6 +136,12 @@ async function ImportDiffSection({
       <Card className="mt-4">
         <CardHeader>
           <CardTitle>Conflicts</CardTitle>
+          {diff.conflicts.length > 0 ? (
+            <p className="mt-1 text-sm text-fg-muted">
+              Each row says what its download contains. Press the chosen answer again to make it
+              undecided.
+            </p>
+          ) : null}
         </CardHeader>
         <CardBody className="p-0">
           {diff.conflicts.length === 0 ? (

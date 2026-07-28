@@ -20,7 +20,9 @@ Everything you would otherwise remove gets reported instead.
 **Re-runnable by design.** Check before every step and skip what is already done. A founder who runs
 this twice, or runs it after editing the documents by hand, must lose nothing.
 
-**It stops at this machine.** No remote, no provisioning, no deploying, no secrets written.
+**It stops at this machine.** No remote, no provisioning, no deploying, no secrets written. It does
+create the local branches this workflow runs on (section 5) — never renaming or deleting one, never
+rewriting history, never pushing.
 
 ---
 
@@ -37,6 +39,8 @@ order, and only what is there:
 - **Conventions the code itself shows** — module style, error handling, how boundaries are
   validated, what the tests actually assert.
 - **CI and deploy** — what runs on a push, where it deploys, what the environment needs.
+- **Git** — whether this is a repository at all, what the trunk branch is called, and which
+  long-lived branches already exist. Section 5 needs all three.
 - **The founder's own documents** — their README and anything under their docs. Read them for
   context. You are not rewriting them.
 
@@ -114,7 +118,35 @@ pipeline sitting next to theirs is worse than none. If this foundation's `{{CI_F
 while the project has its own, that is why. Say so in the report, alongside the command mismatch from
 section 3, and leave the founder to decide.
 
-## 5. Old assistant instructions
+## 5. The branch model
+
+The workflow this foundation ships runs on branches — `/createspec` cuts one, `/pr-check` opens a
+pull request into the one above it, and the CI and deploy rules key off their names. An imported
+project usually arrives without them, so set them up. Locally, and only what is missing.
+
+1. **No `.git` here at all?** Then `git init -b main`, stage everything and make the first commit —
+   this project as it stands today, before anything else happens. Say in your report exactly what
+   went into it.
+2. **Find the trunk**, if there is a repository already: the branch that is checked out, or what
+   `git symbolic-ref refs/remotes/origin/HEAD` reports. **Do not rename it.** A trunk called
+   `master` stays `master`: renaming it breaks branch protection, open pull requests and every CI
+   trigger pointing at the old name, and none of that is yours to break.
+3. **Create what is missing**, and nothing else: `develop` from the trunk, then the first
+   `feature/<name>` from `develop` — see [BRANCHING.md](../../docs/architecture/BRANCHING.md). A
+   branch that already exists is left exactly where it is.
+4. **Make the documents say the real name.** [BRANCHING.md](../../docs/architecture/BRANCHING.md)
+   and `CLAUDE.md` are written around `main`. If this project's trunk is called something else,
+   rewrite them to name the branch that exists — the *shape* is the rule
+   (trunk ← `develop` ← `feature/<name>` ← issue branch), the trunk's name is a fact about this
+   repository.
+
+**The limits are the same as everywhere else in this command.** No remote: no `push`, no
+`remote add`, no branch created anywhere but here. No history rewritten — never `rebase`, never
+`reset --hard`, never `--force`. No branch renamed and none deleted. And do not commit the founder's
+working tree beyond the one first commit in case 1: whatever is uncommitted is theirs to look at
+before it goes in.
+
+## 6. Old assistant instructions
 
 Projects that have been worked on with AI accumulate instruction files — `.cursorrules`, an older
 `AGENTS.md`, `.github/copilot-instructions.md`, half-finished notes to a model that are now years of
@@ -126,16 +158,19 @@ this foundation or the code, and what would be lost by removing it. Where it hol
 true and still useful, fold that into `CLAUDE.md` — attributed, so the founder can see what moved —
 and say the original is now redundant. The founder decides what to remove.
 
-## 6. Report
+## 7. Report
 
 Say, plainly:
 
 1. What you found the stack and structure to be, and which files told you.
 2. Which documents you rewrote, and what changed in each.
-3. What you renamed to `.old`, and what you left untouched.
-4. Which old instruction files you found, and what you recommend for each.
-5. Every `[NEEDS CLARIFICATION]` you left, and why it could not be answered from the repository.
-6. Anything you noticed about the code that looks wrong. Name it — and leave it. It goes through
+3. Which `.airrow` files you tailored, what you carried across from the founder's version, and that
+   renaming one over their own is theirs to do.
+4. Which branches existed already and which you created, and — if the trunk is not `main` — that the
+   documents now name the branch this repository actually has.
+5. Which old instruction files you found, and what you recommend for each.
+6. Every `[NEEDS CLARIFICATION]` you left, and why it could not be answered from the repository.
+7. Anything you noticed about the code that looks wrong. Name it — and leave it. It goes through
    `/createspec`, like every other change from here.
 
 Then point the founder at step 2 of [START_HERE.md](../../START_HERE.md): the accounts and services

@@ -672,6 +672,16 @@ export async function saveConflictResolution(
   if (res.error) throw new Error(`Supabase: ${res.error.message}`);
 }
 
+/** Undo a decision: back to undecided, which is a delivery outcome of its own (spec 91). */
+export async function clearConflictResolution(jobId: string, path: string): Promise<void> {
+  const res = await db()
+    .from("import_conflicts")
+    .delete()
+    .eq("generation_job_id", jobId)
+    .eq("path", path);
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
+}
+
 export async function listConflictResolutions(jobId: string): Promise<Map<string, ConflictResolution>> {
   const data = rows<{ path: string; resolution: ConflictResolution }>(
     await db().from("import_conflicts").select("path, resolution").eq("generation_job_id", jobId)

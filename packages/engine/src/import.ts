@@ -508,6 +508,19 @@ export function pathOverlap(expected: ReadonlyArray<string>, actual: ReadonlyArr
  * what it is. A name with no extension (`Dockerfile`) and a dotfile (`.gitignore`, whose leading dot
  * is not an extension) both take the suffix at the end.
  */
+/**
+ * Whether an undecided conflict on this path delivers Airrow's version beside the founder's.
+ *
+ * Markdown only. A sidecar exists so `/cleanup` can reconcile two versions of a document, and
+ * markdown is exactly the set it may rewrite. Anything else would be inert at best and live at
+ * worst: `ci.airrow.yml` in `.github/workflows/` is a second pipeline GitHub Actions runs, failing
+ * on commands the project may not have — a red build the founder never asked for, in the one file
+ * `/cleanup` is forbidden to fix.
+ */
+export function deliversSidecar(path: string): boolean {
+  return path.endsWith(".md");
+}
+
 export function sidecarPath(path: string): string {
   const slash = path.lastIndexOf("/");
   const name = path.slice(slash + 1);
@@ -542,12 +555,7 @@ export function applyResolutions(
     }
     const decision = resolutions.get(file.path);
     if (decision === "use_generated") written.push(file);
-    // Markdown only. A sidecar exists so `/cleanup` can reconcile two versions of a document, and
-    // markdown is exactly the set it may rewrite. Anything else would be inert at best and live at
-    // worst: `ci.airrow.yml` in `.github/workflows/` is a second pipeline GitHub Actions runs, failing
-    // on commands the project may not have — a red build the founder never asked for, in the one
-    // file `/cleanup` is forbidden to fix.
-    else if (decision === undefined && file.path.endsWith(".md")) {
+    else if (decision === undefined && deliversSidecar(file.path)) {
       written.push({ ...file, path: sidecarPath(file.path) });
     }
   }

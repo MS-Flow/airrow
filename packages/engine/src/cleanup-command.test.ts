@@ -202,6 +202,29 @@ describe("the /cleanup command", () => {
     expect(cleanup).toContain("No remote");
     expect(cleanup).toContain("no secrets written");
   });
+
+  it("sets up the branch model the workflow runs on", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(cleanup).toContain("## 5. The branch model");
+    expect(cleanup).toContain("git init -b main");
+    expect(prose(cleanup)).toContain("`develop` from the trunk");
+    expect(cleanup).toContain("BRANCHING.md");
+  });
+
+  it("leaves an existing trunk's name alone and adapts the documents to it instead", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    // Renaming `master` breaks branch protection, open pull requests and every CI trigger pointing
+    // at it — none of which this command can put back.
+    expect(cleanup).toContain("**Do not rename it.**");
+    expect(prose(cleanup)).toContain("the trunk's name is a fact about this repository");
+  });
+
+  it("forbids the git operations that cannot be undone", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    for (const forbidden of ["rebase", "reset --hard", "--force", "No branch renamed and none deleted"]) {
+      expect(cleanup).toContain(forbidden);
+    }
+  });
 });
 
 describe("the documents match the command the founder actually has", () => {

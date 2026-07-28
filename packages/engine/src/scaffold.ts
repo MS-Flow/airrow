@@ -661,10 +661,10 @@ function firstStep(model: ProjectModel): string {
     return [
       ...run,
       `It reads ${model.name} as it actually is — the stack, the structure, the commands that really`,
-      "work — and rewrites the documents in this foundation to describe *that* project. It changes no",
-      "code: not a dependency, not a config file, not a migration. It deletes nothing either; a file of",
-      "yours it would otherwise write over is renamed with `.old` and reported, never removed. It is safe",
-      "to run again.",
+      "work — and rewrites the documents in this foundation to describe *that* project. It also creates",
+      "the local branches this workflow runs on, and only the ones you do not have yet. It changes no",
+      "code: not a dependency, not a config file, not a migration. It deletes nothing either, renames no",
+      "file of yours, and touches no remote. It is safe to run again.",
       "",
       "When it finishes, the commands these documents name are the ones that actually work here:"
     ].join("\n");
@@ -1086,10 +1086,10 @@ function repoSetupSteps(model: ProjectModel, from: number): string[] {
   const imported = shipsCleanup(model);
   const hostStep = usesAzureRepos(model)
     ? imported
-      ? "In **Azure DevOps**, create a project for the repository your code already lives in, and make sure `main` and `develop` both exist with this foundation committed alongside the code."
+      ? "In **Azure DevOps**, create a project for the repository your code already lives in, then push this foundation alongside the code — including the `develop` branch `/cleanup` created."
       : "In **Azure DevOps**, create a project and an empty **Azure Repos** repository, then push this foundation — including the `develop` branch `/start` created."
     : imported
-      ? `Push this foundation to your existing ${repoLabel(model)} repository, alongside the code, and make sure \`main\` and \`develop\` both exist.`
+      ? `Push this foundation to your existing ${repoLabel(model)} repository, alongside the code, including the \`develop\` branch \`/cleanup\` created.`
       : `Create an empty repository on ${repoLabel(model)} and push this foundation, including the \`develop\` branch \`/start\` created.`;
   if (usesAzureRepos(model)) {
     return [

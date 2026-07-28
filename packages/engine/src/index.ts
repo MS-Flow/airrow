@@ -30,6 +30,7 @@ export {
   applyResolutions,
   buildPreviewTree,
   checkImportLimits,
+  deliversSidecar,
   diffAgainstExisting,
   digestImported,
   hasCodeSignal,

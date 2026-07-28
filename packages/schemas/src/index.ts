@@ -100,10 +100,17 @@ export const importCreateSchema = projectCreateSchema.extend({
   source: z.literal("zip")
 });
 
-/** A single conflict decision posted back from the review screen. */
+/**
+ * A single conflict decision posted back from the review screen.
+ *
+ * An empty resolution means "undo this decision" — pressing the active button again returns the path
+ * to undecided. It is its own value rather than a second action because the review screen posts one
+ * form per button, and an unmade decision is a real state: undecided delivers Airrow's document as a
+ * `.airrow` sidecar, which neither explicit answer does (spec 91).
+ */
 export const conflictDecisionSchema = z.object({
   path: z.string().min(1).max(400),
-  resolution: conflictResolutionSchema
+  resolution: z.union([conflictResolutionSchema, z.literal("")])
 });
 
 export const profileUpdateSchema = z.object({

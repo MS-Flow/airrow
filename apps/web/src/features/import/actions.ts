@@ -4,6 +4,7 @@
 //
 // The analysis runs in this request and nothing but paths, sizes and digests is persisted, so the
 // founder's source never lands in Airrow's database (§II, customer IP).
+import { revalidatePath } from "next/cache";
 import { analyzeImport, digestImported, slugify } from "@airrow/engine";
 import {
   conflictDecisionSchema,
@@ -14,6 +15,7 @@ import {
 } from "@airrow/schemas";
 import { requireSession } from "@/lib/auth";
 import {
+  clearConflictResolution,
   createImportSource,
   createProject,
   getImportSource,
@@ -100,5 +102,13 @@ export async function resolveConflictAction(formData: FormData): Promise<void> {
   const [source, job] = await Promise.all([getImportSource(projectId), latestJob(projectId)]);
   if (!source || !job) return;
 
-  await saveConflictResolution(source.id, job.id, decision.data.path, decision.data.resolution);
+  const { path, resolution } = decision.data;
+  if (resolution === "") await clearConflictResolution(job.id, path);
+  else await saveConflictResolution(source.id, job.id, path, resolution);
+
+  // Without this the decision is written and nothing on screen changes — the button reads as broken
+  // and the founder clicks it again. Both pages are downstream of the answer: the review shows which
+  // version wins, and the preview tree is built through `applyResolutions`.
+  revalidatePath(`/app/projects/${projectId}/import`);
+  revalidatePath(`/app/projects/${projectId}/preview`);
 }

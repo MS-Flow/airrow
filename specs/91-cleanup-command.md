@@ -126,6 +126,26 @@ ska kunna jämka två versioner av ett *dokument*, och markdown är precis den m
 Det ersätter också `.old`-mekaniken i `/cleanup` steg 4: kommandot behöver inte längre gräva i
 git-historiken efter en version som skrevs över — båda filerna ligger på disk, tydligt märkta.
 
+### Tillägg: `/cleanup` sätter också upp branchmodellen
+
+Hela arbetssättet vilar på brancherna — `/createspec` klipper en, `/pr-check` öppnar PR mot den
+ovanför, och CI- och deployreglerna känner igen dem på namnet. Ett importerat projekt kommer utan
+dem, och dokument som beskriver en struktur som inte finns hjälper ingen.
+
+`/cleanup` skapar därför det som saknas, lokalt: `develop` från trunken, sedan första
+`feature/<name>`. Inget `.git` alls ⇒ `git init -b main` och en första commit, som `/start` gör.
+
+**Trunken döps aldrig om.** Heter den `master` får den heta `master`: ett namnbyte slår sönder
+branch protection, öppna pull requests och varje CI-trigger som pekar på det gamla namnet, och
+ingenting av det kan kommandot laga. I stället skrivs *dokumenten* om — `BRANCHING.md` och
+`CLAUDE.md` är skrivna kring `main` — så att de namnger branchen som faktiskt finns. Formen är
+regeln (trunk ← `develop` ← `feature/<name>` ← issue-branch); trunkens namn är ett faktum om repot,
+och att beskriva verkligheten är precis vad `/cleanup` är till för.
+
+Gränserna är desamma som för resten av kommandot: ingen remote, ingen historik som skrivs om (aldrig
+`rebase`, `reset --hard` eller `--force`), ingen branch som döps om eller tas bort, och founderns
+oincheckade arbete committas inte — utom den enda första commiten i ett repo som inte hade git alls.
+
 **Not touched:** `/start` självt — dess innehåll och beteende är oförändrat, det ändras bara vem som
 får det. Importanalysen (#63), LLM-författandet (#65) och genereringsmotorns kontrakt. Ingen parallell
 genereringsväg: samma `generate()`, samma modell, ett fält mer.
@@ -169,6 +189,13 @@ _What "done" means. Every line is something a reviewer can check._
       GitHub Actions kör; sådana konflikter levererar inget, precis som förut.
 - [x] `/cleanup` letar själv upp alla `*.airrow.md`, listar dem i rapporten och arbetar igenom varenda
       en — den väntar inte på att bli tilldelad en.
+- [x] `/cleanup` skapar branchmodellen ur [BRANCHING.md](../docs/architecture/BRANCHING.md) lokalt —
+      `develop` och första `feature/<name>`, bara det som saknas — och `git init -b main` med en
+      första commit i ett repo utan git.
+- [x] En befintlig trunk döps aldrig om. Heter den något annat än `main` skrivs dokumenten om att
+      namnge den branch som finns, med formen intakt.
+- [x] `/cleanup` rör ingen remote, skriver aldrig om historik (`rebase`, `reset --hard`, `--force`),
+      döper aldrig om och tar aldrig bort en branch, och committar inte founderns oincheckade arbete.
 - [x] Ett **uttryckligt** "Keep mine" levererar fortfarande ingenting — inte heller en `.airrow`-fil.
 - [x] `/cleanup` vet vilken av de två som är Airrows, skräddarsyr `.airrow`-filen efter projektet, låter
       founderns fil vara helt orörd, och lämnar bytet till foundern med kommandot utskrivet.
@@ -224,7 +251,7 @@ _How each criterion above is proven._
 | --- | --- |
 | `pnpm -r typecheck` | rent (3 projekt) |
 | `pnpm -r lint` | rent, inga nya anmärkningar (3 projekt) |
-| `pnpm -r test` | **428 gröna**, 27 skippade — schemas 35, engine 201, web 192 |
+| `pnpm -r test` | **439 gröna**, 27 skippade — schemas 35, engine 204, web 200 |
 | `pnpm test:scripts` | 13 gröna |
 | `pnpm engine:smoke` | SMOKE PASSED — 5 fixtures (Ledgerly är den nya importvägen) |
 | `pnpm --filter web build` | rent |
@@ -232,7 +259,7 @@ _How each criterion above is proven._
 De 27 skippade är pre-existerande: `*.db.test.ts`- och RLS-sviterna skippar utan lokal Supabase.
 Inga nya fel, inga pre-existerande fel.
 
-Nya tester: `cleanup-command.test.ts` (25) och `import.test.ts` (+13 — kodsignal-predikatet,
+Nya tester: `cleanup-command.test.ts` (28) och `import.test.ts` (+13 — kodsignal-predikatet,
 `sidecarPath` och de fyra `applyResolutions`-fallen: ny fil, oavgjord konflikt, uttryckligt val,
 uttryckligt "Keep mine").
 
@@ -410,6 +437,51 @@ lint rent, 419 gröna (27 pre-existerande skippade), `test:scripts` 13 gröna, `
 Motorn förblir ren: `hasCodeSignal()` och `commandFor()` är rena funktioner över modellen,
 databasuppslaget ligger i `apps/web/src/features/import/origin.ts`, och inget i `packages/**` läser
 `process.env` eller importerar från `apps/*`. Ingen schemaändring, alltså ingen ny RLS-yta.
+
+### Konfliktknapparna sparade, men ingenting hände på skärmen
+
+Rapporterat vid test: "Keep mine" och "Use Airrow's" såg ut att inte göra någonting.
+
+De gjorde det — `resolveConflictAction` skrev beslutet till `import_conflicts` — men saknade
+`revalidatePath`, så server-komponenten renderades aldrig om och sidan visade fortfarande det gamla
+läget. Ett beslut som inte syns är ett beslut foundern fattar en gång till. Rättat i
+[`import/actions.ts`](../apps/web/src/features/import/actions.ts): både granskningssidan och previewen
+revalideras, eftersom previewträdet byggs genom `applyResolutions`. Övriga actions i kodbasen gjorde
+redan så ([`preview/actions.ts:34`](../apps/web/src/features/preview/actions.ts#L34),
+[`projects/actions.ts:26`](../apps/web/src/features/projects/actions.ts#L26)) — den här hade bara
+aldrig fått det.
+
+### Raden säger nu vad som faktiskt hamnar i nedladdningen
+
+Badgen visade bara "Undecided" och försvann så fort man valt något, vilket lämnade de två avgjorda
+lägena helt utan text. Nu står utfallet alltid skrivet, i fyra varianter — inte tre:
+
+| Val | Vad raden säger |
+| --- | --- |
+| Inget val, markdown | Undecided — yours is kept, Airrow's arrives as `README.airrow.md` |
+| Inget val, annat | Undecided — yours is kept, Airrow's version is not delivered |
+| Keep mine | Yours is kept — Airrow's version is not delivered |
+| Use Airrow's | Airrow's version takes this path — yours is not delivered |
+
+Att beskriva de två oavgjorda fallen likadant hade lovat en fil som inte ligger i arkivet, så UI:t
+frågar motorn i stället för att gissa: `deliversSidecar(path)` är utbruten ur `applyResolutions` och
+används av båda. Regeln finns på ett ställe (§IV), och `ConflictRow.test.tsx` (8 tester) håller texten
+mot den.
+
+**Och beslutet går att ångra.** Ett tryck på den redan valda knappen tar bort raden ur
+`import_conflicts` och sökvägen är oavgjord igen — vilket är ett eget leveransutfall, inte ett
+tomrum: oavgjort ger `.airrow`-filen som varken "Keep mine" eller "Use Airrow's" gör. `resolution: ""`
+i `conflictDecisionSchema` bär den avsikten. Knappen postar avsikten i stället för att servern räknar
+ut den ur sparat värde — en gammal sida ska aldrig kunna slå av ett beslut som foundern ser som
+ovalt. Ingen migration: policyn på `import_conflicts` är `for all` och `delete` fanns redan i grants.
+
+### Följdfynd: vägen tillbaka till svaren fanns bara inne i filbläddraren
+
+"Change answers" låg i previewens header och ingen annanstans. Svaren är indata till allt på
+projektsidan, så länken hör hemma där — en founder som vill ändra något går inte djupare in i
+utdatan för att hitta vägen tillbaka. Tillagd i "Next step"-kortet för ett projekt som har svar att
+ändra (`ready` eller `failed`), med en rad som säger vad som händer: en ändring regenererar
+foundationen, redigerade filer ersätts, och det som redan är nedladdat rörs inte.
 
 ### `.env.example` finns inte i ett importerat projekt
 
