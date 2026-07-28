@@ -13,9 +13,9 @@ closes that gap. Read @.claude/spec-kit/constitution.md first; everything below 
 a pipeline. Documents only. If something in the project looks wrong to you, that is a spec, not a fix
 you make here.
 
-**It deletes nothing.** Where this foundation took a path the project already used, the founder's
-version is recovered and kept, never removed. Everything you would otherwise delete gets reported
-instead.
+**It deletes nothing, and it renames nothing.** Where this foundation shipped a document the project
+already had, both are on disk — theirs at its own path, this foundation's beside it as `.airrow`.
+Everything you would otherwise remove gets reported instead.
 
 **Re-runnable by design.** Check before every step and skip what is already done. A founder who runs
 this twice, or runs it after editing the documents by hand, must lose nothing.
@@ -78,24 +78,41 @@ Anything you cannot establish from the repository goes in as
 plausible guess — an invented convention is worse than an admitted unknown, because the next
 assistant will follow it.
 
-## 4. Where this foundation took a path the project already used
+## 4. The `.airrow` files: where this project already had one
 
-This foundation ships files the project may already have — `README.md` most often. Landing it here
-overwrote the founder's version of that file. Nothing is allowed to stay lost.
+Where this foundation ships a document the project already had, the founder's file keeps its path and
+this foundation's version arrives beside it as `<name>.airrow.md` — `README.airrow.md`,
+`CLAUDE.airrow.md`, `docs/architecture/SYSTEM_OVERVIEW.airrow.md`. Both are on disk on purpose, and
+the name says which is which: **the `.airrow` file is this foundation's version; the plain one is the
+founder's.**
 
-For every document this foundation shipped that this project already had:
+**Start by finding all of them** — `git ls-files '*.airrow.md'`, or a glob for `**/*.airrow.md` if
+this is not a git repository. There may be one, there may be a dozen; the number depends on how much
+of this foundation the project already had. List them in your report before you touch any, and work
+through every single one. An `.airrow` file left untailored is a document that describes someone
+else's project.
 
-1. **Recover their version.** In a git repository it is in the history:
-   `git show HEAD:README.md > README.old.md` — the commit before this foundation arrived. Read
-   `git status` and `git log` to find which paths that applies to. If this is not a git repository,
-   or the file has no history, say so in the report and change nothing.
-2. **Keep it as `.old`**, byte for byte unchanged: `README.md` → `README.old.md`, the suffix before
-   the extension. Never delete it, never edit it, never merge it silently.
-3. **Say so in plain words**, in the report: their file is still there, they are welcome to fold
-   anything from it back in, and the reason this foundation's version now holds the path is that the
-   workflow reads it.
+For each of them:
 
-If a `.old` file from an earlier run is already there, leave it alone. That path is settled.
+1. **Treat the `.airrow` file as one of the documents in section 3.** It is this foundation's, so
+   tailor it to this project like the rest — that is what makes it worth adopting.
+2. **Read the founder's version for what only they know.** Anything in it that is true and not in the
+   `.airrow` file — how the project is deployed, why something is the way it is, what a reader needs
+   to know — belongs in the tailored version. Say in your report what you carried across.
+3. **Leave the founder's file alone.** Do not rewrite it, do not delete it, do not rename it. Their
+   `README.md` is theirs.
+4. **Tell them the swap is theirs to make**, in plain words: their file is untouched,
+   `README.airrow.md` is the version the workflow reads, and when they are happy with it they rename
+   it over their own — `git mv README.airrow.md README.md`. Nothing here does that for them.
+
+If an `.airrow` file is missing for a document this project already had, the founder chose to keep
+theirs during the import review. Respect it: say so once in the report and move on.
+
+**Only documents arrive this way.** Where this foundation would have shipped a *non*-document the
+project already had — a workflow file most likely — nothing was delivered, because a second live
+pipeline sitting next to theirs is worse than none. If this foundation's `{{CI_FILE}}` is missing
+while the project has its own, that is why. Say so in the report, alongside the command mismatch from
+section 3, and leave the founder to decide.
 
 ## 5. Old assistant instructions
 

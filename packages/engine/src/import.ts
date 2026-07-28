@@ -502,8 +502,31 @@ export function pathOverlap(expected: ReadonlyArray<string>, actual: ReadonlyArr
 }
 
 /**
- * Apply the founder's conflict decisions. Unresolved conflicts keep the existing file — the safe
- * default — so a half-answered review can never overwrite work.
+ * The path a generated file takes when the founder's file already holds the real one.
+ *
+ * `README.md` → `README.airrow.md`; the suffix goes before the extension so the file still opens as
+ * what it is. A name with no extension (`Dockerfile`) and a dotfile (`.gitignore`, whose leading dot
+ * is not an extension) both take the suffix at the end.
+ */
+export function sidecarPath(path: string): string {
+  const slash = path.lastIndexOf("/");
+  const name = path.slice(slash + 1);
+  const dot = name.lastIndexOf(".");
+  const renamed = dot <= 0 ? `${name}.airrow` : `${name.slice(0, dot)}.airrow${name.slice(dot)}`;
+  return path.slice(0, slash + 1) + renamed;
+}
+
+/**
+ * Apply the founder's conflict decisions. A file of theirs is never overwritten by one they did not
+ * explicitly ask for — that is the promise from spec 63 and it is unchanged.
+ *
+ * What changed (spec 91) is what happens to Airrow's version of an **undecided** conflict. It used to
+ * be dropped, which left an imported project with, say, no `CLAUDE.md` at all and `/cleanup` with
+ * nothing to reconcile against — the foundation's own documents were missing from the foundation. It
+ * now ships alongside as `README.airrow.md`, which overwrites nothing and leaves both versions on disk
+ * for `/cleanup` to work through — for markdown, see below. An **explicit** "keep mine" still
+ * delivers nothing: the founder decided, and a sidecar they said they did not want is still a file
+ * they did not want.
  */
 export function applyResolutions(
   generated: GeneratedFile[],
@@ -511,7 +534,22 @@ export function applyResolutions(
   resolutions: ReadonlyMap<string, ConflictResolution>
 ): GeneratedFile[] {
   const existingPaths = new Set(existing.map((f) => f.path));
-  return generated.filter(
-    (file) => !existingPaths.has(file.path) || resolutions.get(file.path) === "use_generated"
-  );
+  const written: GeneratedFile[] = [];
+  for (const file of generated) {
+    if (!existingPaths.has(file.path)) {
+      written.push(file);
+      continue;
+    }
+    const decision = resolutions.get(file.path);
+    if (decision === "use_generated") written.push(file);
+    // Markdown only. A sidecar exists so `/cleanup` can reconcile two versions of a document, and
+    // markdown is exactly the set it may rewrite. Anything else would be inert at best and live at
+    // worst: `ci.airrow.yml` in `.github/workflows/` is a second pipeline GitHub Actions runs, failing
+    // on commands the project may not have — a red build the founder never asked for, in the one
+    // file `/cleanup` is forbidden to fix.
+    else if (decision === undefined && file.path.endsWith(".md")) {
+      written.push({ ...file, path: sidecarPath(file.path) });
+    }
+  }
+  return written;
 }

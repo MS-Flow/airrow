@@ -93,6 +93,39 @@ stackDetected: boolean }` — inte som två lösa booleaner. `analyzeImport()` f
 `ImportAnalysis` så att predikatet är ett, deterministiskt och testbart på samma ställe som resten av
 analysen.
 
+### Tillägg: en oavgjord konflikt levererar båda versionerna
+
+Rapporterat av foundern efter första skarpa körningen: ett importerat projekt laddades ner och
+`README.md` var fortfarande deras gamla — Airrows version fanns inte någonstans i arkivet.
+
+Orsaken var `applyResolutions` ([`import.ts`](../packages/engine/src/import.ts)): en konflikt som
+foundern inte tagit ställning till **släppte** Airrows fil helt. Följden är värre än en gammal README:
+ett importerat projekt kunde få en foundation utan `CLAUDE.md`, utan `README.md` — foundationens egna
+dokument saknades i foundationen, och `/cleanup` hade ingenting att stämma av mot.
+
+En oavgjord konflikt levererar nu **båda**: founderns fil behåller sin sökväg, Airrows kommer bredvid
+som `README.airrow.md` (suffixet före filändelsen, så filen fortfarande öppnas som det den är).
+Ingenting skrivs över, vilket är det spec 63 faktiskt lovade — löftet var aldrig att Airrows version
+skulle kastas, utan att founderns aldrig skulle skrivas över tyst.
+
+**Suffixet är `.airrow`, inte `.new`.** Det säger vem filen kommer från i stället för hur gammal den
+är, vilket är den upplysning som faktiskt behövs: en founder som ser `README.airrow.md` bredvid sin
+egen vet direkt vilken som är vems, och `/cleanup` behöver ingen förklaring för att veta vilken den
+äger. Att namnet bär produkten är en bonus, inte skälet.
+
+Ett **uttryckligt** "Keep mine" levererar fortfarande ingenting. Där har foundern bestämt sig, och en
+sidecar de sagt nej till är fortfarande en fil de sagt nej till (§0, founder-in-control).
+
+**Bara markdown får en sidecar.** Den första versionen gav alla konflikter en, vilket producerade
+`.github/workflows/ci.airrow.yml` i ett projekt som redan hade en egen CI — och GitHub Actions kör varje
+`.yml` i den mappen. Foundern hade fått en andra pipeline igång, som failar på kommandon projektet
+kanske inte har, i den enda fil `/cleanup` är förbjuden att laga. En sidecar finns för att `/cleanup`
+ska kunna jämka två versioner av ett *dokument*, och markdown är precis den mängd den får skriva om.
+Övriga konflikter beter sig som förut: oavgjord ⇒ inget levereras, och `/cleanup` rapporterar det.
+
+Det ersätter också `.old`-mekaniken i `/cleanup` steg 4: kommandot behöver inte längre gräva i
+git-historiken efter en version som skrevs över — båda filerna ligger på disk, tydligt märkta.
+
 **Not touched:** `/start` självt — dess innehåll och beteende är oförändrat, det ändras bara vem som
 får det. Importanalysen (#63), LLM-författandet (#65) och genereringsmotorns kontrakt. Ingen parallell
 genereringsväg: samma `generate()`, samma modell, ett fält mer.
@@ -129,13 +162,18 @@ _What "done" means. Every line is something a reviewer can check._
 - [x] `/cleanup` hittar gammal AI-slop — föråldrade och motstridiga instruktionsfiler
       (`.cursorrules`, gamla `AGENTS.md`, `.github/copilot-instructions.md` och liknande) — och
       **rapporterar dem för foundern att ta ställning till. Den raderar aldrig en fil.**
-- [x] Där Airrows dokument tog en sökväg projektet redan använde återskapas founderns version ur
-      git-historiken och behålls som `.old` (`README.md` → `README.old.md`), aldrig raderad, och
-      `/cleanup` säger i klartext att den gamla filen finns kvar och kan användas — men att Airrows
-      version är den som arbetssättet utgår från. _(Omformulerat under `/implement`: två filer kan
-      inte ha samma sökväg samtidigt — se Implementation notes.)_
-- [x] Omdöpningen är den **enda** ändring `/cleanup` gör utanför Airrows egna dokument, och innehållet
-      i den omdöpta filen är byte för byte oförändrat.
+- [x] En **oavgjord** konflikt på ett markdown-dokument levererar båda versionerna: founderns fil
+      behåller sin sökväg och Airrows kommer bredvid som `<namn>.airrow.md`. Ingenting skrivs över, och
+      det gäller varje dokument — inte bara `README.md`.
+- [x] Ingen annan filtyp får en sidecar. En `.airrow.yml` i `.github/workflows/` vore en andra pipeline
+      GitHub Actions kör; sådana konflikter levererar inget, precis som förut.
+- [x] `/cleanup` letar själv upp alla `*.airrow.md`, listar dem i rapporten och arbetar igenom varenda
+      en — den väntar inte på att bli tilldelad en.
+- [x] Ett **uttryckligt** "Keep mine" levererar fortfarande ingenting — inte heller en `.airrow`-fil.
+- [x] `/cleanup` vet vilken av de två som är Airrows, skräddarsyr `.airrow`-filen efter projektet, låter
+      founderns fil vara helt orörd, och lämnar bytet till foundern med kommandot utskrivet.
+- [x] Importflödets egen text lovar det som faktiskt händer — konfliktraden och sammanfattningen på
+      importsidan säger att en oavgjord konflikt ger en `.airrow`-fil.
 - [x] `/cleanup` skriver bara om Airrows genererade dokument — `CLAUDE.md`, `docs/**`, `START_HERE.md`,
       `specs/README.md`. Founderns egna dokument läses för kontext men skrivs aldrig om, och
       `.claude/spec-kit/constitution.md` lämnas orörd: den är filen som styr alla andra.
@@ -186,7 +224,7 @@ _How each criterion above is proven._
 | --- | --- |
 | `pnpm -r typecheck` | rent (3 projekt) |
 | `pnpm -r lint` | rent, inga nya anmärkningar (3 projekt) |
-| `pnpm -r test` | **419 gröna**, 27 skippade — schemas 35, engine 192, web 192 |
+| `pnpm -r test` | **428 gröna**, 27 skippade — schemas 35, engine 201, web 192 |
 | `pnpm test:scripts` | 13 gröna |
 | `pnpm engine:smoke` | SMOKE PASSED — 5 fixtures (Ledgerly är den nya importvägen) |
 | `pnpm --filter web build` | rent |
@@ -194,7 +232,9 @@ _How each criterion above is proven._
 De 27 skippade är pre-existerande: `*.db.test.ts`- och RLS-sviterna skippar utan lokal Supabase.
 Inga nya fel, inga pre-existerande fel.
 
-Nya tester: `cleanup-command.test.ts` (21) och `import.test.ts` (+8, kodsignal-predikatet).
+Nya tester: `cleanup-command.test.ts` (25) och `import.test.ts` (+13 — kodsignal-predikatet,
+`sidecarPath` och de fyra `applyResolutions`-fallen: ny fil, oavgjord konflikt, uttryckligt val,
+uttryckligt "Keep mine").
 
 ---
 
@@ -313,20 +353,17 @@ _Unusual inputs or states, and what should happen._
 
 ## Implementation notes
 
-### Avvikelse: två filer kan inte ha samma sökväg
+### Kollisionen löstes två gånger: först i git, sedan i leveransen
 
 Specen sa att founderns fil skulle döpas om "där founderns fil och Airrows dokument har samma
-sökväg". Det tillståndet finns inte: när leveransen skriver `README.md` är founderns `README.md`
-borta i samma ögonblick. Regeln blev därför **återskapa i stället för att döpa om** — founderns
-version hämtas ur git-historiken (`git show HEAD:README.md > README.old.md`, commiten före
-foundationen kom) och behålls som `.old`. Innehållet är byte för byte identiskt, verifierat i den
-manuella körningen.
+sökväg". Det tillståndet finns inte — två filer kan inte dela sökväg. Första lösningen var därför att
+`/cleanup` skulle **återskapa** founderns version ur git-historiken
+(`git show HEAD:README.md > README.old.md`). Den fungerade, verifierad byte för byte i den manuella
+körningen, men den lade bördan på ett repo som måste ha rätt historik.
 
-Konsekvensen är värd att stå för: i ett repo utan git, eller för en fil utan historik, finns inget
-att återskapa. `/cleanup` säger då det i rapporten och rör ingenting — den hittar inte på en gammal
-version. Det andra fallet är när foundern valde **"Keep mine"** i konfliktsteget (#63): då levererades
-Airrows version aldrig, det finns ingen kollision, och beslutet är founderns — `/cleanup` överprövar
-det inte.
+Den skarpa körningen visade att problemet satt tidigare: leveransen skickade aldrig Airrows version
+alls. Med `.airrow`-filerna (se _Design decision_) ligger båda på disk redan när foundern packar upp,
+och `/cleanup` behöver varken git eller gissningar. `.old`-mekaniken är borta ur kommandot.
 
 ### Den manuella körningen hittade ett hål: CI namnger kommandon `/cleanup` inte får röra
 

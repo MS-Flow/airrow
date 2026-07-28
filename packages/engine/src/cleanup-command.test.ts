@@ -68,6 +68,9 @@ function model(origin: ProjectOrigin, answers: InterviewAnswers = BASE) {
   });
 }
 
+/** Collapse wrapping, so an assertion about a sentence survives the file being re-wrapped. */
+const prose = (text: string): string => text.replace(/\s+/g, " ");
+
 function render(origin: ProjectOrigin, answers: InterviewAnswers = BASE) {
   const { files } = renderScaffold(TEMPLATE, model(origin, answers));
   const byPath = (p: string) => files.find((f) => f.path === p)?.content ?? "";
@@ -152,11 +155,30 @@ describe("the /cleanup command", () => {
     }
   });
 
-  it("renames a colliding file rather than deleting it, and leaves its contents alone", () => {
+  it("tells the assistant which of the two files is Airrow's, and leaves the founder's alone", () => {
     const cleanup = render(IMPORTED).byPath(CLEANUP);
-    expect(cleanup).toContain("README.old.md");
-    expect(cleanup).toContain("byte for byte unchanged");
-    expect(cleanup).toContain("It deletes nothing.");
+    expect(cleanup).toContain("README.airrow.md");
+    expect(prose(cleanup)).toContain("the `.airrow` file is this foundation's version");
+    expect(cleanup).toContain("Leave the founder's file alone");
+    expect(cleanup).toContain("It deletes nothing, and it renames nothing.");
+  });
+
+  it("goes looking for every .airrow document rather than waiting to be handed one", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(cleanup).toContain("git ls-files '*.airrow.md'");
+    expect(prose(cleanup)).toContain("work through every single one");
+  });
+
+  it("explains why a non-document conflict has no .airrow file", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(cleanup).toContain("Only documents arrive this way");
+    expect(cleanup).toContain(".github/workflows/ci.yml");
+  });
+
+  it("leaves the swap to the founder rather than doing it for them", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(cleanup).toContain("git mv README.airrow.md README.md");
+    expect(cleanup).toContain("Nothing here does that for them");
   });
 
   it("reports old assistant instructions instead of removing them", () => {

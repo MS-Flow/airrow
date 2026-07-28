@@ -37,6 +37,7 @@ export {
   mergeOverlay,
   mergePreviewFiles,
   pathOverlap,
+  sidecarPath,
   stripCommonRoot,
   IGNORED_IMPORT_DIRECTORIES,
   IMPORT_LIMITS

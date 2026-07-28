@@ -173,8 +173,12 @@ async function ImportDiffSection({
       </Card>
 
       <p className="mt-6 text-sm text-fg-faint">
-        The download contains the new files plus any conflict you chose to take from Airrow.
-        Undecided conflicts keep your version. Your project&rsquo;s structure sits in the{" "}
+        The download contains the new files plus any conflict you chose to take from Airrow. Where you
+        have not decided, your version keeps its path and Airrow&rsquo;s arrives beside it as{" "}
+        <span className="font-mono text-xs">.airrow.md</span> — nothing of yours is overwritten, and{" "}
+        <span className="font-mono text-xs">/cleanup</span> works through both. Choose{" "}
+        <em>Keep mine</em> and Airrow&rsquo;s version is not delivered at all. Your project&rsquo;s
+        structure sits in the{" "}
         <Link href={`/app/projects/${projectId}/preview`} className="text-fg underline-offset-4 hover:underline">
           preview
         </Link>

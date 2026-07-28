@@ -13,6 +13,7 @@ import {
   digestImported,
   hasCodeSignal,
   isIgnoredImportPath,
+  sidecarPath,
   stripCommonRoot,
   IMPORT_LIMITS
 } from "./import.ts";
@@ -394,30 +395,76 @@ describe("applyResolutions", () => {
   const existing = (...paths: string[]): ReturnType<typeof digestImported> =>
     digestImported(paths.map((p) => file(p, "old")), identityDigest);
 
-  it("keeps the existing file when the founder has not decided", () => {
+  it("never takes the existing file's path when the founder has not decided", () => {
     const written = applyResolutions(
       [generated("README.md"), generated("docs/NEW.md")],
       existing("README.md"),
       new Map()
     );
-    expect(written.map((f) => f.path)).toEqual(["docs/NEW.md"]);
+    expect(written.map((f) => f.path)).toEqual(["README.airrow.md", "docs/NEW.md"]);
   });
 
-  it("overwrites only the files explicitly chosen", () => {
+  it("still delivers Airrow's version of an undecided conflict, beside theirs", () => {
+    const written = applyResolutions([generated("CLAUDE.md")], existing("CLAUDE.md"), new Map());
+    // Dropping it left an imported project with no CLAUDE.md at all and /cleanup nothing to
+    // reconcile against — the foundation missing its own documents (spec 91).
+    expect(written).toHaveLength(1);
+    expect(written[0]?.content).toBe("generated");
+  });
+
+  it("sidecars every conflicting document, not just the README", () => {
+    const written = applyResolutions(
+      [generated("README.md"), generated("CLAUDE.md"), generated("docs/architecture/SYSTEM_OVERVIEW.md")],
+      existing("README.md", "CLAUDE.md", "docs/architecture/SYSTEM_OVERVIEW.md"),
+      new Map()
+    );
+    expect(written.map((f) => f.path)).toEqual([
+      "README.airrow.md",
+      "CLAUDE.airrow.md",
+      "docs/architecture/SYSTEM_OVERVIEW.airrow.md"
+    ]);
+  });
+
+  it("never sidecars a workflow file — Actions would run it as a second pipeline", () => {
+    const written = applyResolutions(
+      [generated(".github/workflows/ci.yml"), generated("README.md")],
+      existing(".github/workflows/ci.yml", "README.md"),
+      new Map()
+    );
+    expect(written.map((f) => f.path)).toEqual(["README.airrow.md"]);
+  });
+
+  it("takes an existing file's own path only where that was explicitly chosen", () => {
     const written = applyResolutions(
       [generated("README.md"), generated("CLAUDE.md")],
       existing("README.md", "CLAUDE.md"),
       new Map([["README.md", "use_generated" as const]])
     );
-    expect(written.map((f) => f.path)).toEqual(["README.md"]);
+    expect(written.map((f) => f.path)).toEqual(["README.md", "CLAUDE.airrow.md"]);
   });
 
-  it("never writes a file the founder chose to keep", () => {
+  it("delivers nothing at all for a file the founder chose to keep — not even a sidecar", () => {
     const written = applyResolutions(
       [generated("README.md")],
       existing("README.md"),
       new Map([["README.md", "keep_existing" as const]])
     );
     expect(written).toEqual([]);
+  });
+});
+
+describe("sidecarPath", () => {
+  it("puts the suffix before the extension, so the file still opens as what it is", () => {
+    expect(sidecarPath("README.md")).toBe("README.airrow.md");
+    expect(sidecarPath(".github/workflows/ci.yml")).toBe(".github/workflows/ci.airrow.yml");
+  });
+
+  it("appends it when there is no extension to sit before", () => {
+    expect(sidecarPath("Dockerfile")).toBe("Dockerfile.airrow");
+  });
+
+  it("does not read a dotfile's leading dot as an extension", () => {
+    expect(sidecarPath(".gitignore")).toBe(".gitignore.airrow");
+    expect(sidecarPath("config/.env")).toBe("config/.env.airrow");
   });
 });

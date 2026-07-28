@@ -54,7 +54,10 @@ export function ConflictRow({
 
       <div className="flex items-center gap-2">
         {decision === undefined ? (
-          <Badge tone="info">Undecided — yours is kept</Badge>
+          // Undecided no longer means Airrow's version is dropped: it arrives beside yours as
+          // `<name>.airrow.md` so `/cleanup` has both to work from (spec 91). Yours is still
+          // untouched, which is the promise that matters here.
+          <Badge tone="info">Undecided — yours is kept, Airrow&rsquo;s arrives as .airrow</Badge>
         ) : null}
         <Choice
           projectId={projectId}

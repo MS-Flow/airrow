@@ -736,7 +736,8 @@ function cleanupClaim(commands: Commands, stackName: string): string {
 function cleanupScope(): string {
   return [
     "**Yours to rewrite** — every document this foundation shipped: `README.md`, `START_HERE.md`,",
-    "`CLAUDE.md`, everything under `docs/`, and `specs/README.md`.",
+    "`CLAUDE.md`, everything under `docs/`, and `specs/README.md` — including any that arrived as",
+    "`<name>.airrow.md` beside a file of the founder's (section 4).",
     "",
     "**Read, never rewrite:**",
     "",
