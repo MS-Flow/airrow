@@ -68,7 +68,9 @@ export default async function Landing() {
   return (
     <div className="min-h-screen bg-bg">
       <header className="sticky top-0 z-20 border-b border-border bg-bg/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
+        {/* Wraps rather than overflows: below 360px the lockup and the actions need more room
+            than the row has, and a second line is the honest way to give it to them. */}
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-y-2 px-6 py-3.5">
           <AirrowLogo size="lg" priority />
           <div className="flex items-center gap-2">
             <ThemeSwitch current={theme} />
@@ -116,7 +118,7 @@ export default async function Landing() {
             <span className="font-medium text-fg">{HERO.leadBrand}</span>
             {HERO.leadRest}
           </p>
-          <div className="mt-10 flex animate-slide-up items-center gap-3">
+          <div className="mt-10 flex animate-slide-up flex-wrap items-center justify-center gap-3">
             <Button size="lg" asChild>
               <Link href={primaryHref}>{HERO.primaryCta}</Link>
             </Button>
