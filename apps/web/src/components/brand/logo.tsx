@@ -16,7 +16,9 @@ export function AirrowLogo({
   size?: "sm" | "md" | "lg";
   priority?: boolean;
 }) {
-  const height = { sm: "h-5", md: "h-7", lg: "h-10" }[size];
+  // `lg` steps down on a phone: at `h-10` the lockup is ~151px wide, which is half of a
+  // 360px header before the theme switch and the actions beside it have asked for anything.
+  const height = { sm: "h-5", md: "h-7", lg: "h-7 sm:h-10" }[size];
 
   return (
     <Image

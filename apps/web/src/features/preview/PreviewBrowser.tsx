@@ -7,13 +7,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Check, ChevronDown, ChevronRight, File, FileText, FileWarning, Pencil, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  File,
+  FileText,
+  FileWarning,
+  FolderTree,
+  Pencil,
+  X
+} from "lucide-react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { buildPreviewTree } from "@airrow/engine";
 import type { PreviewFileEntry, PreviewFileSource, PreviewTreeNode } from "@airrow/engine";
 import { Button } from "@/components/ui/button";
 import { InlineError } from "@/components/ui/states";
+import { useOverlay } from "@/lib/use-overlay";
 import { cn } from "@/lib/utils";
 import { highlightFileAction, saveGeneratedFileAction } from "./actions";
 import { resolvePreviewLink } from "./links";
@@ -206,15 +217,27 @@ export function PreviewBrowser({
 
   const reader = useRef<HTMLDivElement>(null);
 
+  // Below `md` the tree is an overlay drawer rather than a column, so a phone can reach the
+  // repository at all. Above it the same markup is simply the pane it has always been, and
+  // this state is never consulted.
+  const [treeOpen, setTreeOpen] = useState(false);
+  const closeTree = useCallback(() => setTreeOpen(false), []);
+  useOverlay({ open: treeOpen, onDismiss: closeTree });
+
   const select = useCallback(
     (p: string) => {
       if (!byPath.has(p)) return;
       setActive(p);
+      // Picking a file is the drawer's whole purpose, so it gets out of the way afterwards.
+      setTreeOpen(false);
       // Deep links keep working without a navigation: no RSC round-trip, no scroll restoration.
       const params = new URLSearchParams(window.location.search);
       params.set("file", p);
       window.history.replaceState(null, "", `?${params.toString()}`);
       reader.current?.scrollTo({ top: 0 });
+      // Below `md` the reader is not the scroll container — the page is, and a new file
+      // should start at its first line rather than wherever the last one was left.
+      window.scrollTo({ top: 0 });
     },
     [byPath]
   );
@@ -307,10 +330,29 @@ export function PreviewBrowser({
     });
   }, [active, draft, projectId, router]);
 
-  // The tree and reader fill the viewport below the app top bar and preview header.
+  // From `md` up the tree and reader fill the viewport below the app top bar and preview
+  // header, each scrolling on its own. Below it there is no such box: the preview header
+  // wraps to three rows there, so any fixed height is a guess — and a nested scroll area on
+  // a phone is a trap. The reader flows and the page scrolls.
   return (
-    <div className="flex h-[calc(100vh-7rem)]">
-      <aside className="w-72 shrink-0 overflow-y-auto border-r border-border bg-bg-subtle p-3 max-md:hidden">
+    <div className="flex md:h-[calc(100dvh-7rem)]">
+      {treeOpen ? (
+        <button
+          type="button"
+          aria-label="Close file tree"
+          onClick={closeTree}
+          className="fixed inset-0 z-40 animate-fade-in cursor-default bg-bg/70 backdrop-blur-sm md:hidden"
+        />
+      ) : null}
+
+      <aside
+        id="preview-file-tree"
+        className={cn(
+          "w-72 shrink-0 border-r border-border bg-bg-subtle p-3 md:overflow-y-auto",
+          "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:overflow-y-auto max-md:transition-transform max-md:duration-200 max-md:ease-out-quart",
+          treeOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"
+        )}
+      >
         {yoursCount > 0 ? (
           <div className="mb-2 border-b border-border pb-2">
             <button
@@ -340,15 +382,29 @@ export function PreviewBrowser({
           />
         ))}
       </aside>
-      <div ref={reader} className="flex-1 overflow-y-auto">
+      <div ref={reader} className="min-w-0 flex-1 md:overflow-y-auto">
         {/* The tree moves with the rail; the text does not. `.preview-reader` insets the
             column to wherever the viewport's centre is, so collapsing the rail leaves the
             file exactly where it was. */}
         <div className="preview-reader py-10">
           <div className="mb-6 flex items-center justify-between gap-4">
-            <p className="font-mono text-xs text-fg-faint">{active}</p>
+            <div className="flex min-w-0 items-center gap-3">
+              {/* The way back to the repository on a phone; on desktop the tree is right there. */}
+              <Button
+                size="sm"
+                variant="secondary"
+                className="shrink-0 md:hidden"
+                aria-expanded={treeOpen}
+                aria-controls="preview-file-tree"
+                onClick={() => setTreeOpen(true)}
+              >
+                <FolderTree className="size-3.5" />
+                Files
+              </Button>
+              <p className="truncate font-mono text-xs text-fg-faint">{active}</p>
+            </div>
             {editing ? (
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 <Button size="sm" variant="ghost" onClick={() => setDraft(null)} disabled={saving}>
                   <X className="size-3.5" />
                   Cancel
@@ -359,7 +415,7 @@ export function PreviewBrowser({
                 </Button>
               </div>
             ) : (
-              <Button size="sm" variant="ghost" onClick={() => setDraft(content)}>
+              <Button size="sm" variant="ghost" className="shrink-0" onClick={() => setDraft(content)}>
                 <Pencil className="size-3.5" />
                 Edit
               </Button>

@@ -292,19 +292,30 @@ describe("a stack the founder described", () => {
     expect(values.CMD_TEST).toBe("pytest");
   });
 
-  it("says it does not know a command rather than printing a wrong one", () => {
-    // A founder reported `pnpm dev` in a .NET project's START_HERE. The npm default is harmless as
-    // a fallback only while the stack is a Node one; for anything else it is a wrong instruction in
-    // the first file they open. Blank renders as `[NEEDS CLARIFICATION]`, the same as any other
-    // value the interview could not supply.
-    const { values, decisions: _d } = deriveScaffoldValues(django, undefined, commands);
+  it("fills a command the model left out from the stack the founder described", () => {
+    // The npm default is still refused — a founder reported `pnpm dev` in a .NET project's
+    // START_HERE, and for anything but a Node stack that is a wrong instruction in the first file
+    // they open. What changed is the rung below the model: this description says Python, so the
+    // gap is filled with Python's own linter rather than with a marker.
+    const { values } = deriveScaffoldValues(django, undefined, commands);
 
-    expect(values.CMD_LINT).toBe("");
-    expect(values.CMD_DEV).toBe("python manage.py runserver");
+    expect(values.CMD_LINT).toBe("ruff check .");
+    expect(values.CMD_DEV).toBe("python manage.py runserver"); // what the model wrote still wins
   });
 
-  it("leaves the marker in the file, so the founder sees exactly what to fill in", () => {
-    const { files, plan } = renderScaffold(TEMPLATE, django, undefined, undefined, commands);
+  it("leaves the marker only where the stack itself is unrecognisable", () => {
+    const unknown = resolveProjectModel({
+      name: "Klinikjournal",
+      description: "Records for small clinics.",
+      answers: {
+        productType: "saas",
+        framework: "custom",
+        frameworkOther: "something entirely of my own devising",
+        hosting: "vercel",
+        database: "postgres"
+      }
+    });
+    const { files, plan } = renderScaffold(TEMPLATE, unknown, undefined, undefined, commands);
     const startHere = files.find((f) => f.path === "START_HERE.md")?.content ?? "";
 
     expect(startHere).toContain("[NEEDS CLARIFICATION: CMD_LINT]");
@@ -352,11 +363,13 @@ describe("a stack the founder described", () => {
     expect(values.STACK_SUMMARY).not.toContain("Tailwind");
   });
 
-  it("ships CI as a marked placeholder rather than a Node toolchain that cannot work", () => {
+  it("ships CI for the stack it recognised, never a Node toolchain that cannot work", () => {
     const { values } = deriveScaffoldValues(django);
 
-    expect(values.CI_SETUP_STEPS).toContain("::warning::");
+    expect(values.CI_SETUP_STEPS).toContain("actions/setup-python");
+    expect(values.CI_SETUP_STEPS).toContain("pip install -r requirements.txt");
     expect(values.CI_SETUP_STEPS).not.toContain("actions/setup-node");
+    expect(values.CI_SETUP_STEPS_AZ).toContain("UsePythonVersion@0");
   });
 
   it("reports the authored commands as authored in the manifest", () => {

@@ -13,6 +13,7 @@ import {
   type AuthoredSlots,
   type AuthoredToolchain
 } from "../../schemas/src/authoring.ts";
+import { inferStack, type InferredStack, type Runtime } from "./toolchain.ts";
 import {
   aiUsageLabel,
   audienceLabel,
@@ -101,6 +102,7 @@ function packageManager(model: ProjectModel): "pnpm" | "npm" {
  */
 function cmds(
   model: ProjectModel,
+  inferred: InferredStack | null,
   authoredToolchain?: AuthoredToolchain
 ): { commands: Commands; fromModel: Set<string> } {
   // Customer projects are single-app repos, so every script runs from the repo root.
@@ -122,11 +124,14 @@ function cmds(
       fromModel.add(slot);
       continue;
     }
-    // Nothing was authored for this one, and the npm/pnpm default is not a harmless fallback here —
-    // it is a wrong command in the file the founder runs first. Telling a .NET project to run
-    // `pnpm dev` is worse than admitting we do not know, so it empties to a `[NEEDS CLARIFICATION]`
-    // marker through the ordinary substitution path, the same as any other unanswered value.
-    commands[slot] = "";
+    // Nothing authored for this one. The npm/pnpm default is still not a fallback — telling a .NET
+    // project to run `pnpm dev` is a wrong command in the file the founder runs first — but
+    // `inferStack` reads what they wrote and gives that ecosystem's own documented command, which
+    // is what an engineer reading the same sentence would write down.
+    //
+    // Only a description nothing recognises empties to a `[NEEDS CLARIFICATION]` marker through the
+    // ordinary substitution path, the same as any other unanswered value.
+    commands[slot] = inferred?.commands[slot] ?? "";
   }
   return { commands, fromModel };
 }
@@ -142,17 +147,79 @@ function installCommand(model: ProjectModel, ci: boolean): string {
   return ci ? "pnpm install --frozen-lockfile" : "pnpm install";
 }
 
-function ciSetupSteps(model: ProjectModel, stackName: string): string {
-  // A custom stack gets an honest placeholder rather than a Node toolchain that would be wrong for
-  // it. This is the same treatment a non-Vercel deploy target already gets: CI that fails loudly on
-  // the first run is worse than CI that says what is missing and stops.
+/**
+ * The GitHub Action that installs each runtime, and the Azure Pipelines task that does the same.
+ *
+ * Only the ones with a canonical answer are listed. `other` is not a gap to fill in later — it is
+ * the ecosystems whose CI needs something this file cannot decide, Swift wanting macOS being the
+ * clear case, and for those the honest placeholder still ships.
+ */
+const RUNTIME_SETUP: Record<Runtime, { github: string[]; azure: string[] }> = {
+  node: {
+    github: ["      - uses: actions/setup-node@v4", "        with:", "          node-version: 20"],
+    azure: ["          - task: NodeTool@0", "            inputs:", "              versionSpec: '20.x'"]
+  },
+  python: {
+    github: ["      - uses: actions/setup-python@v5", "        with:", "          python-version: '3.12'"],
+    azure: ["          - task: UsePythonVersion@0", "            inputs:", "              versionSpec: '3.12'"]
+  },
+  go: {
+    github: ["      - uses: actions/setup-go@v5", "        with:", "          go-version: '1.22'"],
+    azure: ["          - task: GoTool@0", "            inputs:", "              version: '1.22'"]
+  },
+  dotnet: {
+    github: ["      - uses: actions/setup-dotnet@v4", "        with:", "          dotnet-version: '8.0.x'"],
+    azure: ["          - task: UseDotNet@2", "            inputs:", "              version: '8.0.x'"]
+  },
+  ruby: {
+    github: ["      - uses: ruby/setup-ruby@v1", "        with:", "          ruby-version: '3.3'"],
+    azure: ["          - task: UseRubyVersion@0", "            inputs:", "              versionSpec: '3.3'"]
+  },
+  java: {
+    github: [
+      "      - uses: actions/setup-java@v4",
+      "        with:",
+      "          distribution: temurin",
+      "          java-version: '21'"
+    ],
+    azure: [
+      "          - task: JavaToolInstaller@0",
+      "            inputs:",
+      "              versionSpec: '21'",
+      "              jdkArchitectureOption: x64",
+      "              jdkSourceOption: PreInstalled"
+    ]
+  },
+  // Both hosted runner images ship a Rust and a PHP toolchain, so the install command is the whole
+  // setup. A version-pinning step here would be a third-party action bought for nothing.
+  rust: { github: [], azure: [] },
+  php: { github: [], azure: [] },
+  flutter: {
+    github: ["      - uses: subosito/flutter-action@v2", "        with:", "          channel: stable"],
+    azure: ["          - bash: git clone -b stable --depth 1 https://github.com/flutter/flutter.git $(Agent.ToolsDirectory)/flutter", "            displayName: Flutter SDK"]
+  },
+  other: { github: [], azure: [] }
+};
+
+/** True when CI knows both how to install this stack and what to run — the two it needs to pass. */
+function ciCanRun(model: ProjectModel, inferred: InferredStack | null): boolean {
+  return !isCustomStack(model) || (inferred !== null && inferred.runtime !== "other");
+}
+
+function ciSetupSteps(model: ProjectModel, stackName: string, inferred: InferredStack | null): string {
   if (isCustomStack(model)) {
-    return [
-      "      - name: Set up the toolchain",
-      "        run: |",
-      `          echo "::warning::Add the setup and install steps for ${stackName} here, then remove this guard."`,
-      "          exit 0"
-    ].join("\n");
+    // A stack we recognise gets its real setup: the runtime, then that ecosystem's reproducible
+    // install. Anything else keeps the honest placeholder — CI that fails loudly on the first run is
+    // worse than CI that says what is missing and stops.
+    if (!ciCanRun(model, inferred) || !inferred) {
+      return [
+        "      - name: Set up the toolchain",
+        "        run: |",
+        `          echo "::warning::Add the setup and install steps for ${stackName} here, then remove this guard."`,
+        "          exit 0"
+      ].join("\n");
+    }
+    return [...RUNTIME_SETUP[inferred.runtime].github, `      - run: ${inferred.install}`].join("\n");
   }
   // Indented to sit under `steps:` in the workflow YAML.
   const setupNode = [
@@ -176,9 +243,10 @@ function ciSetupSteps(model: ProjectModel, stackName: string): string {
  * For a golden-path stack the question is answerable: no `package.json`, no `/start`, nothing to
  * check. For a stack the founder described, it is not — the marker could be `pyproject.toml`,
  * `go.mod` or a `.csproj`, and guessing wrong would gate CI on a file that never appears. So the
- * gate falls back to what *is* knowable: whether this project's verification commands are real.
- * Unauthored ones render as `[NEEDS CLARIFICATION]` markers, which would reach the shell as a
- * command that does not exist — a red build that says nothing about the code.
+ * gate falls back to what *is* knowable: whether this job can do the whole thing, install included.
+ *
+ * Both halves matter. Real commands run against a runner where nothing was installed is a red build
+ * on the first push — which is the defect spec 66 exists to remove, arriving from the other side.
  */
 /**
  * What CI says when it finds no stack to verify.
@@ -194,13 +262,13 @@ function noStackNotice(model: ProjectModel): string {
     : `No stack here yet — run ${commandName(model)} in this repository, then push again.`;
 }
 
-function ciReadyCheck(model: ProjectModel, commands: Commands): string {
+function ciReadyCheck(model: ProjectModel, inferred: InferredStack | null): string {
   const out = (value: "true" | "false") => `echo "ready=${value}" >> "$GITHUB_OUTPUT"`;
   if (isCustomStack(model)) {
-    if (commands.CMD_TYPECHECK === "") {
+    if (!ciCanRun(model, inferred)) {
       return [
         `          ${out("false")}`,
-        '          echo "::notice::CI is waiting on this project\'s verification commands — fill them into .github/workflows/ci.yml, then push again."'
+        '          echo "::notice::CI is waiting on this project\'s setup and verification commands — fill them into .github/workflows/ci.yml, then push again."'
       ].join("\n");
     }
     return `          ${out("true")}`;
@@ -222,13 +290,13 @@ function ciReadyCheck(model: ProjectModel, commands: Commands): string {
  * commands. Rendering GitHub's YAML with different indentation would produce a file that parses and
  * does nothing, which is worse than not shipping one.
  */
-function ciReadyCheckAzure(model: ProjectModel, commands: Commands): string {
+function ciReadyCheckAzure(model: ProjectModel, inferred: InferredStack | null): string {
   const set = (v: "true" | "false") => `echo "##vso[task.setvariable variable=ready;isOutput=true]${v}"`;
   if (isCustomStack(model)) {
-    if (commands.CMD_TYPECHECK === "") {
+    if (!ciCanRun(model, inferred)) {
       return [
         `              ${set("false")}`,
-        '              echo "##vso[task.logissue type=warning]CI is waiting on this project\'s verification commands — fill them into azure-pipelines.yml, then push again."'
+        '              echo "##vso[task.logissue type=warning]CI is waiting on this project\'s setup and verification commands — fill them into azure-pipelines.yml, then push again."'
       ].join("\n");
     }
     return `              ${set("true")}`;
@@ -243,12 +311,19 @@ function ciReadyCheckAzure(model: ProjectModel, commands: Commands): string {
   ].join("\n");
 }
 
-function ciSetupStepsAzure(model: ProjectModel, stackName: string): string {
+function ciSetupStepsAzure(model: ProjectModel, stackName: string, inferred: InferredStack | null): string {
   if (isCustomStack(model)) {
+    if (!ciCanRun(model, inferred) || !inferred) {
+      return [
+        "          - bash: |",
+        `              echo "##vso[task.logissue type=warning]Add the setup and install steps for ${stackName} here, then remove this guard."`,
+        "            displayName: Set up the toolchain"
+      ].join("\n");
+    }
     return [
-      "          - bash: |",
-      `              echo "##vso[task.logissue type=warning]Add the setup and install steps for ${stackName} here, then remove this guard."`,
-      "            displayName: Set up the toolchain"
+      ...RUNTIME_SETUP[inferred.runtime].azure,
+      `          - bash: ${inferred.install}`,
+      "            displayName: Install dependencies"
     ].join("\n");
   }
   const node = [
@@ -497,14 +572,29 @@ function designSystemStep(model: ProjectModel): string[] {
  * `vercel@latest`. A pin here would be a second thing to maintain in `template/` and would go stale
  * silently; the founder scaffolds once, on the day they generate.
  */
-function startBootstrap(model: ProjectModel, stackName: string): string {
-  // Nothing here knows how to bootstrap a stack the founder described in prose, and guessing costs
-  // them an afternoon of undoing it. Same treatment the CI setup steps already give a custom stack.
+function startBootstrap(model: ProjectModel, stackName: string, inferred: InferredStack | null): string {
   if (isCustomStack(model)) {
+    // Where the ecosystem is recognised, its own generator is named — that is the difference
+    // between a command a founder runs and a paragraph telling them to go and find one. Where it is
+    // not, the gap stays honest: guessing a scaffolder costs them an afternoon of undoing it.
+    const scaffold = inferred?.scaffold
+      ? [
+          `1. **Scaffold ${sentence(stackName)}** Its own generator, run in this directory:`,
+          "",
+          "   ```bash",
+          `   ${inferred.scaffold}`,
+          "   ```",
+          "",
+          "   Keep every file that is already here — if the generator would overwrite one of ours,",
+          "   keep ours and say so. Adjust the command if your project needs different options."
+        ]
+      : [
+          `1. **Scaffold ${sentence(stackName)}** Use its official project generator, in this directory. This`,
+          "   foundation cannot name the command for you — it is your stack, and a wrong guess here is",
+          "   worse than an honest gap. Keep every file that is already here."
+        ];
     return [
-      `1. **Scaffold ${sentence(stackName)}** Use its official project generator, in this directory. This`,
-      "   foundation cannot name the command for you — it is your stack, and a wrong guess here is",
-      "   worse than an honest gap. Keep every file that is already here.",
+      ...scaffold,
       "2. **Wire the toolchain** so the commands below are real: a type check, a linter, and a test",
       "   runner, each reachable by the command this project's documents already name.",
       "3. **Create `.env.example`, then copy it to `.env.local`.** The foundation names this file but",
@@ -778,7 +868,10 @@ export function deriveScaffoldValues(
   /** Tokens whose value came from the model rather than being derived — the manifest reports them. */
   authoredTokens: Set<string>;
 } {
-  const { commands: command, fromModel: authoredCommands } = cmds(model, authoredToolchain);
+  // Read once and threaded through: the commands, the CI setup, the CI gate and `/start` all have
+  // to describe the same stack, and re-deriving it per caller is how they would stop agreeing.
+  const inferred = isCustomStack(model) ? inferStack(model.stack.customFramework) : null;
+  const { commands: command, fromModel: authoredCommands } = cmds(model, inferred, authoredToolchain);
   const vocab = provider(model);
   // "dotnet efcore c# js" is what a founder types; it is not what their documentation should say.
   // For a custom stack the model turns that into a name a reader recognises, and everything that
@@ -816,7 +909,7 @@ export function deriveScaffoldValues(
     STACK_DETAIL: `${stackName} · ${frontend}${backendSummary(model)} · deployed to ${hosting} · code on ${repoLabel(model)}`,
     REPO_PROVIDER: repoLabel(model),
     SETUP_STEPS: setupSteps(model, stackName),
-    START_BOOTSTRAP: startBootstrap(model, stackName),
+    START_BOOTSTRAP: startBootstrap(model, stackName, inferred),
     START_MINIMUM: startMinimum(model),
     FIRST_COMMAND: commandName(model),
     FIRST_STEP: firstStep(model),
@@ -825,10 +918,10 @@ export function deriveScaffoldValues(
     CLEANUP_SCOPE: cleanupScope(),
     FIRST_SPEC_HINT: firstSpecHint(model),
     DEPLOY_TARGET: hosting,
-    CI_SETUP_STEPS: ciSetupSteps(model, stackName),
-    CI_READY_CHECK: ciReadyCheck(model, command),
-    CI_SETUP_STEPS_AZ: ciSetupStepsAzure(model, stackName),
-    CI_READY_CHECK_AZ: ciReadyCheckAzure(model, command),
+    CI_SETUP_STEPS: ciSetupSteps(model, stackName, inferred),
+    CI_READY_CHECK: ciReadyCheck(model, inferred),
+    CI_SETUP_STEPS_AZ: ciSetupStepsAzure(model, stackName, inferred),
+    CI_READY_CHECK_AZ: ciReadyCheckAzure(model, inferred),
     DEPLOY_STEPS: deploySteps(model),
     ISSUE_TERM: vocab.issueTerm,
     BOARD_TERM: vocab.boardTerm,
@@ -864,7 +957,12 @@ export function deriveScaffoldValues(
   const decisions: ScaffoldDecision[] = [
     dec("PROJECT_NAME", model.name, "interview", "Product name from the interview."),
     dec("STACK_SUMMARY", summary, "default", "Golden-path stack (Next.js/TS/Tailwind/Supabase), narrowed by the interview."),
-    dec("CMD_TEST", command.CMD_TEST, "default", `${packageManager(model)} — the package manager the ${stackName} toolchain defaults to.`),
+    dec(
+      "CMD_TEST",
+      command.CMD_TEST,
+      isCustomStack(model) ? "interview" : "default",
+      commandRationale(model, inferred, stackName, authoredCommands.has("CMD_TEST"))
+    ),
     dec("DEPLOY_TARGET", hosting, model.hosting === "vercel" ? "default" : "interview",
       model.hosting === "vercel"
         ? "Golden-path hosting."
@@ -894,6 +992,26 @@ export function deriveScaffoldValues(
 
 function dec(token: string, value: string, source: "interview" | "default", rationale: string): ScaffoldDecision {
   return { token, value, source, rationale };
+}
+
+/**
+ * Where this project's commands came from, in the founder's terms.
+ *
+ * The preview is the one place a founder can catch a wrong command before it is in every document,
+ * and "we read your sentence and concluded Expo" is exactly the decision worth showing them.
+ */
+function commandRationale(
+  model: ProjectModel,
+  inferred: InferredStack | null,
+  stackName: string,
+  authored: boolean
+): string {
+  if (!isCustomStack(model)) {
+    return `${packageManager(model)} — the package manager the ${stackName} toolchain defaults to.`;
+  }
+  if (authored) return `Written for the stack you described: ${stackName}.`;
+  if (inferred) return `Read from the stack you described as ${inferred.label} — its own documented commands.`;
+  return "Your stack was not recognised, so the commands are left for you to fill in rather than guessed.";
 }
 
 /**

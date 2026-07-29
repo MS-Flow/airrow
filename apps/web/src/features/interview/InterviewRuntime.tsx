@@ -326,8 +326,9 @@ export function InterviewRuntime({
                 }
               }}
             />
-            <div className="mt-5 flex items-center justify-between">
-              <span className="font-mono text-2xs text-fg-faint">⌘↵ to continue</span>
+            <div className="mt-5 flex items-center justify-between max-sm:justify-end">
+              {/* Hidden on a phone: it points at a keyboard shortcut there is no keyboard for. */}
+              <span className="font-mono text-2xs text-fg-faint max-sm:hidden">⌘↵ to continue</span>
               <Button onClick={advance} disabled={typeof value !== "string" || !value.trim()}>
                 Continue
               </Button>

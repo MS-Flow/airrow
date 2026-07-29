@@ -3,9 +3,9 @@
 **{{PROJECT_TAGLINE}}**
 
 This foundation ships the rules, workflow and documentation for {{PROJECT_NAME}}. It does not ship the
-application — that part is yours, and everything you add to it from here arrives one spec at a time.
-The steps below are in the order that works: get the foundation working, then connect the accounts,
-then start building.
+application — that part is yours. You stay in control of the code: what gets built from here is
+decided one spec at a time, by you, with an AI assistant doing the typing. The steps below are in the
+order that works: get the foundation working, then connect the accounts, then start building.
 
 ---
 

@@ -61,8 +61,10 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
 
   return (
     <PageContainer>
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight text-fg">{project.name}</h1>
+      {/* Wraps rather than squeezes: a long name plus a wide status badge is the common case
+          on a phone, and the name is the part that must survive it. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h1 className="text-2xl font-semibold tracking-tight break-words text-fg">{project.name}</h1>
         <Badge tone={meta.tone}>{meta.label}</Badge>
       </div>
       <p className="mt-2 max-w-2xl text-base leading-relaxed text-fg-muted">{project.description}</p>

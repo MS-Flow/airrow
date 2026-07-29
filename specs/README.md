@@ -49,6 +49,7 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Fix UI design flaws — shell corrections + anonymous interview | [11-ui-design-flaws.md](11-ui-design-flaws.md) | ✅ Done |
 | Downloaded foundation must fully reflect the interview answers | [10-foundation-reflects-answers.md](10-foundation-reflects-answers.md) | ✅ Done |
 | Landing copy, the spec-driven story, smooth scroll and a real footer | [23-landing-copy-footer.md](23-landing-copy-footer.md) | 🔄 In progress |
+| Mobile UI: every screen works on a phone | [31-mobile-ui.md](31-mobile-ui.md) | 🔄 In progress |
 | `/start`: from empty repo to a running starting point | [66-start-command.md](66-start-command.md) | ✅ Done |
 | `/cleanup`: the right first-run command for the project's origin | [91-cleanup-command.md](91-cleanup-command.md) | ✅ Done |
 | Azure DevOps gets its own workflow, not GitHub's with different labels | [67-azure-devops-parity.md](67-azure-devops-parity.md) | 🔄 In progress |
