@@ -40,8 +40,12 @@ Steps:
    - Respect the constitution's PR-direction rule; issue branches never target `main`/`develop`.
    - **Sync `feature/<name>` with `develop` before cutting the issue branch**, so the new branch is
      born with everything already integrated instead of discovering the drift as conflicts in its PR:
-     1. `git status --porcelain` — if the working tree is dirty, **stop** and list the files. Commit or
-        stash them yourself; never stash, merge over, or commit on the user's behalf.
+     1. `git status --porcelain --untracked-files=no -- . ':(exclude).claude/settings.local.json'` —
+        if that reports anything, **stop** and list the files. Commit or stash them yourself; never
+        stash, merge over, or commit on the user's behalf. The exclusions are deliberate:
+        `.claude/settings.local.json` is machine-local and `/push` never commits it, so a plain
+        `git status --porcelain` would block every run; untracked files are ignored because a merge
+        does not touch them (git refuses on its own if one is in the way).
      2. `git fetch origin develop`, then `git log feature/<name>..origin/develop --oneline`. Empty
         means in sync — skip straight to creating the branch, no empty merge commit.
      3. Otherwise `git merge origin/develop` into `feature/<name>` and push it. On conflict, **stop**

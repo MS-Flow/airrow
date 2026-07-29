@@ -89,7 +89,8 @@ _What "done" means. Every line is something a reviewer can check._
 - [x] A merge conflict stops the flow with the conflicting paths named, leaves the half-merged tree in
       place for the runner to resolve, and does **not** create the issue branch on top of it.
 - [x] A dirty working tree is detected **before** the merge starts and stops the flow with the files
-      named — nothing is stashed, merged over, or committed on the runner's behalf.
+      named — nothing is stashed, merged over, or committed on the runner's behalf. The check ignores
+      `.claude/settings.local.json` (machine-local, never committed by `/push`) and untracked files.
 - [x] A rejected push is retried once after `git pull`; if it still fails, the flow stops and reports.
       No failure mode lets spec creation continue on an unsynced feature branch.
 - [x] `develop` is never merged directly into an issue branch.
@@ -185,6 +186,22 @@ direction this implements; nothing in it says the sync must be manual.
 
 No application code changed; the engine and its purity are untouched.
 
+### Follow-up: the dirty check was too strict (fixed in this spec)
+
+The first real `/createspec` run after this change — issue #77 — exposed a defect in the rule as first
+written. A plain `git status --porcelain` reports `.claude/settings.local.json`, which is machine-local
+and which [`/push`](../.claude/commands/push.md) deliberately never commits. The dirty check would
+therefore have hard-stopped **every** run that needed a merge, on a file nobody is ever expected to
+commit. The #77 run only survived it because `feature/ci-cd` was already in sync, so no merge was
+attempted.
+
+Fixed by narrowing the check to
+`git status --porcelain --untracked-files=no -- . ':(exclude).claude/settings.local.json'`, in both
+copies of the command. Untracked files are excluded for a different reason: a merge does not touch
+them, and git refuses on its own if one would be overwritten — so blocking on them is noise, not
+safety. Verified: with the pathspec, a tree dirty only in `settings.local.json` reports nothing, while
+two genuinely modified source files are still reported.
+
 ---
 
 ## Data model
@@ -209,8 +226,12 @@ _Unusual inputs or states, and what should happen._
 - **Merge conflict** → stop before creating the issue branch and name the conflicting files. The
   half-merged tree is **left in place** — never `git merge --abort` — so the runner resolves it once
   and no resolution work is discarded. Spec creation continues after the merge is committed.
-- **Uncommitted local changes** → detected via `git status --porcelain` *before* the merge starts;
-  hard stop with the files listed. Nothing is stashed, merged over, or committed for the runner.
+- **Uncommitted local changes** → detected *before* the merge starts; hard stop with the files listed.
+  Nothing is stashed, merged over, or committed for the runner. Two things are deliberately **not**
+  treated as dirty: `.claude/settings.local.json`, which is machine-local and which `/push` explicitly
+  never commits, and untracked files, which a merge does not touch (git refuses on its own if one is in
+  the way). The check is therefore
+  `git status --porcelain --untracked-files=no -- . ':(exclude).claude/settings.local.json'`.
 - **Push to `feature/<name>` rejected** (someone else pushed meanwhile) → `git pull` and retry the push
   once; if it still fails, stop and report. The issue branch is not created from an unpushed state.
 - **`gh`/network unavailable, or the fetch fails** → stop and report. Unlike the issue assignment in
