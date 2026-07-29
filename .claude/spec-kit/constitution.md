@@ -18,8 +18,19 @@ Canonical sources it governs: [`CLAUDE.md`](../../CLAUDE.md) ·
 
 ## 0. Product invariants (the promise)
 Every feature, screen, and generated file is judged against these.
-- **Preparation, not implementation.** Airrow generates everything needed *before* serious coding
-  begins — never the application code itself. A feature drifting toward being an app builder is out of scope.
+- **Preparation, and a starting point.** Airrow's hosted product generates engineering *foundations* —
+  documents, rules, workflow and CI — never application code. The `/start` command it ships **inside**
+  a generated repository is the deliberate exception: run explicitly by the founder, on their own
+  machine, it scaffolds the stack and sets the project up to the bare minimum that runs, using the
+  information already in the repo. **Bare minimum is the ceiling** — enough to open, change and
+  continue from, never a guess at the product. Everything past that goes through the spec loop.
+  A foundation generated for a project that **already exists** ships `/cleanup` in its place: run the
+  same way, it reads the codebase that is there and rewrites the foundation's documents to describe
+  it. Its ceiling is narrower — it changes no code and deletes nothing. A foundation ships exactly one
+  of the two, decided by where the project came from. Airrow's servers still never write application
+  code, and ZIP delivery is still a complete foundation on its own. (Amended by
+  [spec 66](../../specs/66-start-command.md), which records the previous wording, and extended by
+  [spec 91](../../specs/91-cleanup-command.md).)
 - **The output is the product.** Generated repos must read like a senior CTO wrote them for *this*
   project — never like a filled-in template. Generic output is a top-severity bug.
 - **Adaptive, never bureaucratic.** The interview asks only questions whose answers change the output.
@@ -70,8 +81,12 @@ Every feature, screen, and generated file is judged against these.
   metadata only — never answer content or generated document bodies.
 - **Manifest of record.** Generation records per file (source, template id + version, prompt version,
   model, inputs hash) in Postgres — do not bypass it. Full schema: `DATABASE_DESIGN.md`.
-- **Repo access via GitHub App installations only** (minimal permissions, short-lived tokens) — never
-  user PATs.
+- **Repo access is least-privilege, and never a user PAT.** Reading **public** content may use the
+  signed-in user's OAuth identity with **no scopes** — that reaches nothing an anonymous visitor
+  could not already fetch. Everything beyond it — private content, and every write — goes through a
+  **GitHub App installation** with minimal permissions and short-lived tokens. User PATs are never
+  accepted, and no repo credential is ever persisted. (Amended by
+  [spec 67](../../specs/67-github-login-import.md), which records the previous wording.)
 
 ## III. Design invariants
 - **Tokens, not literals.** Use the Tailwind v4 / design-system tokens (color, spacing, radii, type) —

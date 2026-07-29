@@ -27,6 +27,7 @@ import {
   HEADER,
   HERO,
   INCLUDED,
+  PRO_INCLUDED,
   SECTIONS,
   STEPS,
   WHY_SDD,
@@ -67,7 +68,9 @@ export default async function Landing() {
   return (
     <div className="min-h-screen bg-bg">
       <header className="sticky top-0 z-20 border-b border-border bg-bg/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
+        {/* Wraps rather than overflows: below 360px the lockup and the actions need more room
+            than the row has, and a second line is the honest way to give it to them. */}
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-y-2 px-6 py-3.5">
           <AirrowLogo size="lg" priority />
           <div className="flex items-center gap-2">
             <ThemeSwitch current={theme} />
@@ -115,7 +118,7 @@ export default async function Landing() {
             <span className="font-medium text-fg">{HERO.leadBrand}</span>
             {HERO.leadRest}
           </p>
-          <div className="mt-10 flex animate-slide-up items-center gap-3">
+          <div className="mt-10 flex animate-slide-up flex-wrap items-center justify-center gap-3">
             <Button size="lg" asChild>
               <Link href={primaryHref}>{HERO.primaryCta}</Link>
             </Button>
@@ -186,28 +189,64 @@ export default async function Landing() {
           <SpecDrivenShowcase foundation={foundation} />
         </section>
 
-        {/* Pricing — free, in full, while Airrow is in early access. */}
+        {/* Pricing. Two cards, and only the first is real — Pro is dimmed and carries no price
+            because it has none yet. Showing it anyway is what makes the free limit read as a
+            starting point rather than a wall. */}
         <section id="pricing" className="scroll-mt-20 border-t border-border py-24">
           <h2 className="text-2xl font-semibold tracking-tight text-fg">
             {SECTIONS.pricing.title}
           </h2>
           <p className="mt-3 max-w-xl text-base text-fg-muted">{SECTIONS.pricing.body}</p>
-          <Card className="mt-8">
-            <CardBody className="p-8">
-              <p className="text-5xl font-semibold tracking-tight text-fg">
-                {SECTIONS.pricing.amount}
-              </p>
-              <p className="mt-2 text-base text-fg-muted">{SECTIONS.pricing.note}</p>
-              <ul className="mt-7 grid gap-3 sm:grid-cols-2">
-                {INCLUDED.map((item) => (
-                  <li key={item} className="flex items-start gap-2.5 text-base text-fg-muted">
-                    <Check className="mt-0.5 size-4 shrink-0 text-fg" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </CardBody>
-          </Card>
+          <div className="mt-8 grid gap-6 lg:grid-cols-2">
+            <Card>
+              <CardBody className="p-8">
+                <p className="text-sm font-medium text-fg-muted">{SECTIONS.pricing.free.name}</p>
+                <p className="mt-2 text-5xl font-semibold tracking-tight text-fg">
+                  {SECTIONS.pricing.free.amount}
+                </p>
+                <p className="mt-2 text-base text-fg-muted">{SECTIONS.pricing.free.note}</p>
+                <ul className="mt-7 grid gap-3">
+                  {INCLUDED.map((item) => (
+                    <li key={item} className="flex items-start gap-2.5 text-base text-fg-muted">
+                      <Check className="mt-0.5 size-4 shrink-0 text-fg" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                <Button className="mt-8 w-full" asChild>
+                  <Link href={primaryHref}>{SECTIONS.pricing.free.action}</Link>
+                </Button>
+              </CardBody>
+            </Card>
+
+            <Card className="border-dashed">
+              <CardBody className="p-8">
+                <div className="flex items-center gap-2.5">
+                  <p className="text-sm font-medium text-fg-muted">{SECTIONS.pricing.pro.name}</p>
+                  <span className="rounded-full border border-border px-2.5 py-0.5 text-xs font-medium text-fg-faint">
+                    {SECTIONS.pricing.pro.badge}
+                  </span>
+                </div>
+                <p className="mt-2 text-3xl font-semibold tracking-tight text-fg-faint">
+                  {SECTIONS.pricing.pro.amount}
+                </p>
+                <p className="mt-2 text-base text-fg-muted">{SECTIONS.pricing.pro.note}</p>
+                <ul className="mt-7 grid gap-3">
+                  {PRO_INCLUDED.map((item) => (
+                    <li key={item} className="flex items-start gap-2.5 text-base text-fg-muted">
+                      <Check className="mt-0.5 size-4 shrink-0 text-fg-faint" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                {/* Disabled rather than absent: the button is what makes it read as a real tier
+                    that is not ready, instead of a feature list with no way in. */}
+                <Button variant="secondary" className="mt-8 w-full" disabled>
+                  {SECTIONS.pricing.pro.action}
+                </Button>
+              </CardBody>
+            </Card>
+          </div>
         </section>
 
         {/* CTA */}

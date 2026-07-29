@@ -28,7 +28,12 @@ export const metadata = { title: "Sign in" };
 
 const ERRORS: Record<string, string> = {
   invalid: "Invalid email or password.",
-  unconfirmed: "Confirm your email address first — open the link we sent you, then sign in."
+  unconfirmed: "Confirm your email address first — open the link we sent you, then sign in.",
+  github: "GitHub sign-in did not complete. Try again, or sign in with your email and password.",
+  // Verified by GitHub, not by us: an address nobody has proved they own is no way to identify
+  // someone, and linking on it would let anyone claim an existing Airrow account (spec 67).
+  github_unverified:
+    "GitHub has not verified the email address on your account. Verify it with GitHub, then sign in here again — nothing was created."
 };
 
 export default async function LoginPage({

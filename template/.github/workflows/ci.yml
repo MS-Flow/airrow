@@ -8,7 +8,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # There is nothing to typecheck in a repository with no stack in it. Without this gate the very
+  # first push goes red before a line has been written — which says nothing true about the code and
+  # trains everyone to ignore the badge.
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        name: Is there a stack to verify?
+        run: |
+{{CI_READY_CHECK}}
+
   verify:
+    needs: detect
+    if: needs.detect.outputs.ready == 'true'
     runs-on: ubuntu-latest
     env:
       TZ: UTC

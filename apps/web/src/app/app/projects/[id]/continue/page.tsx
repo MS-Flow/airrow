@@ -1,9 +1,8 @@
 // Continue Locally handoff (F-405): from ZIP to first AI-implemented feature.
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Download } from "lucide-react";
 import { PageContainer } from "@/components/shell/page-container";
-import { Button } from "@/components/ui/button";
+import { DownloadProject } from "@/features/import/DownloadProject";
 import { Card, CardBody } from "@/components/ui/card";
 import { requireSession } from "@/lib/auth";
 import { getProject, latestModelVersion } from "@/lib/data/store";
@@ -89,12 +88,7 @@ export default async function ContinuePage({ params }: { params: Promise<{ id: s
         <Link href={`/app/projects/${id}/preview`} className="text-sm text-fg-muted hover:text-fg">
           ← Back to preview
         </Link>
-        <Button asChild>
-          <a href={`/api/projects/${id}/zip`}>
-            <Download className="size-4" />
-            Download ZIP
-          </a>
-        </Button>
+        <DownloadProject projectId={id} slug={slug} />
       </div>
     </PageContainer>
   );

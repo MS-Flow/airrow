@@ -27,7 +27,8 @@ export type FeatureId =
   | "admin"
   | "audit_logs";
 
-export type Framework = "nextjs" | "vite";
+/** `custom` means the founder described their own stack in `frameworkOther`. */
+export type Framework = "nextjs" | "vite" | "custom";
 export type RepoProvider = "github" | "azure_devops";
 export type TeamShape = "solo" | "small_team" | "startup" | "agency";
 export type SecurityLevel = "standard" | "elevated";
@@ -49,10 +50,12 @@ export type Database = "supabase" | "postgres";
 /** Raw interview answers, keyed by question id. Order mirrors the interview flow. */
 export interface InterviewAnswers {
   productType?: ProductType;
+  problem?: string;
   vision?: string;
   mvpFocus?: string;
   audience?: Audience;
   coreEntities?: string;
+  nonGoals?: string;
   tenancy?: Tenancy;
   authModel?: AuthMethod[];
   roles?: "simple" | "granular";
@@ -63,11 +66,23 @@ export interface InterviewAnswers {
   dataSensitivity?: DataSensitivity;
   scale?: ScaleExpectation;
   framework?: Framework;
+  /** Free-text stack, when `framework` is `custom`. */
+  frameworkOther?: string;
   database?: Database;
   hosting?: Hosting;
   repoProvider?: RepoProvider;
   team?: TeamShape;
 }
+
+/**
+ * Where a project came from, and — for an import — whether the analysis found code to read.
+ *
+ * It decides which command the foundation ships (spec 91): a project started from nothing gets
+ * `/start`, which scaffolds a stack; an imported one that already has a stack gets `/cleanup`, which
+ * reads it and rewrites the documents to match. An import with nothing but documents in it has
+ * nothing to read, so it gets `/start` like any other empty project.
+ */
+export type ProjectOrigin = { kind: "new" } | { kind: "imported"; stackDetected: boolean };
 
 /** Fully resolved, validated model the engine generates from. */
 export interface ProjectModel {
@@ -75,6 +90,7 @@ export interface ProjectModel {
   name: string;
   slug: string;
   description: string;
+  origin: ProjectOrigin;
   vision: string;
   productType: ProductType;
   audience: Audience;
@@ -88,6 +104,12 @@ export interface ProjectModel {
   hosting: Hosting;
   stack: {
     framework: Framework;
+    /**
+     * The founder's own words for their stack, when `framework` is `custom`; empty otherwise.
+     * Nothing derives commands or setup steps from it — those are authored (`TOOLCHAIN_SLOTS`),
+     * because no amount of string matching knows what `manage.py` is.
+     */
+    customFramework: string;
     language: "typescript";
     styling: "tailwind";
     ui: "shadcn/ui";
@@ -105,6 +127,10 @@ export interface ProjectModel {
   scale: ScaleExpectation;
   mvpFocus: string;
   coreEntities: string;
+  /** The problem and who has it. Empty when unanswered — never inferred. */
+  problem: string;
+  /** What the product deliberately is not doing. Empty when unanswered. */
+  nonGoals: string;
   derived: {
     multiTenant: boolean;
     hasPayments: boolean;
@@ -123,12 +149,29 @@ export interface GeneratedFile {
   templateId: string;
 }
 
+/**
+ * What wrote the prose in this generation (spec 65). `null` when nothing did — no API key, a failed
+ * call, a rejected response — and every file is then deterministic.
+ *
+ * Recorded because a generated file has to be attributable (constitution §II): the same answers put
+ * through a different prompt or a different model produce different documents, and without this a
+ * regression months from now has nothing to point at.
+ */
+export interface AuthoringRecord {
+  /** Bumped when the prompt changes in a way that would produce different prose from same answers. */
+  promptVersion: string;
+  /** Model id as sent to the API, e.g. `claude-haiku-4-5`. */
+  model: string;
+}
+
 export interface Manifest {
   engineVersion: string;
   schemaVersion: string;
   generatedAt: string;
   projectSlug: string;
   fileCount: number;
+  /** Provenance for every file marked `authored` below. */
+  authoring: AuthoringRecord | null;
   files: Array<{
     path: string;
     source: "static" | "authored";
@@ -141,6 +184,79 @@ export interface Manifest {
 export interface GenerationResult {
   files: GeneratedFile[];
   manifest: Manifest;
+}
+
+/* ── Importing an existing project (spec 63) ──────────────────────────────── */
+
+/** One file read out of an imported project. `path` is repo-relative with `/` separators. */
+export interface ImportedFile {
+  path: string;
+  content: string;
+}
+
+/** Ceilings on what may be imported; the values live with the engine (`IMPORT_LIMITS`). */
+export interface ImportLimits {
+  /** Total decompressed bytes of the files actually analyzed. */
+  maxBytes: number;
+  maxFiles: number;
+}
+
+/** Why the analysis prefilled an answer — shown beside it so the founder can judge the guess. */
+export interface ImportEvidence {
+  field: keyof InterviewAnswers;
+  /** Human-readable form of the derived value. */
+  value: string;
+  /** Where it came from, e.g. `package.json → dependencies.next`. */
+  source: string;
+}
+
+export interface ImportAnalysis {
+  /** Prefill for the interview. Only questions the analysis could answer are present. */
+  answers: InterviewAnswers;
+  /**
+   * Whether the archive held code at all — a manifest or source, as opposed to documents. It decides
+   * which command the foundation ships (spec 91); see `ProjectOrigin`.
+   */
+  stackDetected: boolean;
+  evidence: ImportEvidence[];
+  /** Detected but not mappable onto the current model — surfaced, never silently dropped. */
+  notes: string[];
+  filesAnalyzed: number;
+  filesIgnored: number;
+}
+
+export type ImportSourceKind = "zip" | "repo";
+export type ImportSourceStatus = "analyzed" | "failed";
+
+/**
+ * What Airrow keeps about an imported file once analysis is done: its path and a content digest,
+ * never the content itself. Enough to diff generated output against the project; nothing of the
+ * customer's source survives the request (constitution §II, customer IP).
+ */
+export interface ImportedFileDigest {
+  path: string;
+  bytes: number;
+  digest: string;
+}
+
+/** What the founder chose for a file that already exists with different content. */
+export type ConflictResolution = "keep_existing" | "use_generated";
+
+export interface ImportDiffEntry {
+  path: string;
+  generatedBytes: number;
+  /** `null` when the imported project has no file at this path. */
+  existingBytes: number | null;
+}
+
+/**
+ * Generated output measured against the imported project. `conflicts` is the only bucket that
+ * needs a decision — nothing in it is written until the founder picks (spec 63).
+ */
+export interface ImportDiff {
+  added: ImportDiffEntry[];
+  identical: ImportDiffEntry[];
+  conflicts: ImportDiffEntry[];
 }
 
 export type JobStage = "resolve" | "author" | "assemble" | "validate" | "manifest";

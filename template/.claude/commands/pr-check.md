@@ -25,7 +25,7 @@ Steps:
 4. **Overlap** — files changed on both sides since the merge base (`comm -12` of the two
    `git diff --name-only <base>..<...>` lists).
 5. **Verdict:**
-   - Clean + no overlap → green light; print `gh pr create --base <target> --head <branch>`.
+   - Clean + no overlap → green light; print `{{CLI_PR_CREATE}}`.
    - Conflicts or overlap → list the files and suggest syncing first (`git merge origin/<target>` or
      `git merge <feature>` for an issue branch), resolve, retry.
 

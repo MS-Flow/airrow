@@ -24,11 +24,22 @@ const store = vi.hoisted(() => ({
   updateJob: vi.fn(async (_jobId: string, _patch: JobPatch) => {}),
   saveArtifact: vi.fn(async (_jobId: string, _result: unknown) => {}),
   setProjectStatus: vi.fn(async (_projectId: string, _status: string) => {}),
-  getJob: vi.fn(async (_jobId: string) => ({ id: "job1", projectId: "proj1" }))
+  getJob: vi.fn(async (_jobId: string) => ({ id: "job1", projectId: "proj1" })),
+  saveAuthoringProvenance: vi.fn(async (_jobId: string, _p: unknown) => {}),
+  findAuthoredByInputs: vi.fn(async (): Promise<unknown> => null)
 }));
 
 vi.mock("@/lib/data/store", () => store);
 vi.mock("@/lib/template/load", () => ({ loadTemplate: () => [] }));
+
+// The one network call in generation, stubbed: these tests are about the runner's control flow, and
+// §V forbids reaching the network from a test regardless.
+const authorFoundation = vi.hoisted(() => vi.fn(async (): Promise<unknown> => null));
+vi.mock("./author", () => ({
+  authorFoundation,
+  PROMPT_VERSION: "test-prompt",
+  AUTHORING_MODEL: "test-model"
+}));
 
 const generate = vi.hoisted(() => vi.fn());
 vi.mock("@airrow/engine", () => ({ generate }));
@@ -50,6 +61,8 @@ describe("runGenerationJob", () => {
     vi.clearAllMocks();
     order.length = 0;
     store.getJob.mockResolvedValue({ id: "job1", projectId: "proj1" });
+    store.findAuthoredByInputs.mockResolvedValue(null);
+    authorFoundation.mockResolvedValue(null);
     store.saveArtifact.mockImplementation(async () => {
       await Promise.resolve();
       order.push("artifact-saved");
@@ -103,5 +116,69 @@ describe("runGenerationJob", () => {
     );
     expect(store.setProjectStatus).toHaveBeenCalledWith("proj1", "failed");
     expect(store.saveArtifact).not.toHaveBeenCalled();
+  });
+});
+
+// A regeneration with unchanged answers costs ~37s, a paid call, and a slice of the founder's
+// three-generation allowance. Founders regenerate constantly while tuning one answer, so this is the
+// difference between the limit being a budget and the limit being a wall.
+describe("authoring memoisation", () => {
+  const stored = { slots: { VISION: "A stored vision that is long enough to survive validation." } };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    store.getJob.mockResolvedValue({ id: "job1", projectId: "proj1" });
+    store.findAuthoredByInputs.mockResolvedValue(null);
+    authorFoundation.mockResolvedValue(null);
+    generate.mockReturnValue({ files: [{ path: "README.md" }], manifest: { fileCount: 1 } });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("reuses stored prose instead of paying for the call again", async () => {
+    store.findAuthoredByInputs.mockResolvedValue(stored);
+
+    await runToCompletion();
+
+    expect(authorFoundation).not.toHaveBeenCalled();
+    expect(generate.mock.calls[0]?.[2]?.authored).toMatchObject({ VISION: expect.any(String) });
+  });
+
+  it("calls out when nothing matches, and stores what it got", async () => {
+    authorFoundation.mockResolvedValue(stored);
+
+    await runToCompletion();
+
+    expect(authorFoundation).toHaveBeenCalledTimes(1);
+    expect(store.saveAuthoringProvenance).toHaveBeenCalledWith(
+      "job1",
+      expect.objectContaining({ promptVersion: "test-prompt", authoringModel: "test-model" })
+    );
+  });
+
+  it("keys the lookup on the prompt and model, not just the answers", async () => {
+    // Prose written by a superseded prompt is not the prose these inputs would produce now. Missing
+    // is the correct outcome — a stale hit is invisible, and would quietly outlive the change.
+    await runToCompletion();
+
+    expect(store.findAuthoredByInputs).toHaveBeenCalledWith(
+      "proj1",
+      expect.any(String),
+      "test-prompt",
+      "test-model"
+    );
+  });
+
+  it("does not serve stored prose that no longer satisfies the contract", async () => {
+    // Caps tighten and slots get removed. A payload that was valid when written is still just data
+    // on the way back in, and must clear the same bar as a live response.
+    store.findAuthoredByInputs.mockResolvedValue({ slots: { NOT_A_SLOT: "x" }, documents: {} });
+
+    await runToCompletion();
+
+    expect(authorFoundation).toHaveBeenCalledTimes(1);
   });
 });

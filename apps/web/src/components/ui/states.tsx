@@ -86,6 +86,47 @@ export function InlineError({ children, className }: { children: React.ReactNode
   );
 }
 
+/**
+ * An advisory the founder should read before acting, or a consequence worth knowing
+ * about after. Deliberately *not* an error: nothing has failed, so it never carries
+ * `role="alert"` and never borrows the danger tone — a caution that looks like a
+ * failure teaches founders to dismiss both.
+ */
+export function Notice({
+  title,
+  children,
+  role,
+  className
+}: {
+  title?: string;
+  children: React.ReactNode;
+  /**
+   * Set only when the notice appears in response to something the founder just did,
+   * which a screen reader should hear. Standing advisories are read in page order
+   * and stay silent.
+   */
+  role?: "status";
+  className?: string;
+}) {
+  return (
+    <div
+      role={role}
+      className={cn(
+        "flex gap-3 rounded-lg border border-warn/30 bg-warn/5 px-4 py-3.5",
+        className
+      )}
+    >
+      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warn" aria-hidden />
+      <div className="min-w-0">
+        {title ? <h3 className="text-base font-semibold text-fg">{title}</h3> : null}
+        <div className={cn("text-sm leading-relaxed text-fg-muted", title && "mt-1.5")}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function LoadingState({ rows = 3, className }: { rows?: number; className?: string }) {
   return (
     <div className={cn("space-y-3", className)} role="status" aria-label="Loading">

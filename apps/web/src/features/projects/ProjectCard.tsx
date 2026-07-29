@@ -40,14 +40,16 @@ export function ProjectRow({ project, className }: { project: ProjectSummary; cl
     <Link href={nextRoute(project.status, project.id)} className={cn("group block", className)}>
       <Card interactive className="flex items-center justify-between gap-4 px-5 py-4">
         <div className="min-w-0">
-          <div className="flex items-center gap-3">
+          {/* The status badge is as wide as "Interview in progress"; on a phone it takes the
+              next line rather than the name's last characters. */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="truncate text-md font-medium text-fg">{project.name}</span>
             <Badge tone={meta.tone}>{meta.label}</Badge>
           </div>
           <p className="mt-1 truncate text-sm text-fg-muted">{project.description}</p>
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          <span className="text-xs text-fg-faint">{timeAgo(project.updatedAt)}</span>
+          <span className="text-xs text-fg-faint max-sm:hidden">{timeAgo(project.updatedAt)}</span>
           <ArrowRight className="size-4 text-fg-faint transition-transform group-hover:translate-x-0.5 group-hover:text-fg-muted" />
         </div>
       </Card>
