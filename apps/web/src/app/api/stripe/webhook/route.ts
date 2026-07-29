@@ -14,6 +14,7 @@ import {
   applySubscriptionState,
   claimStripeEvent,
   orgForStripeCustomer,
+  releaseStripeEvent,
   type SubscriptionState
 } from "@/lib/data/store";
 import { planForStatus, stripe, stripeConfigured, stripeWebhookSecret } from "@/lib/stripe";
@@ -105,14 +106,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ received: true, duplicate: true });
   }
 
-  const state = await stateFor(event);
-  if (!state) return NextResponse.json({ received: true, applied: false });
+  // Everything past the claim runs under it: if any of it fails, the claim is handed back so
+  // Stripe's retry is a real second attempt rather than a no-op. Without this, one transient
+  // database error turns a paid upgrade into a founder who is silently still on free.
+  try {
+    const state = await stateFor(event);
+    if (!state) return NextResponse.json({ received: true, applied: false });
 
-  // Scoped by the customer the payment belongs to. There is no session here — this lookup *is* the
-  // authorization, and an unknown customer changes nothing.
-  const orgId = await orgForStripeCustomer(state.customerId);
-  if (!orgId) return NextResponse.json({ received: true, applied: false });
+    // Scoped by the customer the payment belongs to. There is no session here — this lookup *is*
+    // the authorization, and an unknown customer changes nothing.
+    const orgId = await orgForStripeCustomer(state.customerId);
+    if (!orgId) return NextResponse.json({ received: true, applied: false });
 
-  await applySubscriptionState(orgId, state);
-  return NextResponse.json({ received: true, applied: true });
+    await applySubscriptionState(orgId, state);
+    return NextResponse.json({ received: true, applied: true });
+  } catch (error) {
+    await releaseStripeEvent(event.id);
+    throw error;
+  }
 }

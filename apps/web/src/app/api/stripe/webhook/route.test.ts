@@ -15,6 +15,7 @@ const retrieve = vi.hoisted(() => vi.fn());
 const claimStripeEvent = vi.hoisted(() => vi.fn(async () => true));
 const orgForStripeCustomer = vi.hoisted(() => vi.fn(async (): Promise<string | null> => "org1"));
 const applySubscriptionState = vi.hoisted(() => vi.fn(async () => {}));
+const releaseStripeEvent = vi.hoisted(() => vi.fn(async () => {}));
 
 vi.mock("@/lib/stripe", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/stripe")>();
@@ -31,7 +32,8 @@ vi.mock("@/lib/stripe", async (importOriginal) => {
 vi.mock("@/lib/data/store", () => ({
   claimStripeEvent,
   orgForStripeCustomer,
-  applySubscriptionState
+  applySubscriptionState,
+  releaseStripeEvent
 }));
 
 import { POST } from "./route";
@@ -65,6 +67,8 @@ describe("stripe webhook", () => {
     vi.clearAllMocks();
     claimStripeEvent.mockResolvedValue(true);
     orgForStripeCustomer.mockResolvedValue("org1");
+    applySubscriptionState.mockResolvedValue(undefined);
+    releaseStripeEvent.mockResolvedValue(undefined);
   });
 
   describe("authorization", () => {
@@ -128,6 +132,45 @@ describe("stripe webhook", () => {
 
       expect(res.status).toBe(200);
       expect(applySubscriptionState).not.toHaveBeenCalled();
+    });
+
+    it("hands the claim back when applying fails, so the retry is a real second attempt", async () => {
+      // The bug this guards, found by /analyze: claim, then fail, then have Stripe retry into a
+      // "duplicate — already handled" answer. The upgrade a founder paid for disappears silently and
+      // permanently. The claim exists to stop concurrent deliveries doing the same work, not to
+      // stop the redelivery that exists because the work did not happen.
+      constructEventAsync.mockResolvedValue(event("customer.subscription.updated", subscription()));
+      applySubscriptionState.mockRejectedValue(new Error("connection reset"));
+
+      await expect(POST(request())).rejects.toThrow(/connection reset/);
+
+      expect(releaseStripeEvent).toHaveBeenCalledWith("evt_1");
+    });
+
+    it("hands the claim back when reading the subscription fails", async () => {
+      // The same window, one call earlier: Stripe itself can be down when we call back on checkout.
+      constructEventAsync.mockResolvedValue(
+        event("checkout.session.completed", {
+          customer: "cus_1",
+          mode: "subscription",
+          subscription: "sub_1"
+        })
+      );
+      retrieve.mockRejectedValue(new Error("stripe unavailable"));
+
+      await expect(POST(request())).rejects.toThrow(/stripe unavailable/);
+
+      expect(releaseStripeEvent).toHaveBeenCalledWith("evt_1");
+    });
+
+    it("keeps the claim when the event simply did not apply to anything", async () => {
+      // An unknown event type is a finished, correct outcome — not a failure. Releasing here would
+      // make Stripe redeliver something we have already decided to ignore.
+      constructEventAsync.mockResolvedValue(event("payout.paid", { id: "po_1" }));
+
+      await POST(request());
+
+      expect(releaseStripeEvent).not.toHaveBeenCalled();
     });
 
     it("claims the event before applying it", async () => {

@@ -6,7 +6,7 @@
 
 |                |                                                          |
 | -------------- | -------------------------------------------------------- |
-| **Status**     | 🔄 In progress                                            |
+| **Status**     | ✅ Done                                                   |
 | **Issue**      | #99 — "Stripe Checkout och billing portal för Pro"       |
 | **Branch**     | `99-stripe-checkout` (from `feature/pro`)                |
 | **Feature**    | Pro                                                       |
@@ -135,7 +135,7 @@ pnpm -r typecheck   Done — clean across schemas, engine, web
 pnpm -r lint        Done — no new issues
 pnpm -r test        schemas   35 passed
                     engine   213 passed
-                    web      351 passed | 0 skipped (49 files)
+                    web      354 passed | 0 skipped (49 files)
 pnpm test:scripts     13 passed
 ```
 
@@ -243,6 +243,30 @@ _Unusual inputs or states, and what should happen._
 ---
 
 ## Implementation notes
+
+**`/analyze` found a bug that would have lost paid upgrades, silently.** The webhook claimed an event
+id and then applied it. If applying failed — a transient database error, or Stripe being unreachable
+on the callback — the handler returned 500, Stripe retried, and the retry found the id already
+claimed and answered "duplicate". The founder had paid and stayed on free, with nothing in the logs
+saying so.
+
+The claim exists to stop two *concurrent* deliveries doing the same work. It must not also stop the
+redelivery that exists precisely because the work did not happen. So the whole apply now runs inside
+a `try` that releases the claim before rethrowing, and three tests cover it: release on a failed
+apply, release on a failed Stripe read, and — the one that keeps the fix honest — *no* release when
+the event simply did not apply to anything, because an ignored event type is a finished outcome
+rather than a failure.
+
+The related half is that `applySubscriptionState` writes two tables and the Supabase client cannot
+wrap them in a transaction. The billing row is written first deliberately: it is the lookup
+`orgForStripeCustomer` needs, so a half-applied event leaves enough behind for the redelivery to find
+the organization and finish. That comment now says so, instead of implying an atomicity the function
+does not have.
+
+**`DATABASE_DESIGN.md` was missed again.** Spec 74's close-out fixed exactly this omission one spec
+earlier, and this spec added two more undocumented tables. Both are now in the schema block, along
+with `generation_usage`, which had been missing since spec 65. Fixing one instance is not fixing the
+habit — worth stating plainly so the next spec's `/analyze` looks for it.
 
 **Two decisions taken during implementation, both about not trusting the browser.**
 

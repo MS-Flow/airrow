@@ -875,6 +875,12 @@ export interface SubscriptionState {
  * caller that could write one without the other is a caller that can leave an organization paying
  * for a plan it does not have — or holding a plan it stopped paying for.
  *
+ * That is an argument about callers, not about atomicity: the Supabase client cannot wrap two
+ * statements in a transaction, so a failure between them still diverges. The billing row is written
+ * first on purpose. It is the lookup `orgForStripeCustomer` needs, so a half-applied event leaves
+ * enough behind for the redelivery to find the organization and finish the job — and the webhook
+ * releases its claim on failure so that redelivery actually gets to run.
+ *
  * This is the **only** path that writes `organizations.plan` outside a migration, which is what the
  * column-level revoke in `20260729120000_pro_plan.sql` is there to guarantee.
  */
@@ -913,4 +919,17 @@ export async function claimStripeEvent(eventId: string, eventType: string): Prom
   // 23505 is unique_violation: seen before, which is a successful no-op rather than a failure.
   if (res.error.code === "23505") return false;
   throw new Error(`Supabase: ${res.error.message}`);
+}
+
+/**
+ * Give a claimed event back, because applying it failed.
+ *
+ * Without this the claim is a trap: Stripe retries a 500, the retry finds the id already recorded,
+ * answers "duplicate", and an upgrade a founder paid for is lost permanently and silently. The claim
+ * is there to stop two *concurrent* deliveries doing the same work — it must not also stop the
+ * redelivery that exists precisely because the work did not happen.
+ */
+export async function releaseStripeEvent(eventId: string): Promise<void> {
+  const res = await db().from("stripe_events").delete().eq("event_id", eventId);
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
 }
