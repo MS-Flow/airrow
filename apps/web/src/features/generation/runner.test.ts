@@ -159,6 +159,30 @@ describe("authoring memoisation", () => {
     );
   });
 
+  it("records that a reused run made no call, so the founder is not charged for it", async () => {
+    // The other half of memoisation (spec 74). Reusing the prose already avoided the Claude call;
+    // this flag is what stops the ledger charging a foundation for a call nobody made.
+    store.findAuthoredByInputs.mockResolvedValue(stored);
+
+    await runToCompletion();
+
+    expect(store.saveAuthoringProvenance).toHaveBeenCalledWith(
+      "job1",
+      expect.objectContaining({ reused: true })
+    );
+  });
+
+  it("records a live call as chargeable", async () => {
+    authorFoundation.mockResolvedValue(stored);
+
+    await runToCompletion();
+
+    expect(store.saveAuthoringProvenance).toHaveBeenCalledWith(
+      "job1",
+      expect.objectContaining({ reused: false })
+    );
+  });
+
   it("keys the lookup on the prompt and model, not just the answers", async () => {
     // Prose written by a superseded prompt is not the prose these inputs would produce now. Missing
     // is the correct outcome — a stale hit is invisible, and would quietly outlive the change.

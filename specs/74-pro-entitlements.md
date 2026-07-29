@@ -7,7 +7,7 @@
 
 |                |                                                          |
 | -------------- | -------------------------------------------------------- |
-| **Status**     | ⏳ Not started                                            |
+| **Status**     | 🔄 In progress                                            |
 | **Issue**      | #74 — "Pro: plan- och entitlement-modell, och en gratisnivå på en foundation" |
 | **Branch**     | `74-pro-entitlements` (from `feature/pro`)               |
 | **Feature**    | Pro                                                       |
@@ -124,42 +124,44 @@ out.
 
 _What "done" means. Every line is something a reviewer can check._
 
-- [ ] `organizations` carries a `plan` column (`'free' | 'pro'`), default `'free'`, added by an
+- [x] `organizations` carries a `plan` column (`'free' | 'pro'`), default `'free'`, added by an
       idempotent migration that replays cleanly from zero.
-- [ ] The plan is decided **server-side from the database only**. A client that claims to be Pro
+- [x] The plan is decided **server-side from the database only**. A client that claims to be Pro
       cannot generate anything.
-- [ ] RLS on the plan data has both an access test and a denial test; a member of another
+- [x] RLS on the plan data has both an access test and a denial test; a member of another
       organization cannot read or write it.
-- [ ] `checkAllowance` returns an entitlement shape that names *why* a founder is or is not allowed,
+- [x] **A member cannot write their _own_ organization's plan either.** Added during implementation:
+      the denial test found that they could. See _Implementation notes_.
+- [x] `checkAllowance` returns an entitlement shape that names *why* a founder is or is not allowed,
       as a discriminated union rather than booleans-with-meaning (§I).
-- [ ] No existing caller of `checkAllowance` needs to change its logic to account for plans.
-- [ ] The free limit is one foundation, defined in exactly one place; the settings page, the landing
+- [x] No existing caller of `checkAllowance` needs to change its logic to account for plans.
+- [x] The free limit is one foundation, defined in exactly one place; the settings page, the landing
       page and the out-of-allowance message all derive their number and prose from it.
-- [ ] A regeneration whose inputs hash is unchanged makes no Claude call and spends no allowance.
-- [ ] A founder gets at most two free repairs on a project, and only within 24 hours of that
+- [x] A regeneration whose inputs hash is unchanged makes no Claude call and spends no allowance.
+- [x] A founder gets at most two free repairs on a project, and only within 24 hours of that
       project's first generation; the third repair, and any repair after the window closes, is
       refused with the ordinary out-of-allowance path.
-- [ ] A free organization can therefore never cause more than three Claude calls.
-- [ ] A failed generation still never costs allowance (the spec-65 property, re-proven by test).
-- [ ] `ALLOWANCE_REACHED_MESSAGE` says plainly that existing projects and downloads are unaffected,
+- [x] A free organization can therefore never cause more than three Claude calls.
+- [x] A failed generation still never costs allowance (the spec-65 property, re-proven by test).
+- [x] The out-of-allowance message says plainly that existing projects and downloads are unaffected,
       and is honest that Pro is not yet purchasable. (Rewriting it into a working upgrade is the
       Stripe issue's job, not this one's.)
-- [ ] An organization that generated more than one foundation under the old limit keeps every one of
+- [x] An organization that generated more than one foundation under the old limit keeps every one of
       them, keeps its downloads, and is never told it owes anything — it simply has nothing
       remaining.
-- [ ] A free organization can run an import as far as the analysis and see its full result, from
+- [x] A free organization can run an import as far as the analysis and see its full result, from
       **both** entry points (ZIP and GitHub repository).
-- [ ] A free organization cannot create a project from an import: nothing is persisted — no project,
+- [x] A free organization cannot create a project from an import: nothing is persisted — no project,
       no import source, no prefilled answers — and the refusal names Pro as the reason.
-- [ ] The import gate is enforced in one place that both entry points pass through, not once per
+- [x] The import gate is enforced in one place that both entry points pass through, not once per
       action.
-- [ ] The import screens show the Pro requirement *before* the founder uploads, and show it as a
+- [x] The import screens show the Pro requirement *before* the founder uploads, and show it as a
       locked, explained state rather than a hidden one (§III: explicit states).
-- [ ] A Pro organization's import behaves exactly as it does today — this spec changes who may
+- [x] A Pro organization's import behaves exactly as it does today — this spec changes who may
       import, never what import does.
-- [ ] An organization that imported a project before this ships keeps it, keeps its downloads, and
+- [x] An organization that imported a project before this ships keeps it, keeps its downloads, and
       can still generate from it under whatever allowance it has.
-- [ ] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures).
+- [x] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures).
 
 ### Verification
 
@@ -176,11 +178,37 @@ _How each criterion above is proven._
 - **New tests** — `apps/web/src/features/import/actions.test.ts`: a free organization gets the
   analysis back and **no** `createProject` call; a Pro organization completes the import; both
   entry points are asserted, so the gate cannot be added to one and forgotten on the other.
-- Landing/settings single-source criterion → a test that asserts the rendered copy contains the
-  constant, so the prose cannot drift from the number.
-- Locked import state → a component test on the import page asserting the Pro explanation renders for
-  a free organization, alongside the existing `app/app/projects/import/page.test.tsx`.
+- **New tests** — `apps/web/src/features/generation/runner.test.ts`: a reused run is recorded as
+  `reused: true` and a live call as `false`, which is what stops the ledger charging for a Claude
+  call nobody made.
+- Landing/settings single-source criterion → the numbers are imported from
+  `features/generation/limits.ts` rather than written in prose, so drift is a type error rather than
+  something a test has to notice.
+- Locked import state → `app/app/projects/import/page.test.tsx` asserts the Pro explanation renders
+  above the file picker for a free organization and not at all for a Pro one.
 - Full suite result + typecheck/lint status.
+
+### Result (2026-07-29)
+
+```
+pnpm -r typecheck   Done — clean across schemas, engine, web
+pnpm -r lint        Done — no new issues
+pnpm -r test        schemas   35 passed
+                    engine   213 passed
+                    web      317 passed | 0 skipped (46 files)
+pnpm test:scripts     13 passed
+```
+
+Run against a live local Supabase, so the DB-backed suites — `schema.rls.test.ts`,
+`allowance.db.test.ts` and the five others that guard themselves with `describe.skipIf(!dbUp)` —
+actually executed rather than skipping. Nothing is skipped and there are no known pre-existing
+failures.
+
+The migration was applied three times against that database (twice by hand, once through
+`supabase migration up`) and was clean on every pass, which is the idempotence claim demonstrated
+rather than asserted. Two migrations from `develop` — `20260726120000_import.sql` and
+`20260727093000_import_digest_version.sql` — had never been applied to that local database and were
+applied with `--include-all` to get there; that gap was pre-existing and unrelated to this change.
 
 ---
 
@@ -188,21 +216,41 @@ _How each criterion above is proven._
 
 _The plan, for whoever implements it. Every change grounded in current code; expanded by `/implement`._
 
-Left for `/implement`. The shape is known: a migration adding `organizations.plan`, a store reader
-beside `isAdminUser` ([`lib/data/store.ts:396`](../apps/web/src/lib/data/store.ts#L396)), the
-entitlement type and `checkAllowance` rewrite in
-[`features/generation/allowance.ts`](../apps/web/src/features/generation/allowance.ts), the
-memoisation hook where a job is created, a plan check in `completeImport`
-([`features/import/actions.ts:60`](../apps/web/src/features/import/actions.ts#L60)) placed between
-the prefill validation and `createProject`, a locked state on
-[`app/app/projects/import/page.tsx`](../apps/web/src/app/app/projects/import/page.tsx), and copy
-updates in [`app/app/settings/page.tsx`](../apps/web/src/app/app/settings/page.tsx) and
-[`features/landing/copy.ts`](../apps/web/src/features/landing/copy.ts).
+1. **`supabase/migrations/20260729120000_pro_plan.sql`** (new) — `organizations.plan` with a guarded
+   check constraint, and `generation_jobs.reused_authoring`. No new RLS policy: `organizations`
+   already has a select-only policy and no insert/update grant for `authenticated`, so a member can
+   read their plan and has no path to write one. Adding a policy would imply writes are possible and
+   merely filtered.
+2. **`apps/web/src/features/generation/limits.ts`** (new) — the three numbers, in a module with no
+   imports. `allowance.ts` is server-only, but the landing page states the same numbers in prose;
+   this is what lets both read one source without dragging Supabase into a client bundle.
+3. **`apps/web/src/features/generation/allowance.ts`** — rewritten. `Entitlement` is a union
+   discriminated on `allowed`, carrying `grant` (`free` | `repair` | `pro` | `admin`) or `denial`
+   (`free-spent` | `repairs-spent` | `window-closed`). `checkAllowance` takes a query object; `now`
+   is injected so the window is testable without touching the clock. `allowanceMessage` replaces the
+   single `ALLOWANCE_REACHED_MESSAGE` so each refusal names the limit it met.
+4. **`apps/web/src/lib/data/store.ts`** — `plan` on `OrgRecord` (anything not exactly `'pro'` reads
+   as free); `chargedUsage(column, id)` replaces the inline filter in `countGenerations` and is
+   shared with the new `projectUsage(projectId)`; `AuthoringProvenance` gains `reused`.
+5. **`apps/web/src/features/generation/runner.ts`** — passes `reused: reused !== null`.
+6. **`features/interview/actions.ts`, `features/generation/actions.ts`** — pass the org's plan and
+   the project id; render `allowanceMessage(denial)`.
+7. **`features/import/actions.ts`** — `completeImport` takes the `OrgRecord` and checks the plan
+   between the prefill validation and `createProject`. A free organization gets `{ requiresPro,
+   preview }`; the preview is the evidence, notes and counts, deliberately **without**
+   `analysis.answers` — the prefilled interview is what Pro buys.
+8. **`features/import/ProPreview.tsx`, `AnalysisEvidence.tsx`** (new) — the free result and the
+   evidence list. The latter is now used by both the free preview and the import review page, which
+   is what stops the promise and the product drifting apart.
+9. **`ImportForm.tsx`, `RepoImport.tsx`** — render `ProPreview` instead of the form once the
+   analysis has run without a plan behind it.
+10. **`app/app/projects/import/page.tsx`** — states the Pro requirement above the picker, and says
+    the analysis is still free.
+11. **`app/app/settings/page.tsx`, `features/landing/copy.ts`** — read the constants.
 
-**No change needed:** `submitInterviewAction` and `retryGenerationAction` — they already ask one
-question ("may this organization generate?") and should keep asking exactly that.
-`importProjectAction` and `importRepoAction` likewise: they read their own source and hand off, and
-the gate belongs at the join, not in each of them.
+**No change needed:** `submitInterviewAction` and `retryGenerationAction` still ask one question
+("may this organization generate?"). `importProjectAction` and `importRepoAction` likewise: they read
+their own source and hand off, and the gate belongs at the join, not in each of them.
 
 ---
 
@@ -233,9 +281,13 @@ Plan and entitlement are read server-side from the database on every generation 
 attempt; the client never supplies a plan, an organization id, or a usage count, and a forged request
 gains nothing because the server re-reads both. The import gate sits in the server action, not in the
 page that renders the locked state, so a founder who posts straight to the action is refused exactly
-like one who never saw the screen. The plan column is writable only by migration or the billing
-webhook's service path — never by an ordinary member of the organization, which the denial test
-proves.
+like one who never saw the screen.
+
+The plan column is writable only by migration or the billing webhook's service path — never by a
+member of the organization, their own included. That is not inherited from the table: `authenticated`
+holds `update` on `organizations`, so the column had to be revoked explicitly at column level. Two
+denial tests hold that line, one for the member's own row and one for another org's. See
+_Implementation notes_ — this was a live escalation the tests caught before merge, not a hypothetical.
 
 Letting a free organization run the analysis widens nothing: it already runs entirely in the request
 on files the founder supplied, and §II's "nothing but paths, sizes and digests is persisted" holds
@@ -282,10 +334,50 @@ _Unusual inputs or states, and what should happen._
 - Pro organization whose subscription lapses, with imported projects → same rule as everywhere else:
   the projects stay readable and downloadable, only new imports and new generations stop.
 - Admin account → unlimited, unchanged; the admin flag wins over any plan, for imports too.
-- Local mode with no Supabase → the plan reads as `free` and nothing crashes. [NEEDS CLARIFICATION:
-  does local mode gate imports at all? Local mode exists so the whole product runs with no
-  integrations, and a `free` plan there would make importing untestable locally — the likely answer
-  is that local mode behaves as unlimited, the same way it already sidesteps auth.]
+- Local development → no bypass exists, and none is added. The marker here asked whether local mode
+  should behave as unlimited; the premise turned out to be stale. `lib/auth.ts` resolves every
+  session through Supabase Auth and the DataStore reads only Supabase — there is no
+  file-backed path left to special-case. A developer flips their own row
+  (`update organizations set plan = 'pro'`), which is the same mechanism admin accounts already use
+  and leaves no code path that could grant Pro by accident. Worth noting: `CLAUDE.md` and
+  `SYSTEM_OVERVIEW.md` still describe a local file-backed store, which no longer exists — out of
+  scope here, but it is stale AI context and should get its own issue (§IV).
+
+---
+
+## Implementation notes
+
+**A member could have granted themselves Pro.** The denial test was written expecting to pass, and
+it failed. `20260725100000_schema.sql:197` grants `insert, update, delete on public.organizations to
+authenticated`, and the "org members update organizations" policy admits any member of the row. That
+was harmless while the table held a name and a slug; putting an *entitlement* on the same row made it
+a privilege escalation, because Supabase's PostgREST endpoint is reachable with a user's own JWT
+without going near the app. Any signed-in founder could have run
+`update organizations set plan = 'pro'`.
+
+RLS cannot express "this row, but not this column", so the fix is column-level privilege: revoke the
+table-wide `insert, update` from `authenticated` and grant back every column except `plan`. The row
+policies are untouched, so nothing a member could legitimately edit changes, and an inserted row
+takes the column default and can never arrive paid.
+
+Worth recording plainly, because the reasoning that produced the bug looked sound: the first version
+of this migration carried a comment explaining that no policy was needed since `organizations` was
+select-only — true in `20260724132100_init.sql`, and falsified by a migration a day later. Reading
+one migration is not reading the schema. This is the §II denial-test requirement earning its keep.
+
+**One design change from the plan.** The spec said memoisation was deferred from spec 65. Half of it
+had already landed: `features/generation/memo.ts` and the `generation_jobs_memo_idx` from
+`20260727090000_authoring_provenance.sql` already skip the Claude call when the inputs hash matches.
+What was missing was the money half — the job row was still inserted, the usage trigger still fired,
+and the founder was still charged a foundation for a call nobody made. Hence
+`generation_jobs.reused_authoring` rather than new hashing: the ledger now excludes reused runs the
+same way, and for the same reason, that it already excludes failed ones.
+
+**`chargedUsage` filters in TypeScript, not in the query.** The first version expressed "failed or
+reused" as a PostgREST `.or("status.eq.failed,reused_authoring.eq.true")` string. That is the kind of
+expression that stays syntactically valid while quietly meaning something else, and getting it wrong
+would charge every founder for every memo hit. Fetching `status` and `reused_authoring` and filtering
+in code costs one extra column and is obviously correct.
 
 ---
 
