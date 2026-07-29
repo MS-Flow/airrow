@@ -17,6 +17,7 @@ organizations
   slug text unique
   kind text check in ('personal','team')   -- teams activate in M7
   created_by uuid → profiles
+  plan text check in ('free','pro')        -- entitlement (spec 74); see "The plan column" below
 
 organization_members
   organization_id uuid → organizations
@@ -56,6 +57,8 @@ generation_jobs
   error jsonb null
   tokens_used int null
   started_at / finished_at timestamptz
+  inputs_hash / prompt_version / authoring_model / authored   -- memoisation + provenance (spec 65)
+  reused_authoring boolean                  -- answered from a previous run; not charged (spec 74)
 
 artifacts
   id uuid pk
@@ -96,6 +99,14 @@ repo_connections                            -- provider credentials per org (Git
 ## RLS pattern
 
 Single helper: `is_org_member(org_id uuid)` security-definer function checking `organization_members`. Every policy reduces to membership of the row's (direct or joined) organization. Writes additionally check role where relevant. No table without a policy; policies tested in CI.
+
+### The plan column is the exception, and has to be
+
+`organizations.plan` is an entitlement sitting on a row its own members may edit — `authenticated` holds `update` on `organizations`, and the "org members update organizations" policy admits any member. Row-level security cannot express *"this row, but not this column"*, so membership alone would have let a founder run `update organizations set plan = 'pro'` straight against PostgREST with their own JWT.
+
+So the plan is protected by **column-level privilege** instead: spec 74's migration revokes table-wide `insert, update` from `authenticated` and grants back every column except `plan`. The row policies are unchanged. Only a migration or the billing webhook's service-role path writes it.
+
+Read this as the general rule it implies: when a column decides what someone is *entitled to*, membership of the row is not sufficient authorization, and RLS is not the tool. Two denial tests in `schema.rls.test.ts` hold the line — one for a member's own organization, one for someone else's.
 
 ## Design decisions
 

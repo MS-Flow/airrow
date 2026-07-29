@@ -52,7 +52,6 @@ export interface ImportPreview {
   originalName: string;
   filesAnalyzed: number;
   filesIgnored: number;
-  stackDetected: boolean;
   evidence: ImportEvidence[];
   notes: string[];
 }
@@ -115,7 +114,6 @@ async function completeImport(
         originalName,
         filesAnalyzed: analysis.filesAnalyzed,
         filesIgnored: analysis.filesIgnored,
-        stackDetected: analysis.stackDetected,
         evidence: analysis.evidence,
         notes: analysis.notes
       }

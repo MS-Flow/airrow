@@ -7,7 +7,7 @@
 
 |                |                                                          |
 | -------------- | -------------------------------------------------------- |
-| **Status**     | 🔄 In progress                                            |
+| **Status**     | ✅ Done                                                   |
 | **Issue**      | #74 — "Pro: plan- och entitlement-modell, och en gratisnivå på en foundation" |
 | **Branch**     | `74-pro-entitlements` (from `feature/pro`)               |
 | **Feature**    | Pro                                                       |
@@ -372,6 +372,14 @@ What was missing was the money half — the job row was still inserted, the usag
 and the founder was still charged a foundation for a call nobody made. Hence
 `generation_jobs.reused_authoring` rather than new hashing: the ledger now excludes reused runs the
 same way, and for the same reason, that it already excludes failed ones.
+
+**Two findings from `/analyze`, fixed before close-out.** `ImportPreview` carried a `stackDetected`
+field that was populated and never rendered — dead data crossing the server→client boundary, removed.
+And `DATABASE_DESIGN.md`, which §II names as the canonical schema, documented neither new column;
+worse, its RLS section asserted that *every* policy reduces to org membership, which this change made
+untrue. It now documents both columns and carries a short section on why the plan is protected by
+column-level privilege rather than a policy — stated as the general rule it implies, since the next
+entitlement column will face the same problem.
 
 **`chargedUsage` filters in TypeScript, not in the query.** The first version expressed "failed or
 reused" as a PostgREST `.or("status.eq.failed,reused_authoring.eq.true")` string. That is the kind of
