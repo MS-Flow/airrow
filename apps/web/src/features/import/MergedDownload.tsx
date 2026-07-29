@@ -4,7 +4,7 @@
 //
 // The merge happens here, in the browser, because Airrow does not store the founder's source. The
 // server sends only what `applyResolutions` deemed safe to write, so overlaying it is correct by
-// construction — an undecided conflict never arrives and their file survives untouched.
+// construction — an undecided conflict arrives under a `.airrow` path, so their file survives untouched.
 //
 // One button, always. It sits in the preview header as well as on the project pages, so it stays a
 // single control and says everything transient through the toaster instead of growing a paragraph

@@ -74,12 +74,23 @@ export interface InterviewAnswers {
   team?: TeamShape;
 }
 
+/**
+ * Where a project came from, and — for an import — whether the analysis found code to read.
+ *
+ * It decides which command the foundation ships (spec 91): a project started from nothing gets
+ * `/start`, which scaffolds a stack; an imported one that already has a stack gets `/cleanup`, which
+ * reads it and rewrites the documents to match. An import with nothing but documents in it has
+ * nothing to read, so it gets `/start` like any other empty project.
+ */
+export type ProjectOrigin = { kind: "new" } | { kind: "imported"; stackDetected: boolean };
+
 /** Fully resolved, validated model the engine generates from. */
 export interface ProjectModel {
   schemaVersion: "1";
   name: string;
   slug: string;
   description: string;
+  origin: ProjectOrigin;
   vision: string;
   productType: ProductType;
   audience: Audience;
@@ -202,6 +213,11 @@ export interface ImportEvidence {
 export interface ImportAnalysis {
   /** Prefill for the interview. Only questions the analysis could answer are present. */
   answers: InterviewAnswers;
+  /**
+   * Whether the archive held code at all — a manifest or source, as opposed to documents. It decides
+   * which command the foundation ships (spec 91); see `ProjectOrigin`.
+   */
+  stackDetected: boolean;
   evidence: ImportEvidence[];
   /** Detected but not mappable onto the current model — surfaced, never silently dropped. */
   notes: string[];

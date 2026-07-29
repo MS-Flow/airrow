@@ -79,6 +79,17 @@ export const importedFileSchema = z.object({
   content: z.string()
 });
 
+/**
+ * Where the project came from (spec 91). Validated rather than cast because it is derived from
+ * `import_sources.analysis` — a jsonb column, and rows written before `stackDetected` existed carry
+ * no answer at all. A missing field must fail here and be defaulted deliberately by the caller, not
+ * arrive in the engine as `undefined` and silently pick a command.
+ */
+export const projectOriginSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("new") }),
+  z.object({ kind: z.literal("imported"), stackDetected: z.boolean() })
+]);
+
 export const conflictResolutionSchema = z.enum(["keep_existing", "use_generated"]);
 
 /**
@@ -89,10 +100,17 @@ export const importCreateSchema = projectCreateSchema.extend({
   source: z.literal("zip")
 });
 
-/** A single conflict decision posted back from the review screen. */
+/**
+ * A single conflict decision posted back from the review screen.
+ *
+ * An empty resolution means "undo this decision" — pressing the active button again returns the path
+ * to undecided. It is its own value rather than a second action because the review screen posts one
+ * form per button, and an unmade decision is a real state: undecided delivers Airrow's document as a
+ * `.airrow` sidecar, which neither explicit answer does (spec 91).
+ */
 export const conflictDecisionSchema = z.object({
   path: z.string().min(1).max(400),
-  resolution: conflictResolutionSchema
+  resolution: z.union([conflictResolutionSchema, z.literal("")])
 });
 
 export const profileUpdateSchema = z.object({

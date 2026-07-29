@@ -8,9 +8,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # A foundation is documents until `/start` has run, and there is nothing to typecheck in a
-  # repository with no stack in it. Without this gate the very first push goes red before a line has
-  # been written — which says nothing true about the code and trains everyone to ignore the badge.
+  # There is nothing to typecheck in a repository with no stack in it. Without this gate the very
+  # first push goes red before a line has been written — which says nothing true about the code and
+  # trains everyone to ignore the badge.
   detect:
     runs-on: ubuntu-latest
     outputs:
@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: check
-        name: Has /start run yet?
+        name: Is there a stack to verify?
         run: |
 {{CI_READY_CHECK}}
 

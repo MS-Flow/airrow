@@ -76,5 +76,7 @@ passes it in.
 - **Product:** Airrow generates engineering *foundations* — never application code from our servers.
   The one exception is the `/start` command shipped **inside** a generated repo: the founder runs it
   on their own machine, and it takes their project to the bare minimum that runs — that minimum is a
-  ceiling, and everything past it goes through the spec loop (spec 66). ZIP delivery must always work
-  with no integration connected.
+  ceiling, and everything past it goes through the spec loop (spec 66). An **imported** project gets
+  `/cleanup` in its place (spec 91): it reads the existing codebase and rewrites the foundation's
+  documents to match, changes no code and deletes nothing. Exactly one of the two ships, decided by
+  the project's origin. ZIP delivery must always work with no integration connected.

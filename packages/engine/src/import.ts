@@ -132,6 +132,58 @@ function dependencyNames(content: string): Set<string> {
 
 const basename = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 
+/** Package manifests and build files — one of these is a project, whatever language it is in. */
+const MANIFEST_FILES = [
+  "package.json",
+  "requirements.txt",
+  "pyproject.toml",
+  "pipfile",
+  "gemfile",
+  "go.mod",
+  "cargo.toml",
+  "pom.xml",
+  "build.gradle",
+  "build.gradle.kts",
+  "composer.json",
+  "mix.exs",
+  "pubspec.yaml",
+  "dockerfile",
+  "makefile"
+] as const;
+
+const MANIFEST_EXTENSIONS = [".csproj", ".sln", ".fsproj", ".vbproj", ".gemspec", ".cabal"] as const;
+
+/** Extensions that are somebody's source code rather than somebody's documentation. */
+const SOURCE_EXTENSIONS = [
+  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte",
+  ".py", ".rb", ".go", ".rs", ".java", ".kt", ".kts", ".swift", ".cs", ".fs", ".vb",
+  ".php", ".ex", ".exs", ".dart", ".scala", ".clj", ".c", ".h", ".cc", ".cpp", ".hpp", ".m", ".mm",
+  ".sql", ".sh", ".ps1"
+] as const;
+
+/**
+ * Did this archive hold a project, or only documents?
+ *
+ * The one question that decides which command the foundation ships (spec 91). `/cleanup` reads an
+ * existing codebase and rewrites the documents to match it; handed a repository with no code it has
+ * nothing to read, so that import gets `/start` instead — same as any project beginning from nothing.
+ *
+ * Paths only, deliberately: it must give the same answer for the archive being imported and for the
+ * digests stored from it, and the content of those files is never kept (§II). Deliberately *not*
+ * "did we recognise the stack" — a Rails or .NET project is code we cannot name, and a founder with
+ * one still has a codebase for `/cleanup` to read.
+ */
+export function hasCodeSignal(paths: readonly string[]): boolean {
+  return paths.some((path) => {
+    if (isIgnoredImportPath(path)) return false;
+    const name = basename(path).toLowerCase();
+    const manifests: readonly string[] = MANIFEST_FILES;
+    if (manifests.includes(name)) return true;
+    const suffixes: readonly string[] = [...MANIFEST_EXTENSIONS, ...SOURCE_EXTENSIONS];
+    return suffixes.some((ext) => name.endsWith(ext));
+  });
+}
+
 /* ── Analysis ─────────────────────────────────────────────────────────────── */
 
 /**
@@ -241,6 +293,7 @@ export function analyzeImport(files: ImportedFile[], alreadyIgnored = 0): Import
 
   return {
     answers,
+    stackDetected: hasCodeSignal(paths),
     evidence,
     notes,
     filesAnalyzed: kept.length,
@@ -449,8 +502,44 @@ export function pathOverlap(expected: ReadonlyArray<string>, actual: ReadonlyArr
 }
 
 /**
- * Apply the founder's conflict decisions. Unresolved conflicts keep the existing file — the safe
- * default — so a half-answered review can never overwrite work.
+ * The path a generated file takes when the founder's file already holds the real one.
+ *
+ * `README.md` → `README.airrow.md`; the suffix goes before the extension so the file still opens as
+ * what it is. A name with no extension (`Dockerfile`) and a dotfile (`.gitignore`, whose leading dot
+ * is not an extension) both take the suffix at the end.
+ */
+/**
+ * Whether an undecided conflict on this path delivers Airrow's version beside the founder's.
+ *
+ * Markdown only. A sidecar exists so `/cleanup` can reconcile two versions of a document, and
+ * markdown is exactly the set it may rewrite. Anything else would be inert at best and live at
+ * worst: `ci.airrow.yml` in `.github/workflows/` is a second pipeline GitHub Actions runs, failing
+ * on commands the project may not have — a red build the founder never asked for, in the one file
+ * `/cleanup` is forbidden to fix.
+ */
+export function deliversSidecar(path: string): boolean {
+  return path.endsWith(".md");
+}
+
+export function sidecarPath(path: string): string {
+  const slash = path.lastIndexOf("/");
+  const name = path.slice(slash + 1);
+  const dot = name.lastIndexOf(".");
+  const renamed = dot <= 0 ? `${name}.airrow` : `${name.slice(0, dot)}.airrow${name.slice(dot)}`;
+  return path.slice(0, slash + 1) + renamed;
+}
+
+/**
+ * Apply the founder's conflict decisions. A file of theirs is never overwritten by one they did not
+ * explicitly ask for — that is the promise from spec 63 and it is unchanged.
+ *
+ * What changed (spec 91) is what happens to Airrow's version of an **undecided** conflict. It used to
+ * be dropped, which left an imported project with, say, no `CLAUDE.md` at all and `/cleanup` with
+ * nothing to reconcile against — the foundation's own documents were missing from the foundation. It
+ * now ships alongside as `README.airrow.md`, which overwrites nothing and leaves both versions on disk
+ * for `/cleanup` to work through — for markdown, see below. An **explicit** "keep mine" still
+ * delivers nothing: the founder decided, and a sidecar they said they did not want is still a file
+ * they did not want.
  */
 export function applyResolutions(
   generated: GeneratedFile[],
@@ -458,7 +547,17 @@ export function applyResolutions(
   resolutions: ReadonlyMap<string, ConflictResolution>
 ): GeneratedFile[] {
   const existingPaths = new Set(existing.map((f) => f.path));
-  return generated.filter(
-    (file) => !existingPaths.has(file.path) || resolutions.get(file.path) === "use_generated"
-  );
+  const written: GeneratedFile[] = [];
+  for (const file of generated) {
+    if (!existingPaths.has(file.path)) {
+      written.push(file);
+      continue;
+    }
+    const decision = resolutions.get(file.path);
+    if (decision === "use_generated") written.push(file);
+    else if (decision === undefined && deliversSidecar(file.path)) {
+      written.push({ ...file, path: sidecarPath(file.path) });
+    }
+  }
+  return written;
 }

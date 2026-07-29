@@ -3,25 +3,15 @@
 **{{PROJECT_TAGLINE}}**
 
 This foundation ships the rules, workflow and documentation for {{PROJECT_NAME}}. It does not ship the
-application — you write that, with an AI assistant, one spec at a time. The steps below are in the
-order that works: get something running, then connect the accounts, then start building.
+application — that part is yours, and everything you add to it from here arrives one spec at a time.
+The steps below are in the order that works: get the foundation working, then connect the accounts,
+then start building.
 
 ---
 
 ## 1. Get it running
 
-Open your AI assistant in this repository and run:
-
-```
-/start
-```
-
-It scaffolds the stack, wires the toolchain, initialises git locally, and leaves you the smallest
-version of {{PROJECT_NAME}} that actually runs — enough to open, change and continue from, and no
-more. It touches nothing outside this directory: no accounts, no services, no secrets. It is safe to
-run again.
-
-When it finishes, these are real commands:
+{{FIRST_STEP}}
 
 ```bash
 {{CMD_DEV}}        # start the dev server
@@ -35,7 +25,7 @@ make from here has to pass it before it merges.
 
 ## 2. Connect what needs an account
 
-These need a human and, usually, a credit card. `/start` deliberately does none of them.
+These need a human and, usually, a credit card. `{{FIRST_COMMAND}}` deliberately does none of them.
 
 {{SETUP_STEPS}}
 
@@ -59,8 +49,8 @@ matters more than keeping them long.
 ### What a spec is, and when you write one
 
 **A spec is a thing you want to add to {{PROJECT_NAME}}, written down before it is built.** Not a
-document you write once — one spec per change, forever. `/start` left you the smallest thing that runs;
-_everything_ after it arrives this way.
+document you write once — one spec per change, forever. Step 1 got you to a starting point;
+_everything_ you add after it arrives this way.
 
 That means every one of these:
 
