@@ -13,7 +13,12 @@ import { Label } from "@/components/ui/label";
 import { ComingSoon } from "@/components/ui/states";
 import { ThemeToggle } from "@/features/settings/ThemeToggle";
 import { signInWithGitHubAction } from "@/features/auth/actions";
-import { FREE_GENERATION_LIMIT, checkAllowance } from "@/features/generation/allowance";
+import {
+  FREE_GENERATION_LIMIT,
+  FREE_REPAIR_LIMIT,
+  REPAIR_WINDOW_HOURS,
+  checkAllowance
+} from "@/features/generation/allowance";
 import { githubIdentity, requireSession, updateName } from "@/lib/auth";
 import { readTheme } from "@/lib/theme";
 
@@ -35,7 +40,7 @@ export default async function SettingsPage({
   const { saved } = await searchParams;
   const { user, org } = await requireSession();
   const theme = await readTheme();
-  const allowance = await checkAllowance(org.id, user.id);
+  const allowance = await checkAllowance({ orgId: org.id, plan: org.plan, userId: user.id });
   const github = await githubIdentity();
   const githubConfigured = Boolean(process.env.GITHUB_APP_ID && process.env.GITHUB_APP_PRIVATE_KEY);
 
@@ -86,18 +91,24 @@ export default async function SettingsPage({
         <CardBody>
           {allowance.unlimited ? (
             <p className="text-sm text-fg-muted">
-              <span className="font-medium text-fg">Admin</span> · unlimited generations.{" "}
-              {allowance.used} used so far.
+              <span className="font-medium text-fg">
+                {allowance.allowed && allowance.grant === "pro" ? "Pro" : "Admin"}
+              </span>{" "}
+              · unlimited generations. {allowance.used} used so far.
             </p>
           ) : (
             <>
               <p className="text-sm text-fg-muted">
                 <span className="font-medium text-fg">Free</span> · {allowance.remaining} of{" "}
-                {FREE_GENERATION_LIMIT} generations left.
+                {FREE_GENERATION_LIMIT} {FREE_GENERATION_LIMIT === 1 ? "foundation" : "foundations"}{" "}
+                left.
               </p>
               <p className="mt-1.5 text-xs text-fg-faint">
-                Deleting a project doesn&apos;t return a generation — each one is authored the moment
-                you start it. Pro lifts the limit, coming soon.
+                Changed your mind about an answer? A foundation can be regenerated{" "}
+                {FREE_REPAIR_LIMIT} times free within {REPAIR_WINDOW_HOURS} hours of its first run,
+                and regenerating with nothing changed never costs anything. Deleting a project
+                doesn&apos;t return a generation — each one is authored the moment you start it. Pro
+                is unlimited and adds importing an existing project; it isn&apos;t purchasable yet.
               </p>
             </>
           )}
@@ -218,7 +229,7 @@ export default async function SettingsPage({
         />
         <ComingSoon
           title="Pro"
-          description="Unlimited generations, push straight to GitHub, and regeneration as your product changes."
+          description="Unlimited foundations, importing an existing project, and push straight to GitHub."
         />
         <ComingSoon
           title="API keys"

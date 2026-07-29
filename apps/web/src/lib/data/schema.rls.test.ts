@@ -160,4 +160,61 @@ describe.skipIf(!dbUp)("full schema RLS (local Supabase)", () => {
       expect(visibleToB).not.toContain(c.idA);
     });
   }
+
+  /* ── The plan (spec 74) ───────────────────────────────────────────────────
+   *
+   * The entitlement is a column, so its access control is `organizations`'s — which is why it is
+   * asserted here rather than assumed. Two properties matter and neither is obvious from reading
+   * the migration alone: a member can *read* their plan, and nobody can write one.
+   */
+  async function asUser<T>(userId: string, run: () => Promise<T>): Promise<T> {
+    await db.query("begin");
+    try {
+      await db.query("select set_config('request.jwt.claims', $1, true)", [
+        JSON.stringify({ sub: userId })
+      ]);
+      await db.query("select set_config('role', 'authenticated', true)");
+      return await run();
+    } finally {
+      await db.query("rollback");
+    }
+  }
+
+  it("organizations.plan: a member reads their own plan and never another org's", async () => {
+    await db.query("update public.organizations set plan = 'pro' where id = $1", [ORG_A]);
+
+    const seen = await asUser(USER_A, async () => {
+      const res = await db.query<{ id: string; plan: string }>("select id, plan from public.organizations");
+      return res.rows;
+    });
+
+    expect(seen).toEqual([{ id: ORG_A, plan: "pro" }]);
+  });
+
+  it("organizations.plan: a member cannot grant themselves Pro", async () => {
+    // The denial that matters most. `organizations` carries no insert/update grant for the API
+    // role at all, so this is refused before any policy is consulted — but "we never granted it"
+    // is a claim worth a test, because a future migration could grant it by accident.
+    await expect(
+      asUser(USER_B, () =>
+        db.query("update public.organizations set plan = 'pro' where id = $1", [ORG_B])
+      )
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it("organizations.plan: an outsider cannot write another org's plan", async () => {
+    await expect(
+      asUser(USER_A, () =>
+        db.query("update public.organizations set plan = 'pro' where id = $1", [ORG_B])
+      )
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it("organizations.plan: defaults to free, so a new organization is never accidentally paid", async () => {
+    const res = await db.query<{ plan: string }>(
+      "select plan from public.organizations where id = $1",
+      [ORG_B]
+    );
+    expect(res.rows[0]?.plan).toBe("free");
+  });
 });

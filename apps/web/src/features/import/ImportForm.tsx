@@ -18,6 +18,7 @@ import { InlineError, Notice } from "@/components/ui/states";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { importProjectAction, type ImportFormState } from "./actions";
 import { cacheArchive } from "./archive-cache";
+import { ProPreview } from "./ProPreview";
 
 export function ImportForm() {
   const [state, action] = useActionState<ImportFormState, FormData>(importProjectAction, {});
@@ -52,6 +53,10 @@ export function ImportForm() {
       active = false;
     };
   }, [state.projectId, archive, router]);
+
+  // The analysis ran and produced a real result; only keeping it needs Pro. Replacing the form
+  // rather than sitting above it, because the form's next step no longer exists for this founder.
+  if (state.requiresPro && state.preview) return <ProPreview preview={state.preview} />;
 
   return (
     <form action={action} className="space-y-5">
