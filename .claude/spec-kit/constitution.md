@@ -81,8 +81,12 @@ Every feature, screen, and generated file is judged against these.
   metadata only — never answer content or generated document bodies.
 - **Manifest of record.** Generation records per file (source, template id + version, prompt version,
   model, inputs hash) in Postgres — do not bypass it. Full schema: `DATABASE_DESIGN.md`.
-- **Repo access via GitHub App installations only** (minimal permissions, short-lived tokens) — never
-  user PATs.
+- **Repo access is least-privilege, and never a user PAT.** Reading **public** content may use the
+  signed-in user's OAuth identity with **no scopes** — that reaches nothing an anonymous visitor
+  could not already fetch. Everything beyond it — private content, and every write — goes through a
+  **GitHub App installation** with minimal permissions and short-lived tokens. User PATs are never
+  accepted, and no repo credential is ever persisted. (Amended by
+  [spec 67](../../specs/67-github-login-import.md), which records the previous wording.)
 
 ## III. Design invariants
 - **Tokens, not literals.** Use the Tailwind v4 / design-system tokens (color, spacing, radii, type) —

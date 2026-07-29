@@ -15,7 +15,12 @@ export type ArchiveRead =
 
 const megabytes = (bytes: number): string => `${Math.round(bytes / (1024 * 1024))} MB`;
 
-const TOO_BIG = `That archive is over the ${megabytes(IMPORT_LIMITS.maxBytes)} import limit.`;
+/**
+ * What the founder called the thing they gave us. A repository read through GitHub's zipball takes
+ * exactly this path (spec 67), and telling that founder their "archive" is too large would name
+ * something they never made.
+ */
+export type ArchiveNoun = "archive" | "repository";
 
 /** Archive entry name → repo-relative path. Returns null for anything that tries to escape. */
 export function normalizePath(name: string): string | null {
@@ -24,15 +29,19 @@ export function normalizePath(name: string): string | null {
   return path;
 }
 
-/** Read an uploaded ZIP into the file list the engine analyses. */
-export async function readArchive(bytes: ArrayBuffer): Promise<ArchiveRead> {
-  if (bytes.byteLength > IMPORT_LIMITS.maxBytes) return { ok: false, error: TOO_BIG };
+/** Read a ZIP — uploaded, or fetched from a repository — into the file list the engine analyses. */
+export async function readArchive(
+  bytes: ArrayBuffer,
+  noun: ArchiveNoun = "archive"
+): Promise<ArchiveRead> {
+  const tooBig = `That ${noun} is over the ${megabytes(IMPORT_LIMITS.maxBytes)} import limit.`;
+  if (bytes.byteLength > IMPORT_LIMITS.maxBytes) return { ok: false, error: tooBig };
 
   let zip: JSZip;
   try {
     zip = await JSZip.loadAsync(bytes);
   } catch {
-    return { ok: false, error: "That file could not be read as a ZIP archive." };
+    return { ok: false, error: `That ${noun} could not be read as a ZIP archive.` };
   }
 
   // Filter before decompressing: a dependency directory should cost nothing to skip, and the
@@ -51,7 +60,7 @@ export async function readArchive(bytes: ArrayBuffer): Promise<ArchiveRead> {
   if (entries.length > IMPORT_LIMITS.maxFiles) {
     return {
       ok: false,
-      error: `That archive has ${entries.length} files — the import limit is ${IMPORT_LIMITS.maxFiles}.`
+      error: `That ${noun} has ${entries.length} files — the import limit is ${IMPORT_LIMITS.maxFiles}.`
     };
   }
 
@@ -60,7 +69,7 @@ export async function readArchive(bytes: ArrayBuffer): Promise<ArchiveRead> {
   for (const { entry, path } of entries) {
     const content = await entry.async("string");
     total += Buffer.byteLength(content, "utf8");
-    if (total > IMPORT_LIMITS.maxBytes) return { ok: false, error: TOO_BIG };
+    if (total > IMPORT_LIMITS.maxBytes) return { ok: false, error: tooBig };
     files.push({ path, content });
   }
 

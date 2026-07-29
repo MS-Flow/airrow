@@ -4,12 +4,25 @@ import Link from "next/link";
 import { PageContainer } from "@/components/shell/page-container";
 import { Card, CardBody } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { ComingSoon, Notice } from "@/components/ui/states";
+import { Notice } from "@/components/ui/states";
 import { ImportForm } from "@/features/import/ImportForm";
+import { RepoPicker } from "@/features/import/RepoPicker";
 
 export const metadata = { title: "Import an existing project" };
 
-export default function ImportProject() {
+/** Page number from the URL. Anything that isn't a page is page one, never an error. */
+function pageNumber(value: string | undefined): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
+export default async function ImportProject({
+  searchParams
+}: {
+  searchParams: Promise<{ repoPage?: string }>;
+}) {
+  const { repoPage } = await searchParams;
+
   return (
     <PageContainer className="max-w-xl animate-slide-up py-16">
       <div className="flex items-center justify-between gap-4">
@@ -45,11 +58,7 @@ export default function ImportProject() {
         </CardBody>
       </Card>
 
-      <ComingSoon
-        className="mt-6"
-        title="Import straight from GitHub"
-        description="Connecting a repository through the Airrow GitHub App — and opening a pull request back into it — arrives with the GitHub App integration. Until then, upload an archive."
-      />
+      <RepoPicker page={pageNumber(repoPage)} />
 
       <p className="mt-6 text-sm text-fg-faint">
         Starting from nothing instead?{" "}

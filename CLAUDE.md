@@ -72,7 +72,8 @@ passes it in.
   tests** — no exceptions, including "internal" tables.
 - **Security:** secrets never in code, client bundles, logs, or generated output. Generated/authored
   files are untrusted text — rendered sanitized, never executed. Repo access via GitHub App
-  installations only, never user PATs.
+  installations for private content and every write; reading public content may use the signed-in
+  user's scope-less OAuth identity. Never user PATs, and no repo credential is persisted.
 - **Product:** Airrow generates engineering *foundations* — never application code from our servers.
   The one exception is the `/start` command shipped **inside** a generated repo: the founder runs it
   on their own machine, and it takes their project to the bare minimum that runs — that minimum is a
