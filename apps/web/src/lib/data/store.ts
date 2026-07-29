@@ -220,6 +220,33 @@ export async function setDisplayName(userId: string, name: string): Promise<void
   if (res.error) throw new Error(`Supabase: ${res.error.message}`);
 }
 
+/**
+ * Undo a signup that should never have happened (spec 67).
+ *
+ * A GitHub identity whose e-mail address GitHub itself has not verified proves nothing about who is
+ * signing in, so the spec's answer is that no account is created — but the account exists by the time
+ * the callback can see the address, because `handle_new_user` fires on insert. This removes it: the
+ * personal org and membership the trigger provisioned, then the auth user (which cascades the
+ * profile). Nothing else is reachable yet — the account is seconds old and owns no projects.
+ *
+ * The one destructive call in the DataStore, and deliberately not a general "delete a user": the
+ * caller must have established that this account is brand new and has a single unverified identity.
+ */
+export async function purgeUnverifiedSignup(userId: string): Promise<void> {
+  const membership = await db().from("organization_members").delete().eq("user_id", userId);
+  if (membership.error) throw new Error(`Supabase: ${membership.error.message}`);
+
+  const orgs = await db()
+    .from("organizations")
+    .delete()
+    .eq("created_by", userId)
+    .eq("kind", "personal");
+  if (orgs.error) throw new Error(`Supabase: ${orgs.error.message}`);
+
+  const { error } = await db().auth.admin.deleteUser(userId);
+  if (error) throw new Error(`Supabase: ${error.message}`);
+}
+
 /* ── Projects (always org-scoped) ─────────────────────────────────────────── */
 
 /**

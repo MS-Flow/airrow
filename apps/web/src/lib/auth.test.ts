@@ -6,10 +6,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const signUpMock = vi.fn();
 const signInMock = vi.fn();
+const oauthMock = vi.fn();
 
 vi.mock("@/lib/data/supabase-server", () => ({
   supabaseServer: async () => ({
-    auth: { signUp: signUpMock, signInWithPassword: signInMock }
+    auth: { signUp: signUpMock, signInWithPassword: signInMock, signInWithOAuth: oauthMock }
   })
 }));
 vi.mock("@/lib/data/store", () => ({
@@ -17,11 +18,12 @@ vi.mock("@/lib/data/store", () => ({
   setDisplayName: vi.fn()
 }));
 
-const { signIn, signUp } = await import("./auth");
+const { githubEmailVerified, signIn, signInWithGitHub, signUp } = await import("./auth");
 
 beforeEach(() => {
   signUpMock.mockReset();
   signInMock.mockReset();
+  oauthMock.mockReset();
 });
 
 describe("signUp", () => {
@@ -76,5 +78,53 @@ describe("signIn", () => {
   it("reports success", async () => {
     signInMock.mockResolvedValue({ error: null });
     await expect(signIn("ada@example.com", "hunter22")).resolves.toEqual({ status: "signed-in" });
+  });
+});
+
+describe("signInWithGitHub", () => {
+  it("asks GitHub for no scopes at all", async () => {
+    oauthMock.mockResolvedValue({ data: { url: "https://github.com/login/oauth" }, error: null });
+
+    await signInWithGitHub("https://airrow.test/auth/callback");
+
+    expect(oauthMock).toHaveBeenCalledWith({
+      provider: "github",
+      options: { scopes: "", redirectTo: "https://airrow.test/auth/callback" }
+    });
+  });
+
+  it("reports a provider that will not start the flow", async () => {
+    oauthMock.mockResolvedValue({ data: { url: null }, error: { message: "provider disabled" } });
+
+    await expect(signInWithGitHub("https://airrow.test/auth/callback")).resolves.toEqual({
+      error: "provider disabled"
+    });
+  });
+});
+
+describe("githubEmailVerified", () => {
+  // `as` justified throughout: these are the two fields the function reads, and building a whole
+  // Supabase `User` would say nothing extra about the decision being tested.
+  const asUser = (value: unknown) => value as Parameters<typeof githubEmailVerified>[0];
+
+  it("accepts an address GitHub says it verified", () => {
+    const user = { identities: [{ provider: "github", identity_data: { email_verified: true } }] };
+    expect(githubEmailVerified(asUser(user))).toBe(true);
+  });
+
+  it("rejects an unverified address even when the account looks confirmed", () => {
+    const user = {
+      email_confirmed_at: "2026-07-01T00:00:00Z",
+      identities: [{ provider: "github", identity_data: { email_verified: false } }]
+    };
+    expect(githubEmailVerified(asUser(user))).toBe(false);
+  });
+
+  it("falls back to the account's own confirmation when the identity carries no flag", () => {
+    const withFlag = { email_confirmed_at: "2026-07-01T00:00:00Z", identities: [] };
+    const without = { email_confirmed_at: null, identities: [] };
+
+    expect(githubEmailVerified(asUser(withFlag))).toBe(true);
+    expect(githubEmailVerified(asUser(without))).toBe(false);
   });
 });

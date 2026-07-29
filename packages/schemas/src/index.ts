@@ -93,12 +93,25 @@ export const projectOriginSchema = z.discriminatedUnion("kind", [
 export const conflictResolutionSchema = z.enum(["keep_existing", "use_generated"]);
 
 /**
- * Importing an existing project: the basics, same bar as creating one from scratch. `source` only
- * admits `zip` — the repo path waits on the GitHub App integration (spec 63, deferred).
+ * Importing an existing project: the basics, same bar as creating one from scratch. `source` says
+ * where the files came from — an uploaded archive, or a public GitHub repository read with the
+ * signed-in founder's scope-less identity (spec 67). Both feed the same analysis.
  */
 export const importCreateSchema = projectCreateSchema.extend({
-  source: z.literal("zip")
+  source: z.enum(["zip", "repo"])
 });
+
+/**
+ * A repository the founder picked out of the list. Owner and name are GitHub's own character set —
+ * validated rather than trusted because they arrive from the browser and end up in a URL path, where
+ * a slash or a `..` would address a different endpoint entirely (spec 67).
+ */
+export const repoSelectionSchema = z.object({
+  owner: z.string().min(1).max(39).regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/),
+  repo: z.string().min(1).max(100).regex(/^[A-Za-z0-9._-]+$/)
+});
+
+export type RepoSelection = z.infer<typeof repoSelectionSchema>;
 
 /**
  * A single conflict decision posted back from the review screen.

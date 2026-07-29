@@ -50,13 +50,17 @@ content) → Validate (required files present, no unresolved token) → Manifest
 id + version, bytes → Postgres). `renderScaffold` also returns a `ScaffoldPlan` for the founder to
 approve before anything is written.
 
-## Importing an existing project (specs 63, 68)
+## Importing an existing project (specs 63, 68, 67)
 A founder with a codebase already in flight enters at `/app/projects/import` instead of
-`/app/projects/new`. The archive is read server-side, then:
+`/app/projects/new`. Two sources, one import: an uploaded ZIP, or a **public GitHub repository**
+picked from a list (spec 67). Both are read server-side, then:
 
 1. **Read** — `features/import/archive.ts` unzips the upload, refusing anything over 50 MB or 5,000
    files (checked before *and* during decompression) and any entry whose path escapes the tree.
-   `node_modules`, `.git`, `dist` and `.next` are skipped without being decompressed.
+   `node_modules`, `.git`, `dist` and `.next` are skipped without being decompressed. A repository
+   takes the same path: `lib/github.ts` fetches the default branch's zipball with the founder's
+   **scope-less** GitHub identity and `features/import/repo.ts` hands it to that same reader, so
+   there is one implementation of the limits and one of the analysis, not two kept in step.
 2. **Analyse** — `analyzeImport` (in `packages/engine`, pure and LLM-free) derives what the manifests
    prove: framework, database, capabilities, hosting, repo provider, tenancy. Each derived answer
    carries the evidence behind it. Anything it cannot prove is left for the founder — never guessed.
@@ -80,12 +84,17 @@ file, keyed by a pepper that lives in the app environment and never in the datab
 (`IMPORT_DIGEST_PEPPERS`, versioned per import so it can be rotated). A raw hash of a short file — a
 single `.env` line — is guessable; a keyed one is not. That is enough to diff, while the founder's
 source never outlives the request that analysed it (§II) and never reaches Airrow's storage at all.
-Importing from a repository, and delivering back as a pull request, wait on the GitHub App
-integration; ZIP delivery covers the import flow end to end today.
+The same holds for a repository: the zipball dies with the request that read it. **Private
+repositories** and **delivering back as a pull request** still wait on the GitHub App integration —
+both need permissions a scope-less identity does not have. ZIP covers the import flow end to end,
+and is the only way in for a private project.
 
 ## Roles & tenancy
-Supabase Auth (email magic link + GitHub OAuth). Every user gets a personal **organization** at
-signup; all resources hang off `organization_id`, and RLS enforces tenancy on every table.
+Supabase Auth: email + password, and **GitHub OAuth with no scopes** (spec 67) — an identity that
+reaches nothing an anonymous visitor could not already fetch. A GitHub address that GitHub itself has
+not verified is refused at `/auth/callback`, since linking on an unproven address would hand somebody
+else's account away. Every user gets a personal **organization** at signup; all resources hang off
+`organization_id`, and RLS enforces tenancy on every table.
 
 ## External services & failure posture
 | Service | Use | Failure posture |
