@@ -118,29 +118,24 @@ export async function checkAllowance(query: AllowanceQuery): Promise<Entitlement
  * What the founder is told when they are refused.
  *
  * Names the limit they actually met rather than one generic wall, and in every case says plainly
- * that what they already have is safe — the first fear on hitting a limit is losing work. Pro is
- * named as the way on but not as a button: it is not purchasable yet, and promising a checkout that
- * does not exist is worse than saying so.
+ * that what they already have is safe — the first fear on hitting a limit is losing work.
+ *
+ * Points at Settings rather than describing what upgrading costs. Settings knows whether payment is
+ * configured on this deployment and this module does not, so sending them to the one screen that can
+ * tell the truth beats a sentence here that might be wrong (spec 99).
  */
 export function allowanceMessage(denial: AllowanceDenial): string {
+  const upgrade = "Upgrade to Pro in Settings for unlimited foundations.";
   const safe = "Your existing projects and downloads are unaffected.";
   switch (denial) {
     case "free-spent":
-      return (
-        `You've used your free foundation. Pro lifts the limit to unlimited foundations and adds ` +
-        `importing an existing project — it isn't purchasable yet, and we'll tell you the moment it ` +
-        `is. ${safe}`
-      );
+      return `You've used your free foundation. ${upgrade} ${safe}`;
     case "repairs-spent":
-      return (
-        `You've used both free revisions of this foundation. Pro removes the limit — it isn't ` +
-        `purchasable yet, and we'll tell you the moment it is. ${safe}`
-      );
+      return `You've used both free revisions of this foundation. ${upgrade} ${safe}`;
     case "window-closed":
       return (
         `Free revisions of a foundation are open for ${REPAIR_WINDOW_HOURS} hours after it is first ` +
-        `generated, and that window has closed. Pro removes the limit — it isn't purchasable yet, ` +
-        `and we'll tell you the moment it is. ${safe}`
+        `generated, and that window has closed. ${upgrade} ${safe}`
       );
   }
 }

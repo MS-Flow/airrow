@@ -94,6 +94,29 @@ repo_connections                            -- provider credentials per org (Git
   provider text check in ('github')         -- 'azure_devops' later
   installation_id text
   unique (organization_id, provider)
+
+generation_usage                            -- the allowance ledger (spec 65)
+  id uuid pk
+  organization_id uuid → organizations      -- never null; the fact this is really about
+  project_id uuid → projects on delete set null   -- outlives its project on purpose
+  generation_job_id uuid → generation_jobs on delete set null
+  -- Counted minus jobs that failed or reused a previous run's prose: the allowance charges for
+  -- Claude calls Airrow actually paid for, and nothing else.
+
+subscriptions                               -- Stripe billing state per org (spec 99)
+  id uuid pk
+  organization_id uuid → organizations unique     -- two live subscriptions is an incident, not a state
+  provider text check in ('stripe')
+  provider_customer_id text                 -- how the webhook, which has no session, finds the org
+  provider_subscription_id text null
+  status text                               -- Stripe's own vocabulary, kept verbatim
+  current_period_end timestamptz null
+  cancel_at_period_end boolean
+
+stripe_events                               -- delivered event ids, for idempotency (spec 99)
+  event_id text pk                          -- the pk *is* the mechanism: claiming is an insert
+  event_type text
+  received_at timestamptz
 ```
 
 ## RLS pattern
@@ -107,6 +130,8 @@ Single helper: `is_org_member(org_id uuid)` security-definer function checking `
 So the plan is protected by **column-level privilege** instead: spec 74's migration revokes table-wide `insert, update` from `authenticated` and grants back every column except `plan`. The row policies are unchanged. Only a migration or the billing webhook's service-role path writes it.
 
 Read this as the general rule it implies: when a column decides what someone is *entitled to*, membership of the row is not sufficient authorization, and RLS is not the tool. Two denial tests in `schema.rls.test.ts` hold the line — one for a member's own organization, one for someone else's.
+
+`subscriptions` follows the same rule at table scope: members may `select` it and nothing more, because `status = 'active'` is an entitlement too. `stripe_events` goes further and has **RLS enabled with no policy at all** — the deny-everything shape `admin_emails` uses. It is the webhook's own bookkeeping, and there is no query a founder should be making against it.
 
 ## Design decisions
 

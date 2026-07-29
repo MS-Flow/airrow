@@ -252,8 +252,13 @@ describe("allowanceMessage", () => {
     expect(allowanceMessage(denial)).toMatch(/unaffected/);
   });
 
-  it.each(denials)("does not promise a checkout that does not exist yet (%s)", (denial) => {
-    expect(allowanceMessage(denial)).toMatch(/isn't purchasable yet/);
+  it.each(denials)("sends the founder somewhere they can actually act (%s)", (denial) => {
+    // Until spec 99 this asserted the opposite — that the message admitted Pro was not purchasable.
+    // That was true and is not any more, and the message must not outlive the fact it described.
+    // Settings is named rather than a price, because Settings is the screen that knows whether
+    // payment is configured on this deployment.
+    expect(allowanceMessage(denial)).toMatch(/Settings/);
+    expect(allowanceMessage(denial)).not.toMatch(/purchasable yet|coming soon/i);
   });
 
   it("names the window in hours rather than restating the number in prose", () => {
