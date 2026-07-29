@@ -775,3 +775,161 @@ export async function recordDelivery(
     .insert({ project_id: projectId, job_id: jobId, method, status: "completed" });
   if (res.error) throw new Error(`Supabase: ${res.error.message}`);
 }
+
+/* ── Billing (spec 99) ──────────────────────────────────────────────────── */
+
+/**
+ * Stripe's state for an organization. The entitlement itself is `organizations.plan` — this is the
+ * record of *why* it holds the value it does, and what the founder sees in settings.
+ */
+export interface SubscriptionRecord {
+  organizationId: string;
+  customerId: string;
+  subscriptionId: string | null;
+  /** Stripe's own vocabulary, kept verbatim: 'active', 'past_due', 'canceled', … */
+  status: string;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+}
+
+interface SubscriptionRow {
+  organization_id: string;
+  provider_customer_id: string;
+  provider_subscription_id: string | null;
+  status: string;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+}
+
+const toSubscription = (r: SubscriptionRow): SubscriptionRecord => ({
+  organizationId: r.organization_id,
+  customerId: r.provider_customer_id,
+  subscriptionId: r.provider_subscription_id,
+  status: r.status,
+  currentPeriodEnd: r.current_period_end,
+  cancelAtPeriodEnd: r.cancel_at_period_end
+});
+
+const SUBSCRIPTION_COLUMNS =
+  "organization_id, provider_customer_id, provider_subscription_id, status, current_period_end, cancel_at_period_end";
+
+export async function getSubscription(orgId: string): Promise<SubscriptionRecord | null> {
+  const row = maybe<SubscriptionRow>(
+    await db()
+      .from("subscriptions")
+      .select(SUBSCRIPTION_COLUMNS)
+      .eq("organization_id", orgId)
+      .maybeSingle()
+  );
+  return row ? toSubscription(row) : null;
+}
+
+/**
+ * Record the Stripe customer created for an organization, before any payment exists.
+ *
+ * Written at checkout rather than at the webhook so a founder who abandons Checkout and comes back
+ * reuses their customer instead of accumulating one per attempt. `status: 'incomplete'` is Stripe's
+ * own word for exactly this state and entitles them to nothing.
+ */
+export async function linkStripeCustomer(orgId: string, customerId: string): Promise<void> {
+  const res = await db()
+    .from("subscriptions")
+    .upsert(
+      {
+        organization_id: orgId,
+        provider_customer_id: customerId,
+        status: "incomplete",
+        updated_at: now()
+      },
+      { onConflict: "organization_id", ignoreDuplicates: true }
+    );
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
+}
+
+/** The organization behind a Stripe customer id. How the webhook, which has no session, scopes. */
+export async function orgForStripeCustomer(customerId: string): Promise<string | null> {
+  const row = maybe<{ organization_id: string }>(
+    await db()
+      .from("subscriptions")
+      .select("organization_id")
+      .eq("provider_customer_id", customerId)
+      .maybeSingle()
+  );
+  return row?.organization_id ?? null;
+}
+
+export interface SubscriptionState {
+  customerId: string;
+  subscriptionId: string | null;
+  status: string;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  /** What this status entitles the organization to. Decided by the caller; written here. */
+  plan: OrgPlan;
+}
+
+/**
+ * Apply a subscription change: the billing row and the entitlement, together.
+ *
+ * These are deliberately one function and not two. They are the same fact viewed twice, and any
+ * caller that could write one without the other is a caller that can leave an organization paying
+ * for a plan it does not have — or holding a plan it stopped paying for.
+ *
+ * That is an argument about callers, not about atomicity: the Supabase client cannot wrap two
+ * statements in a transaction, so a failure between them still diverges. The billing row is written
+ * first on purpose. It is the lookup `orgForStripeCustomer` needs, so a half-applied event leaves
+ * enough behind for the redelivery to find the organization and finish the job — and the webhook
+ * releases its claim on failure so that redelivery actually gets to run.
+ *
+ * This is the **only** path that writes `organizations.plan` outside a migration, which is what the
+ * column-level revoke in `20260729120000_pro_plan.sql` is there to guarantee.
+ */
+export async function applySubscriptionState(
+  orgId: string,
+  state: SubscriptionState
+): Promise<void> {
+  const sub = await db().from("subscriptions").upsert(
+    {
+      organization_id: orgId,
+      provider_customer_id: state.customerId,
+      provider_subscription_id: state.subscriptionId,
+      status: state.status,
+      current_period_end: state.currentPeriodEnd,
+      cancel_at_period_end: state.cancelAtPeriodEnd,
+      updated_at: now()
+    },
+    { onConflict: "organization_id" }
+  );
+  if (sub.error) throw new Error(`Supabase: ${sub.error.message}`);
+
+  const org = await db().from("organizations").update({ plan: state.plan }).eq("id", orgId);
+  if (org.error) throw new Error(`Supabase: ${org.error.message}`);
+}
+
+/**
+ * Claim a Stripe event id, returning false if it has already been applied.
+ *
+ * Stripe delivers at least once and retries for days on a non-2xx, so "have we seen this?" has to be
+ * answered atomically or two concurrent redeliveries both pass the check. The primary key does that
+ * for us: the insert either succeeds or violates the key, with no lock of ours involved.
+ */
+export async function claimStripeEvent(eventId: string, eventType: string): Promise<boolean> {
+  const res = await db().from("stripe_events").insert({ event_id: eventId, event_type: eventType });
+  if (!res.error) return true;
+  // 23505 is unique_violation: seen before, which is a successful no-op rather than a failure.
+  if (res.error.code === "23505") return false;
+  throw new Error(`Supabase: ${res.error.message}`);
+}
+
+/**
+ * Give a claimed event back, because applying it failed.
+ *
+ * Without this the claim is a trap: Stripe retries a 500, the retry finds the id already recorded,
+ * answers "duplicate", and an upgrade a founder paid for is lost permanently and silently. The claim
+ * is there to stop two *concurrent* deliveries doing the same work — it must not also stop the
+ * redelivery that exists precisely because the work did not happen.
+ */
+export async function releaseStripeEvent(eventId: string): Promise<void> {
+  const res = await db().from("stripe_events").delete().eq("event_id", eventId);
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
+}

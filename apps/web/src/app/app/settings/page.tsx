@@ -19,7 +19,14 @@ import {
   REPAIR_WINDOW_HOURS,
   checkAllowance
 } from "@/features/generation/allowance";
+import {
+  BillingUnavailable,
+  ManageBillingButton,
+  UpgradeButtons
+} from "@/features/billing/BillingActions";
 import { githubIdentity, requireSession, updateName } from "@/lib/auth";
+import { getSubscription } from "@/lib/data/store";
+import { stripeConfigured, stripePrices } from "@/lib/stripe";
 import { readTheme } from "@/lib/theme";
 
 async function updateProfileAction(formData: FormData) {
@@ -35,12 +42,14 @@ export const metadata = { title: "Settings" };
 export default async function SettingsPage({
   searchParams
 }: {
-  searchParams: Promise<{ saved?: string }>;
+  searchParams: Promise<{ saved?: string; upgraded?: string }>;
 }) {
-  const { saved } = await searchParams;
+  const { saved, upgraded } = await searchParams;
   const { user, org } = await requireSession();
   const theme = await readTheme();
   const allowance = await checkAllowance({ orgId: org.id, plan: org.plan, userId: user.id });
+  const subscription = org.plan === "pro" ? await getSubscription(org.id) : null;
+  const intervals = stripePrices().map((p) => p.interval);
   const github = await githubIdentity();
   const githubConfigured = Boolean(process.env.GITHUB_APP_ID && process.env.GITHUB_APP_PRIVATE_KEY);
 
@@ -89,13 +98,35 @@ export default async function SettingsPage({
           <CardTitle>Plan</CardTitle>
         </CardHeader>
         <CardBody>
-          {allowance.unlimited ? (
-            <p className="text-sm text-fg-muted">
-              <span className="font-medium text-fg">
-                {allowance.allowed && allowance.grant === "pro" ? "Pro" : "Admin"}
-              </span>{" "}
-              · unlimited generations. {allowance.used} used so far.
+          {upgraded ? (
+            <p className="mb-4 text-sm text-success">
+              You&rsquo;re on Pro. If this still says Free, give Stripe a few seconds and reload —
+              the plan changes when Stripe confirms the payment, not when your browser comes back.
             </p>
+          ) : null}
+
+          {allowance.unlimited ? (
+            <>
+              <p className="text-sm text-fg-muted">
+                <span className="font-medium text-fg">
+                  {allowance.allowed && allowance.grant === "pro" ? "Pro" : "Admin"}
+                </span>{" "}
+                · unlimited generations. {allowance.used} used so far.
+              </p>
+              {subscription ? (
+                <>
+                  <p className="mt-1.5 text-xs text-fg-faint">
+                    {subscription.cancelAtPeriodEnd
+                      ? "Cancelled — Pro runs until the end of the period you've paid for."
+                      : "Renews automatically."}
+                    {subscription.currentPeriodEnd
+                      ? ` Current period ends ${subscription.currentPeriodEnd.slice(0, 10)}.`
+                      : ""}
+                  </p>
+                  <ManageBillingButton />
+                </>
+              ) : null}
+            </>
           ) : (
             <>
               <p className="text-sm text-fg-muted">
@@ -108,8 +139,13 @@ export default async function SettingsPage({
                 {FREE_REPAIR_LIMIT} times free within {REPAIR_WINDOW_HOURS} hours of its first run,
                 and regenerating with nothing changed never costs anything. Deleting a project
                 doesn&apos;t return a generation — each one is authored the moment you start it. Pro
-                is unlimited and adds importing an existing project; it isn&apos;t purchasable yet.
+                is unlimited and adds importing an existing project.
               </p>
+              {stripeConfigured() ? (
+                <UpgradeButtons intervals={intervals} />
+              ) : (
+                <BillingUnavailable />
+              )}
             </>
           )}
         </CardBody>
@@ -227,10 +263,9 @@ export default async function SettingsPage({
           title="Organizations"
           description="Invite your team, share projects and set roles beyond your personal workspace."
         />
-        <ComingSoon
-          title="Pro"
-          description="Unlimited foundations, importing an existing project, and push straight to GitHub."
-        />
+        {/* Pro is no longer listed here: it is real, and the Plan card above is where a founder
+            buys and manages it (spec 99). Leaving a "coming soon" tile beside a working upgrade
+            button would be the one thing on this page that contradicts another. */}
         <ComingSoon
           title="API keys"
           description="Programmatic generation and CI integration for your own tooling."

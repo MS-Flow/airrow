@@ -210,6 +210,64 @@ describe.skipIf(!dbUp)("full schema RLS (local Supabase)", () => {
     ).rejects.toThrow(/permission denied/i);
   });
 
+  /* ── Billing (spec 99) ────────────────────────────────────────────────────
+   *
+   * `subscriptions` is org-scoped and readable by its members. `stripe_events` is not org-scoped at
+   * all and must be readable by nobody: it is the webhook's own bookkeeping, and a founder has no
+   * query to make against it.
+   */
+  /**
+   * Seed a subscription for an org. Upserts, because only the `asUser` reads roll back — a plain
+   * insert here survives the test and the next one collides on the one-per-org constraint.
+   */
+  async function seedSubscription(orgId: string, customer: string, status: string): Promise<void> {
+    await db.query(
+      `insert into public.subscriptions (organization_id, provider_customer_id, status)
+            values ($1, $2, $3)
+       on conflict (organization_id)
+       do update set provider_customer_id = excluded.provider_customer_id, status = excluded.status`,
+      [orgId, customer, status]
+    );
+  }
+
+  it("subscriptions: a member reads their own billing state and never another org's", async () => {
+    await seedSubscription(ORG_A, "cus_a", "active");
+    await seedSubscription(ORG_B, "cus_b", "active");
+
+    const seen = await asUser(USER_A, async () => {
+      const res = await db.query<{ provider_customer_id: string }>(
+        "select provider_customer_id from public.subscriptions"
+      );
+      return res.rows.map((r) => r.provider_customer_id);
+    });
+
+    expect(seen).toEqual(["cus_a"]);
+  });
+
+  it("subscriptions: a member cannot write their own billing state", async () => {
+    // Same reasoning as the plan column: what someone is entitled to is not theirs to edit. If this
+    // were writable, `status = 'active'` would be free Pro without the plan column being touched.
+    await seedSubscription(ORG_A, "cus_a", "canceled");
+
+    await expect(
+      asUser(USER_A, () =>
+        db.query("update public.subscriptions set status = 'active' where organization_id = $1", [
+          ORG_A
+        ])
+      )
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it("stripe_events: is readable by nobody, because it belongs to the webhook", async () => {
+    await db.query(
+      "insert into public.stripe_events (event_id, event_type) values ('evt_rls','customer.subscription.updated') on conflict (event_id) do nothing"
+    );
+
+    await expect(
+      asUser(USER_A, () => db.query("select event_id from public.stripe_events"))
+    ).rejects.toThrow(/permission denied/i);
+  });
+
   it("organizations.plan: defaults to free, so a new organization is never accidentally paid", async () => {
     const res = await db.query<{ plan: string }>(
       "select plan from public.organizations where id = $1",

@@ -34,8 +34,7 @@ export function ProPreview({ preview }: { preview: ImportPreview }) {
       <div className="rounded-lg border border-accent/30 bg-accent/5 px-5 py-4">
         <h3 className="text-base font-semibold text-fg">Keep this as a project with Pro</h3>
         <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">
-          Importing an existing project is part of Pro, along with unlimited foundations. It
-          isn&rsquo;t purchasable yet, and we&rsquo;ll tell you the moment it is.
+          Importing an existing project is part of Pro, along with unlimited foundations.
         </p>
         <p className="mt-3 text-sm text-fg-faint">
           Nothing was saved — your files were read in this request and never stored.{" "}
@@ -47,8 +46,11 @@ export function ProPreview({ preview }: { preview: ImportPreview }) {
           </Link>
           .
         </p>
-        <Button size="sm" className="mt-4" disabled title="Pro isn't purchasable yet">
-          Upgrade to Pro
+        {/* Settings owns the upgrade, because it is the screen that knows whether payment is
+            configured on this deployment (spec 99). Linking there beats a second checkout button
+            that has to duplicate that judgement. */}
+        <Button size="sm" className="mt-4" asChild>
+          <Link href="/app/settings">Upgrade to Pro</Link>
         </Button>
       </div>
     </div>
