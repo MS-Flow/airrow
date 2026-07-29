@@ -47,3 +47,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Mobile UI: every screen works on a phone | [31-mobile-ui.md](31-mobile-ui.md) | 🔄 In progress |
 | `/start`: from empty repo to a running starting point | [66-start-command.md](66-start-command.md) | ✅ Done |
 | Azure DevOps gets its own workflow, not GitHub's with different labels | [67-azure-devops-parity.md](67-azure-devops-parity.md) | 🔄 In progress |
+| Pro: a plan and entitlement model, and a free tier of one foundation | [74-pro-entitlements.md](74-pro-entitlements.md) | ⏳ Not started |
