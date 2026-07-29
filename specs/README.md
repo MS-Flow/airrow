@@ -54,3 +54,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | `/cleanup`: the right first-run command for the project's origin | [91-cleanup-command.md](91-cleanup-command.md) | ✅ Done |
 | Azure DevOps gets its own workflow, not GitHub's with different labels | [67-azure-devops-parity.md](67-azure-devops-parity.md) | 🔄 In progress |
 | Sign in with GitHub, and import a public repo without a ZIP | [67-github-login-import.md](67-github-login-import.md) | ✅ Done |
+| Stripe Checkout and the billing portal for Pro | [99-stripe-checkout.md](99-stripe-checkout.md) | ⏳ Not started |
