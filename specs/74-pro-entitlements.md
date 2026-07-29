@@ -2,7 +2,8 @@
 
 > **In one sentence:** Turn the free generation ceiling from a cost control into a business model —
 > an organization gets a **plan**, the plan decides what it may do, the free tier becomes one complete
-> foundation, and a founder who has spent it is offered Pro instead of a dead end.
+> foundation, importing an existing project becomes Pro, and a founder who has spent their free
+> foundation is offered Pro instead of a dead end.
 
 |                |                                                          |
 | -------------- | -------------------------------------------------------- |
@@ -10,7 +11,7 @@
 | **Issue**      | #74 — "Pro: plan- och entitlement-modell, och en gratisnivå på en foundation" |
 | **Branch**     | `74-pro-entitlements` (from `feature/pro`)               |
 | **Feature**    | Pro                                                       |
-| **Depends on** | [65-authored-documents.md](65-authored-documents.md) — introduced `FREE_GENERATION_LIMIT`, the `generation_usage` ledger and the "failed jobs don't cost allowance" rule this spec must preserve |
+| **Depends on** | [65-authored-documents.md](65-authored-documents.md) — introduced `FREE_GENERATION_LIMIT`, the `generation_usage` ledger and the "failed jobs don't cost allowance" rule this spec must preserve · [63-import-existing-projects.md](63-import-existing-projects.md) and [67-github-login-import.md](67-github-login-import.md) — build the import this spec puts behind the plan |
 
 **Short on time?** Read _User story_ and _Acceptance criteria_ — that's the whole point of the change and
 how you'll know it's done. Everything after those is detail for whoever implements and reviews it.
@@ -33,6 +34,10 @@ _Who wants this, and what they get out of it._
 As a **founder who has generated their free foundation and wants a second one** I want **a plan I can
 upgrade to, and to know before I start where the free line is** so that **hitting the limit is a
 decision I get to make rather than the product quietly ending for me**.
+
+And as a **founder with an existing repository** I want **to see what Airrow makes of my code before
+I pay for anything** so that **upgrading is a judgement about something I have already seen work,
+not a bet**.
 
 ---
 
@@ -66,6 +71,14 @@ during `/implement`)._
   (`supabase/migrations/20260727160000_generation_allowance.sql`) outlives the projects it refers to,
   so deleting a project does not hand an allowance back. RLS on it is already covered by
   `lib/data/schema.rls.test.ts:64`.
+- **Import, today:** ungated and free to anyone signed in. Two entry points — a ZIP
+  (`importProjectAction`) and a public GitHub repository (`importRepoAction`) — converge on
+  `completeImport` in [`features/import/actions.ts:60`](../apps/web/src/features/import/actions.ts#L60),
+  which is where that file already puts everything the two sources share, so that "the limits, the
+  analysis, the prefill and the digests are one implementation with one behaviour". Crucially,
+  `analyzeImport` runs **locally in the engine** — it makes no Claude call and costs Airrow nothing.
+  Persistence (`createProject` → `createImportSource` → `saveInterviewAnswers`) starts on the line
+  after it.
 
 ---
 
@@ -85,6 +98,15 @@ regeneration makes no Claude call and spends nothing — deferred from spec 65),
 window — **at most two repairs on the same project, within 24 hours of its first generation**. Two
 rules rather than one is a deliberate cost: the count makes the ceiling absolute (three Claude calls
 per free organization, ever) and the clock keeps a dormant account from banking repairs indefinitely.
+
+**Import is Pro, but the analysis is free.** A free founder may drop a ZIP or pick a repository and
+see everything Airrow derived from it — detected stack, structure, what the foundation would add,
+which files conflict. Creating the project from it requires Pro. This is the one place in the product
+where the wall's position matters more than its existence: the analysis is the moment a founder with
+an existing repo learns that Airrow understood their code, it costs us nothing to give away, and
+asking them to pay before it would be asking them to buy blind. So `completeImport` splits at the
+line it already has — `analyzeImport` and validation stay free, and the plan is checked immediately
+before `createProject`, where the first durable write happens.
 
 **Ships alone, ahead of payment.** `plan` becomes real and readable, and `'pro'` is settable only by
 migration — enough to verify the Pro path end to end without a payment provider. The out-of-allowance
@@ -125,6 +147,18 @@ _What "done" means. Every line is something a reviewer can check._
 - [ ] An organization that generated more than one foundation under the old limit keeps every one of
       them, keeps its downloads, and is never told it owes anything — it simply has nothing
       remaining.
+- [ ] A free organization can run an import as far as the analysis and see its full result, from
+      **both** entry points (ZIP and GitHub repository).
+- [ ] A free organization cannot create a project from an import: nothing is persisted — no project,
+      no import source, no prefilled answers — and the refusal names Pro as the reason.
+- [ ] The import gate is enforced in one place that both entry points pass through, not once per
+      action.
+- [ ] The import screens show the Pro requirement *before* the founder uploads, and show it as a
+      locked, explained state rather than a hidden one (§III: explicit states).
+- [ ] A Pro organization's import behaves exactly as it does today — this spec changes who may
+      import, never what import does.
+- [ ] An organization that imported a project before this ships keeps it, keeps its downloads, and
+      can still generate from it under whatever allowance it has.
 - [ ] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures).
 
 ### Verification
@@ -139,8 +173,13 @@ _How each criterion above is proven._
   column, per §II.
 - **New tests** — `apps/web/src/lib/data/allowance.db.test.ts`: an unchanged regeneration spends
   nothing; a Pro organization passes the point where a free one is refused.
+- **New tests** — `apps/web/src/features/import/actions.test.ts`: a free organization gets the
+  analysis back and **no** `createProject` call; a Pro organization completes the import; both
+  entry points are asserted, so the gate cannot be added to one and forgotten on the other.
 - Landing/settings single-source criterion → a test that asserts the rendered copy contains the
   constant, so the prose cannot drift from the number.
+- Locked import state → a component test on the import page asserting the Pro explanation renders for
+  a free organization, alongside the existing `app/app/projects/import/page.test.tsx`.
 - Full suite result + typecheck/lint status.
 
 ---
@@ -153,12 +192,17 @@ Left for `/implement`. The shape is known: a migration adding `organizations.pla
 beside `isAdminUser` ([`lib/data/store.ts:396`](../apps/web/src/lib/data/store.ts#L396)), the
 entitlement type and `checkAllowance` rewrite in
 [`features/generation/allowance.ts`](../apps/web/src/features/generation/allowance.ts), the
-memoisation hook where a job is created, and copy updates in
-[`app/app/settings/page.tsx`](../apps/web/src/app/app/settings/page.tsx) and
+memoisation hook where a job is created, a plan check in `completeImport`
+([`features/import/actions.ts:60`](../apps/web/src/features/import/actions.ts#L60)) placed between
+the prefill validation and `createProject`, a locked state on
+[`app/app/projects/import/page.tsx`](../apps/web/src/app/app/projects/import/page.tsx), and copy
+updates in [`app/app/settings/page.tsx`](../apps/web/src/app/app/settings/page.tsx) and
 [`features/landing/copy.ts`](../apps/web/src/features/landing/copy.ts).
 
 **No change needed:** `submitInterviewAction` and `retryGenerationAction` — they already ask one
 question ("may this organization generate?") and should keep asking exactly that.
+`importProjectAction` and `importRepoAction` likewise: they read their own source and hand off, and
+the gate belongs at the join, not in each of them.
 
 ---
 
@@ -185,11 +229,17 @@ Repair tracking needs no new table: the count and the clock are both derivable f
 
 ## Security
 
-Plan and entitlement are read server-side from the database on every generation attempt; the client
-never supplies a plan, an organization id, or a usage count, and a forged request gains nothing
-because the server re-reads both. The plan column is writable only by migration or the billing
+Plan and entitlement are read server-side from the database on every generation and every import
+attempt; the client never supplies a plan, an organization id, or a usage count, and a forged request
+gains nothing because the server re-reads both. The import gate sits in the server action, not in the
+page that renders the locked state, so a founder who posts straight to the action is refused exactly
+like one who never saw the screen. The plan column is writable only by migration or the billing
 webhook's service path — never by an ordinary member of the organization, which the denial test
 proves.
+
+Letting a free organization run the analysis widens nothing: it already runs entirely in the request
+on files the founder supplied, and §II's "nothing but paths, sizes and digests is persisted" holds
+because on the free path *nothing at all* is persisted.
 
 ---
 
@@ -218,8 +268,24 @@ _Unusual inputs or states, and what should happen._
   generations stop. The organization returns to `plan = 'free'` with its usage count untouched, so a
   founder who subscribed after spending their free foundation does not get another one by
   cancelling. §0's no-lock-in promise means we never take back what was generated.
-- Admin account → unlimited, unchanged; the admin flag wins over any plan.
-- Local mode with no Supabase → the plan reads as `free` and nothing crashes.
+- Free organization uploads a broken or empty ZIP → the existing archive error wins; they are told
+  the file is unreadable, not that they need Pro. A plan refusal for a file we could not read would
+  be a lie.
+- Free organization's import analysis succeeds → they see the full result and are then told Pro is
+  needed to create the project. Nothing is written, so re-running it later on Pro produces the same
+  analysis rather than a half-made project.
+- Free organization posts directly to `importProjectAction` / `importRepoAction`, skipping the UI →
+  refused at `completeImport`, the same as everyone else.
+- Organization that imported before this shipped → keeps the project, the import source and the
+  prefilled answers, and generating from it is governed by the ordinary allowance. We do not
+  retroactively lock what a founder already imported (§0, no lock-in).
+- Pro organization whose subscription lapses, with imported projects → same rule as everywhere else:
+  the projects stay readable and downloadable, only new imports and new generations stop.
+- Admin account → unlimited, unchanged; the admin flag wins over any plan, for imports too.
+- Local mode with no Supabase → the plan reads as `free` and nothing crashes. [NEEDS CLARIFICATION:
+  does local mode gate imports at all? Local mode exists so the whole product runs with no
+  integrations, and a `free` plan there would make importing untestable locally — the likely answer
+  is that local mode behaves as unlimited, the same way it already sidesteps auth.]
 
 ---
 
@@ -232,6 +298,11 @@ _Deliberately excluded, so nobody wonders whether it was forgotten._
   creates, and that turns `ALLOWANCE_REACHED_MESSAGE` into a working upgrade.
 - The upgrade screen and where the paywall appears in the flow — a separate issue, so that this one
   stays the model and not the marketing.
-- The Pro-only capabilities themselves (revisions with a diff, GitHub push, repository drift watch) —
-  each its own issue.
+- The remaining Pro-only capabilities (revisions with a diff, GitHub push, repository drift watch) —
+  each its own issue. Import is the exception and lands here, because a `plan` column that only the
+  generation limit reads is an abstraction with one use; gating a second, unrelated capability in the
+  same change is what proves the model carries weight (§I: an abstraction is earned by ≥2 concrete
+  uses).
+- Any change to what import *does* — the analysis, the conflict resolution, the digests and the
+  merged download are spec 63, 67, 68 and 75's, and this spec only decides who reaches them.
 - Pricing. This spec must not encode an amount anywhere.
