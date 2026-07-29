@@ -46,9 +46,14 @@
     "STACK_SUMMARY": "One-line description of the technical stack.",
     "STACK_DETAIL": "Fuller stack description, naming the database/backend accurately.",
     "REPO_PROVIDER": "Where the code lives (GitHub / Azure DevOps).",
-    "SETUP_STEPS": "Ordered steps that need a human with an account — everything /start deliberately does not do.",
+    "SETUP_STEPS": "Ordered steps that need a human with an account — everything the first-run command deliberately does not do.",
     "START_BOOTSTRAP": "Framework-specific scaffold + toolchain steps that /start runs.",
     "START_MINIMUM": "What the bare minimum that runs means for this project — and, as firmly, what it does not.",
+    "FIRST_COMMAND": "The one first-run command this project ships: /start when it begins from nothing, /cleanup when it already has code.",
+    "FIRST_STEP": "Step 1 of START_HERE.md — running that command, and what it leaves behind.",
+    "COMMAND_RULE": "The constitution's process rule about where that command stops and the spec loop starts.",
+    "CLEANUP_CLAIM": "What these documents currently claim the stack and commands are — for /cleanup to verify against the repository.",
+    "CLEANUP_SCOPE": "Which documents /cleanup may rewrite, and which it may only read.",
     "FIRST_SPEC_HINT": "What to write the first spec for, derived from the MVP focus.",
     "CMD_DEV": "Command to start the dev server.",
     "CMD_BUILD": "Command for a production build.",
@@ -71,9 +76,9 @@
     "CLI_BRANCH_LINK": "Command(s) that create the issue branch and link it to the tracker.",
     "CLI_PR_CREATE": "Command that opens a pull request.",
     "CI_SETUP_STEPS_AZ": "Azure Pipelines steps (indented) that set up the toolchain.",
-    "CI_READY_CHECK_AZ": "Azure Pipelines shell (indented) deciding whether /start has run.",
+    "CI_READY_CHECK_AZ": "Azure Pipelines shell (indented) deciding whether there is a stack to verify.",
     "CI_SETUP_STEPS": "YAML steps (indented) that set up the toolchain in CI.",
-    "CI_READY_CHECK": "Shell (indented) deciding whether /start has run, so CI does not go red on an empty repo.",
+    "CI_READY_CHECK": "Shell (indented) deciding whether there is a stack to verify, so CI does not go red on an empty repo.",
     "DEPLOY_STEPS": "YAML steps (indented) that deploy to DEV using ${{ secrets.* }}."
   }
 }

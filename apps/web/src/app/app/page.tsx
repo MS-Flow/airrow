@@ -1,10 +1,11 @@
 // Dashboard: what you were doing, what to do next, and what is coming.
 import Link from "next/link";
-import { ArrowRight, Plus } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { PageContainer } from "@/components/shell/page-container";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/states";
+import { ProjectActions } from "@/features/projects/ProjectActions";
 import { ProjectRow, nextRoute } from "@/features/projects/ProjectCard";
 import { requireSession } from "@/lib/auth";
 import { listProjects } from "@/lib/data/store";
@@ -32,12 +33,7 @@ export default async function Dashboard() {
               : `${projects.length} project${projects.length === 1 ? "" : "s"} in ${org.name}`}
           </p>
         </div>
-        <Button asChild>
-          <Link href="/app/projects/new">
-            <Plus className="size-4" />
-            New project
-          </Link>
-        </Button>
+        <ProjectActions />
       </div>
 
       {inFlight ? (
@@ -80,9 +76,14 @@ export default async function Dashboard() {
             title="Create your first project"
             description="Describe your product, answer the CTO interview, and Airrow generates your complete engineering foundation — ready for Claude Code."
             action={
-              <Button asChild>
-                <Link href="/app/projects/new">Start the interview</Link>
-              </Button>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Button asChild>
+                  <Link href="/app/projects/new">Start the interview</Link>
+                </Button>
+                <Button variant="secondary" asChild>
+                  <Link href="/app/projects/import">Import an existing project</Link>
+                </Button>
+              </div>
             }
           />
         ) : (

@@ -26,6 +26,14 @@ export default function PrivacyPage() {
           treat it that way.
         </li>
         <li>
+          <strong>Imported project structure.</strong> If you import an existing project, we store
+          its <em>shape</em> — the file names, their sizes, and a keyed fingerprint of each file —
+          so we can show you the structure and work out what we would add. We do{" "}
+          <strong>not</strong> store the contents of your files. They are read in memory while we
+          analyse the archive and are never written down or logged. That is also why a download of
+          an imported project is assembled in your browser: your code stays on your machine.
+        </li>
+        <li>
           <strong>Operational logs.</strong> Request metadata, identifiers, timestamps and
           errors. Logs deliberately carry IDs and metadata only, never your answers or the
           contents of generated documents.
@@ -74,6 +82,12 @@ export default function PrivacyPage() {
         your organization and everything hanging off it. Backups and logs age out on their own
         retention schedule shortly afterwards.
       </p>
+      <p>
+        An imported project&apos;s structure follows the same rule: the file names, sizes and
+        fingerprints live as long as the project they belong to and go when it does. The file
+        contents were never kept in the first place — they exist only for the length of the request
+        that analysed your archive, and the archive itself stays on your own machine.
+      </p>
 
       <h2>Your rights</h2>
       <p>
@@ -91,8 +105,9 @@ export default function PrivacyPage() {
 
       <h2>Changes</h2>
       <p>
-        When this policy changes, the date at the top of the page changes with it. Material
-        changes are announced in the application before they take effect.
+        When this policy changes, the date at the top of the page changes with it. That date is the
+        thing to check — we do not currently notify you in the application, and would rather say so
+        than promise a message we have no way to send.
       </p>
     </>
   );

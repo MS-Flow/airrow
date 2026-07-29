@@ -30,6 +30,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const commands: CommandItem[] = [
     ...NAV_ITEMS.map((n) => ({ id: `nav-${n.href}`, label: n.label, href: n.href, group: "Go to" })),
     { id: "action-new", label: "New project", href: "/app/projects/new", hint: "create", group: "Actions" },
+    {
+      id: "action-import",
+      label: "Import an existing project",
+      href: "/app/projects/import",
+      hint: "import",
+      group: "Actions"
+    },
     ...projects.map((p) => ({
       id: `project-${p.id}`,
       label: p.name,
