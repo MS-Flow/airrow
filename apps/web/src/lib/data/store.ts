@@ -30,11 +30,18 @@ export interface UserRecord {
   createdAt: string;
 }
 
+/**
+ * What an organization is entitled to (spec 74). Free is the default every org starts on; Pro is
+ * written by migration or the billing webhook, never by the app on a member's behalf.
+ */
+export type OrgPlan = "free" | "pro";
+
 export interface OrgRecord {
   id: string;
   name: string;
   kind: "personal" | "team";
   createdBy: string;
+  plan: OrgPlan;
 }
 
 export interface MemberRecord {
@@ -105,12 +112,17 @@ interface OrgRow {
   name: string;
   kind: "personal" | "team";
   created_by: string | null;
+  plan: string | null;
 }
 const toOrg = (r: OrgRow): OrgRecord => ({
   id: r.id,
   name: r.name,
   kind: r.kind,
-  createdBy: r.created_by ?? ""
+  createdBy: r.created_by ?? "",
+  // Anything that is not exactly 'pro' is free. The column is constrained and defaulted, so this
+  // only ever fires on a row written before the migration — and defaulting an unknown value *down*
+  // is the one safe direction for an entitlement.
+  plan: r.plan === "pro" ? "pro" : "free"
 });
 
 interface ProjectRow {
@@ -209,7 +221,11 @@ export async function getOrgForUser(userId: string): Promise<OrgRecord | null> {
   const orgId = memberships[0]?.organization_id;
   if (!orgId) return null;
   const org = maybe<OrgRow>(
-    await db().from("organizations").select("id, name, kind, created_by").eq("id", orgId).maybeSingle()
+    await db()
+      .from("organizations")
+      .select("id, name, kind, created_by, plan")
+      .eq("id", orgId)
+      .maybeSingle()
   );
   return org ? toOrg(org) : null;
 }
@@ -391,16 +407,40 @@ export async function createJob(projectId: string, modelVersionId: string): Prom
   return toJob(row);
 }
 
+interface UsageRow {
+  generation_job_id: string | null;
+  created_at: string;
+}
+
 /**
- * Generations an organization has used, for the early-access allowance (spec 65).
+ * Ledger rows an organization was actually charged for, scoped by whichever column the caller cares
+ * about — the org (its whole allowance) or one project (its repairs).
  *
- * Counts through `projects.organization_id` rather than trusting a caller-supplied id, so the
- * allowance is scoped the same way every other resource is (§II).
- *
- * `failed` jobs are excluded deliberately: a generation that fell over on our side — a timeout, a
- * bad response, an outage — must not cost the founder part of their allowance. Queued and running
- * jobs *do* count, so the limit cannot be sidestepped by starting several at once.
+ * Two kinds of job are excluded, for the same reason: Airrow never paid for them. A `failed` job
+ * fell over on our side, and a `reused_authoring` job answered from a previous run's payload without
+ * calling Claude at all (spec 74). A row whose job is gone counts — it completed, was delivered, and
+ * the project was then deleted.
  */
+async function chargedUsage(column: "organization_id" | "project_id", id: string): Promise<UsageRow[]> {
+  const usage = rows<UsageRow>(
+    await db().from("generation_usage").select("generation_job_id, created_at").eq(column, id)
+  );
+  if (usage.length === 0) return [];
+
+  const jobIds = usage.map((u) => u.generation_job_id).filter((v): v is string => v !== null);
+  if (jobIds.length === 0) return usage;
+
+  const jobs = rows<{ id: string; status: JobStatus; reused_authoring: boolean }>(
+    await db().from("generation_jobs").select("id, status, reused_authoring").in("id", jobIds)
+  );
+  // Filtered here rather than in the query: two independent conditions expressed as a PostgREST
+  // `or` string is the kind of thing that stays syntactically valid while meaning something else.
+  const uncharged = new Set(
+    jobs.filter((j) => j.status === "failed" || j.reused_authoring).map((j) => j.id)
+  );
+  return usage.filter((u) => u.generation_job_id === null || !uncharged.has(u.generation_job_id));
+}
+
 /**
  * Generations this organization has spent, from the durable ledger.
  *
@@ -408,24 +448,25 @@ export async function createJob(projectId: string, modelVersionId: string): Prom
  * project refunded the allowance, and the ceiling could be reset at will. `generation_usage` rows
  * are written by a trigger and survive their project, because a Claude call is paid for whether or
  * not what it produced still exists.
- *
- * Failed jobs are still not charged for: an outage on our side must never cost a founder part of
- * their allowance, so the ledger is joined back to the job to exclude them. A job whose row is gone
- * counts — it completed, was delivered, and was then deleted.
  */
 export async function countGenerations(orgId: string): Promise<number> {
-  const usage = rows<{ generation_job_id: string | null }>(
-    await db().from("generation_usage").select("generation_job_id").eq("organization_id", orgId)
-  );
-  if (usage.length === 0) return 0;
+  return (await chargedUsage("organization_id", orgId)).length;
+}
 
-  const jobIds = usage.map((u) => u.generation_job_id).filter((id): id is string => id !== null);
-  if (jobIds.length === 0) return usage.length;
+/** What one project has spent, which is what the free repair window is measured against (spec 74). */
+export interface ProjectUsage {
+  /** Charged generations on this project. The first is the foundation; the rest are repairs. */
+  count: number;
+  /** When the first charged generation ran, or null if there has never been one. */
+  firstAt: string | null;
+}
 
-  const failed = rows<{ id: string }>(
-    await db().from("generation_jobs").select("id").in("id", jobIds).eq("status", "failed")
-  );
-  return usage.length - failed.length;
+export async function projectUsage(projectId: string): Promise<ProjectUsage> {
+  const usage = await chargedUsage("project_id", projectId);
+  // Sorted rather than assuming insertion order: the window opens at the *first* generation, and
+  // reading that off an arbitrary row would silently move the deadline.
+  const first = usage.map((u) => u.created_at).sort()[0];
+  return { count: usage.length, firstAt: first ?? null };
 }
 
 /** True when this account bypasses the free allowance. Set by migration only — never from the app. */
@@ -494,6 +535,11 @@ export interface AuthoringProvenance {
   authoringModel: string;
   /** The validated `{ slots, documents }` payload, kept so an unchanged rerun can reuse it. */
   authored: unknown;
+  /**
+   * Whether this payload came from a previous job rather than from Claude. Recorded because the
+   * allowance charges for calls Airrow made, and a reused payload is not one (spec 74).
+   */
+  reused: boolean;
 }
 
 export async function saveAuthoringProvenance(
@@ -506,7 +552,8 @@ export async function saveAuthoringProvenance(
       inputs_hash: provenance.inputsHash,
       prompt_version: provenance.promptVersion,
       authoring_model: provenance.authoringModel,
-      authored: provenance.authored
+      authored: provenance.authored,
+      reused_authoring: provenance.reused
     })
     .eq("id", jobId);
   if (res.error) throw new Error(`Supabase: ${res.error.message}`);

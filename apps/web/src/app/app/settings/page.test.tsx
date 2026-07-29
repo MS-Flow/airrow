@@ -14,15 +14,17 @@ const identity = vi.hoisted((): { current: { login: string | null; connectedAt: 
 vi.mock("@/lib/auth", () => ({
   requireSession: async () => ({
     user: { id: "u1", name: "Ada", email: "ada@example.com", createdAt: "2026-01-01" },
-    org: { id: "o1", name: "Ada's workspace", kind: "personal" }
+    org: { id: "o1", name: "Ada's workspace", kind: "personal", plan: "free" }
   }),
   githubIdentity: async () => identity.current,
   updateName: vi.fn()
 }));
 vi.mock("@/lib/theme", () => ({ readTheme: async () => "dark" }));
 vi.mock("@/features/generation/allowance", () => ({
-  FREE_GENERATION_LIMIT: 3,
-  checkAllowance: async () => ({ unlimited: false, used: 1, remaining: 2 })
+  FREE_GENERATION_LIMIT: 1,
+  FREE_REPAIR_LIMIT: 2,
+  REPAIR_WINDOW_HOURS: 24,
+  checkAllowance: async () => ({ allowed: true, unlimited: false, used: 0, remaining: 1 })
 }));
 vi.mock("@/features/auth/actions", () => ({ signInWithGitHubAction: vi.fn() }));
 
