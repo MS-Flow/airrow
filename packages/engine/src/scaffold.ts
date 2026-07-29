@@ -19,6 +19,8 @@ import {
   audienceLabel,
   authMethodLabel,
   backendSummary,
+  commandName,
+  commandPath,
   databaseLabel,
   featureLabel,
   frameworkLabel,
@@ -26,6 +28,7 @@ import {
   isCustomStack,
   productTypeLabel,
   repoLabel,
+  shipsCleanup,
   tenancyLabel,
   usesAzureRepos,
   usesSupabase
@@ -245,6 +248,20 @@ function ciSetupSteps(model: ProjectModel, stackName: string, inferred: Inferred
  * Both halves matter. Real commands run against a runner where nothing was installed is a red build
  * on the first push — which is the defect spec 66 exists to remove, arriving from the other side.
  */
+/**
+ * What CI says when it finds no stack to verify.
+ *
+ * "Run /start" is the right instruction only where that command exists. A foundation generated for a
+ * project that already has a stack ships `/cleanup`, which scaffolds nothing — telling that founder
+ * to run a command their repository does not contain would make the first CI run they ever see a
+ * piece of wrong advice.
+ */
+function noStackNotice(model: ProjectModel): string {
+  return shipsCleanup(model)
+    ? "No stack here yet — this foundation was generated for an existing project, so push that project's code alongside these documents."
+    : `No stack here yet — run ${commandName(model)} in this repository, then push again.`;
+}
+
 function ciReadyCheck(model: ProjectModel, inferred: InferredStack | null): string {
   const out = (value: "true" | "false") => `echo "ready=${value}" >> "$GITHUB_OUTPUT"`;
   if (isCustomStack(model)) {
@@ -261,7 +278,7 @@ function ciReadyCheck(model: ProjectModel, inferred: InferredStack | null): stri
     `            ${out("true")}`,
     "          else",
     `            ${out("false")}`,
-    '            echo "::notice::No stack here yet — run /start in this repository, then push again."',
+    `            echo "::notice::${noStackNotice(model)}"`,
     "          fi"
   ].join("\n");
 }
@@ -289,7 +306,7 @@ function ciReadyCheckAzure(model: ProjectModel, inferred: InferredStack | null):
     `                ${set("true")}`,
     "              else",
     `                ${set("false")}`,
-    '                echo "##vso[task.logissue type=warning]No stack here yet — run /start in this repository, then push again."',
+    `                echo "##vso[task.logissue type=warning]${noStackNotice(model)}"`,
     "              fi"
   ].join("\n");
 }
@@ -447,16 +464,24 @@ function provider(model: ProjectModel): ProviderVocabulary {
   };
 }
 
+/** The two first-run commands: a foundation ships exactly one of them (spec 91). */
+const FIRST_RUN_COMMANDS = [".claude/commands/start.md", ".claude/commands/cleanup.md"];
+
 /**
  * Which template files this project ships.
  *
  * GitHub Actions and Azure Pipelines are alternatives, never both. Shipping the pair would leave one
  * permanently red and teach the founder to ignore a failing build — the exact habit the CI gate
  * exists to prevent.
+ *
+ * `/start` and `/cleanup` are alternatives for the same reason (spec 91): one scaffolds a stack, the
+ * other reads the stack that is already there. A repository holding both would be a repository where
+ * one of them is wrong, and nothing in it says which.
  */
 export function shipsPath(model: ProjectModel, path: string): boolean {
   if (path.startsWith(".github/")) return !usesAzureRepos(model);
   if (path.startsWith("azure-pipelines")) return usesAzureRepos(model);
+  if (FIRST_RUN_COMMANDS.includes(path)) return path === commandPath(model);
   return true;
 }
 
@@ -711,6 +736,111 @@ function startMinimum(model: ProjectModel): string {
   ].join("\n");
 }
 
+/**
+ * Step 1 of `START_HERE.md`, which is a different step depending on what the founder already has
+ * (spec 91).
+ *
+ * A new project's first move is to scaffold a stack; an imported project's is to make the documents
+ * describe the stack it already has. Only the prose is rendered: the four commands that follow it
+ * stay as `{{CMD_*}}` tokens in the template, so an unauthored one still reaches the founder as a
+ * `[NEEDS CLARIFICATION]` marker and the manifest can still see which files the model's words are in.
+ */
+function firstStep(model: ProjectModel): string {
+  const run = ["Open your AI assistant in this repository and run:", "", "```", commandName(model), "```", ""];
+  if (shipsCleanup(model)) {
+    return [
+      ...run,
+      `It reads ${model.name} as it actually is — the stack, the structure, the commands that really`,
+      "work — and rewrites the documents in this foundation to describe *that* project. It also creates",
+      "the local branches this workflow runs on, and only the ones you do not have yet. It changes no",
+      "code: not a dependency, not a config file, not a migration. It deletes nothing either, renames no",
+      "file of yours, and touches no remote. It is safe to run again.",
+      "",
+      "When it finishes, the commands these documents name are the ones that actually work here:"
+    ].join("\n");
+  }
+  return [
+    ...run,
+    "It scaffolds the stack, wires the toolchain, initialises git locally, and leaves you the smallest",
+    `version of ${model.name} that actually runs — enough to open, change and continue from, and no`,
+    "more. It touches nothing outside this directory: no accounts, no services, no secrets. It is safe to",
+    "run again.",
+    "",
+    "When it finishes, these are real commands:"
+  ].join("\n");
+}
+
+/**
+ * The rule in the generated constitution that says where this project's command stops and the spec
+ * loop starts (spec 91).
+ *
+ * Both commands have a ceiling, and they are different ceilings: `/start` may build up to the
+ * minimum that runs, `/cleanup` may not touch code at all. A generated repository carrying the wrong
+ * one states a rule its own command breaks.
+ */
+function commandRule(model: ProjectModel): string {
+  if (shipsCleanup(model)) {
+    return [
+      "- **`/cleanup` describes, the spec loop builds.** `/cleanup` reads this project and makes the",
+      "  documents match what is actually here. It changes no code and deletes nothing — that is its",
+      "  ceiling, not a starting budget. Everything that changes the project itself goes through a spec:",
+      "  no spec, no feature."
+    ].join("\n");
+  }
+  return [
+    "- **`/start` sets up, the spec loop builds.** `/start` takes this project to the bare minimum that",
+    "  runs — enough to open, change and continue from. That is its ceiling, not a starting budget.",
+    "  Everything past it goes through a spec: no spec, no feature."
+  ].join("\n");
+}
+
+/**
+ * What `/cleanup` must treat as unverified (spec 91).
+ *
+ * These documents were written from an interview, and the interview was prefilled by a deterministic
+ * import analysis that reads manifests — not by reading the code. Every stack claim in them is
+ * therefore a hypothesis, and saying so is what turns `/cleanup` from a proofreader into a check.
+ */
+function cleanupClaim(commands: Commands, stackName: string): string {
+  const { CMD_DEV, CMD_BUILD, CMD_TYPECHECK, CMD_LINT, CMD_TEST } = commands;
+  return [
+    "These documents were written from an interview about this project, not from reading it. They",
+    `currently claim the stack is **${stackName}**, and that these are the commands:`,
+    "",
+    "```bash",
+    [CMD_DEV, CMD_BUILD, CMD_TYPECHECK, CMD_LINT, CMD_TEST].join("\n"),
+    "```",
+    "",
+    "Treat every line of that as a claim to check, never as a fact. Where a document and the repository",
+    "disagree, **the repository is right** — change the document."
+  ].join("\n");
+}
+
+/**
+ * Which files `/cleanup` may rewrite (spec 91).
+ *
+ * Stated as a rule with examples rather than a fixed list, so it cannot drift from what the template
+ * actually ships. The exclusions are the load-bearing half: the founder's own documents are theirs,
+ * and a command allowed to rewrite the constitution is a command that can widen its own limits.
+ */
+function cleanupScope(): string {
+  return [
+    "**Yours to rewrite** — every document this foundation shipped: `README.md`, `START_HERE.md`,",
+    "`CLAUDE.md`, everything under `docs/`, and `specs/README.md` — including any that arrived as",
+    "`<name>.airrow.md` beside a file of the founder's (section 4).",
+    "",
+    "**Read, never rewrite:**",
+    "",
+    "- The founder's own documents — anything this foundation did not ship. Read them for context, and",
+    "  say in your report what you learned from them.",
+    "- `.claude/spec-kit/constitution.md` and `.claude/spec-kit/spec-template.md`. The constitution",
+    "  governs every other file, including this command; a command that edits it can widen its own",
+    "  limits.",
+    "- `.claude/commands/`. These are the workflow itself.",
+    "- Existing specs in `specs/`. They are decisions that were made, not documentation to correct."
+  ].join("\n");
+}
+
 function rolesText(model: ProjectModel): string {
   if (model.roles === "none") return "Single user type — no role distinctions in v1.";
   if (model.roles === "granular")
@@ -781,6 +911,11 @@ export function deriveScaffoldValues(
     SETUP_STEPS: setupSteps(model, stackName),
     START_BOOTSTRAP: startBootstrap(model, stackName, inferred),
     START_MINIMUM: startMinimum(model),
+    FIRST_COMMAND: commandName(model),
+    FIRST_STEP: firstStep(model),
+    COMMAND_RULE: commandRule(model),
+    CLEANUP_CLAIM: cleanupClaim(command, stackName),
+    CLEANUP_SCOPE: cleanupScope(),
     FIRST_SPEC_HINT: firstSpecHint(model),
     DEPLOY_TARGET: hosting,
     CI_SETUP_STEPS: ciSetupSteps(model, stackName, inferred),
@@ -1013,21 +1148,33 @@ function scalePosture(model: ProjectModel): string {
  */
 function setupSteps(model: ProjectModel, stackName: string): string {
   const steps: string[] = [];
+  // A project that already runs has an environment file of its own, and `.env.example` is written by
+  // `/start` — which an imported project never runs. Naming a file that will not be there is the
+  // defect spec 66 was written to fix, so the instruction is about values, not about a file.
+  const imported = shipsCleanup(model);
   if (usesSupabase(model)) {
     steps.push(
-      "1. Create a **Supabase** project, then copy the project URL and anon key from Project Settings → API.",
-      "2. Copy `.env.example` to `.env.local` and fill in those two values (plus the service-role key, server-side only — never expose it to the browser).",
+      imported
+        ? "1. If you do not already have one, create a **Supabase** project, then copy the project URL and anon key from Project Settings → API."
+        : "1. Create a **Supabase** project, then copy the project URL and anon key from Project Settings → API.",
+      imported
+        ? "2. Put those two values in this project's environment file (plus the service-role key, server-side only — never expose it to the browser)."
+        : "2. Copy `.env.example` to `.env.local` and fill in those two values (plus the service-role key, server-side only — never expose it to the browser).",
       "3. Apply the database migrations to your Supabase project; every schema change from here is a committed migration, never a dashboard edit."
     );
   } else {
     steps.push(
-      `1. Provision a **${databaseLabel(model)}** instance and note its connection string.`,
-      "2. Copy `.env.example` to `.env.local` and fill in the connection string (server-side only — never expose it to the browser).",
+      `1. ${imported ? "If you do not already have one, provision" : "Provision"} a **${databaseLabel(model)}** instance and note its connection string.`,
+      imported
+        ? "2. Put the connection string in this project's environment file (server-side only — never expose it to the browser)."
+        : "2. Copy `.env.example` to `.env.local` and fill in the connection string (server-side only — never expose it to the browser).",
       "3. Apply the database migrations; every schema change from here is a committed migration, never a hand-edit."
     );
   }
   steps.push(...repoSetupSteps(model, 4));
-  if (isCustomStack(model)) {
+  // A project that already runs has its runtime installed — that is how it runs. The step only
+  // exists because `/start` cannot install a toolchain it was never told the name of.
+  if (isCustomStack(model) && !shipsCleanup(model)) {
     // The one machine-level step /start could not spell out, because nothing here knows this stack.
     // Numbered off the list length: the provider steps above differ in count between GitHub and
     // Azure DevOps, and a hardcoded number was wrong the moment that stopped being fixed.
@@ -1051,9 +1198,20 @@ function setupSteps(model: ProjectModel, stackName: string): string {
 function repoSetupSteps(model: ProjectModel, from: number): string[] {
   const vocab = provider(model);
   const n = (offset: number) => from + offset;
+  // An imported project already has its code somewhere, and `/cleanup` initialises nothing — so the
+  // instruction is to make the branch model true where the code already lives, not to push a
+  // `develop` branch a command created.
+  const imported = shipsCleanup(model);
+  const hostStep = usesAzureRepos(model)
+    ? imported
+      ? "In **Azure DevOps**, create a project for the repository your code already lives in, then push this foundation alongside the code — including the `develop` branch `/cleanup` created."
+      : "In **Azure DevOps**, create a project and an empty **Azure Repos** repository, then push this foundation — including the `develop` branch `/start` created."
+    : imported
+      ? `Push this foundation to your existing ${repoLabel(model)} repository, alongside the code, including the \`develop\` branch \`/cleanup\` created.`
+      : `Create an empty repository on ${repoLabel(model)} and push this foundation, including the \`develop\` branch \`/start\` created.`;
   if (usesAzureRepos(model)) {
     return [
-      `${n(0)}. In **Azure DevOps**, create a project and an empty **Azure Repos** repository, then push this foundation — including the \`develop\` branch \`/start\` created.`,
+      `${n(0)}. ${hostStep}`,
       `${n(1)}. **Register the pipelines.** Pipelines → New pipeline → Azure Repos Git → this repo → Existing YAML file: \`${vocab.ciFile}\` for CI, then again for \`${vocab.deployFile}\`. Azure DevOps does not pick up YAML from a directory the way Actions does — an unregistered pipeline simply never runs.`,
       `${n(2)}. **Set the branch policies** the branch model depends on, under Repos → Branches → \`main\` / \`develop\` → Branch policies: require a pull request, require the CI build to pass, and block direct pushes. In this workflow these are the rules — there is no committed file enforcing them.`,
       `${n(3)}. **Create the Boards structure:** one area path (or team) per \`feature/<name>\`, so a ${vocab.issueTerm} always belongs to exactly one feature. That mapping is what \`/createspec\` asks you about.`,
@@ -1062,7 +1220,7 @@ function repoSetupSteps(model: ProjectModel, from: number): string[] {
     ];
   }
   return [
-    `${n(0)}. Create an empty repository on ${repoLabel(model)} and push this foundation, including the \`develop\` branch \`/start\` created.`,
+    `${n(0)}. ${hostStep}`,
     `${n(1)}. **Protect \`main\` and \`develop\`** (Settings → Branches): require a pull request and a passing CI check. The workflows in \`.github/workflows/\` run on their own once pushed.`,
     `${n(2)}. Install ${vocab.cliName} and run \`gh auth login\`, so the spec commands can read ${vocab.issueTerm}s and open pull requests.`,
     `${n(3)}. ${deployTargetSetup(model)}, and put the credentials in ${vocab.secretsHome}.`

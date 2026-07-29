@@ -120,6 +120,31 @@ const fixtures = [
       repoProvider: "github",
       team: "small_team"
     }
+  },
+  {
+    // Spec 91: a project that already exists. Same pipeline, same model — one field different, and
+    // the foundation it gets has to be the one that fits a repository with code already in it.
+    name: "Ledgerly",
+    description: "An invoicing tool a freelance developer has been running for two years.",
+    origin: { kind: "imported", stackDetected: true },
+    answers: {
+      productType: "saas",
+      vision: "The invoicing tool freelancers never have to think about.",
+      mvpFocus: "Send an invoice and know when it was paid.",
+      audience: "b2b",
+      coreEntities: "A Freelancer bills Clients; a Client receives Invoices; an Invoice has Payments.",
+      tenancy: "single_user",
+      authModel: ["email_password"],
+      capabilities: ["payments", "email"],
+      integrations: "Stripe for payments.",
+      dataSensitivity: "pii",
+      scale: "validate",
+      framework: "nextjs",
+      database: "supabase",
+      hosting: "vercel",
+      repoProvider: "github",
+      team: "solo"
+    }
   }
 ];
 
@@ -159,11 +184,22 @@ for (const fx of fixtures) {
   if (!vision?.content.includes(fx.answers.vision)) fail("VISION.md missing the long-term vision");
   if (!vision?.content.includes(fx.answers.mvpFocus)) fail("VISION.md missing the MVP focus");
 
+  // Spec 91: exactly one first-run command, and it is the one this project's origin calls for. Both
+  // would be worse than neither — one of them would be wrong about the repository it is sitting in.
+  const imported = fx.origin?.kind === "imported" && fx.origin.stackDetected;
+  const expectedCommand = `.claude/commands/${imported ? "cleanup" : "start"}.md`;
+  const wrongCommand = `.claude/commands/${imported ? "start" : "cleanup"}.md`;
+  if (!paths.has(expectedCommand)) fail(`missing first-run command: ${expectedCommand}`);
+  if (paths.has(wrongCommand)) fail(`ships the wrong first-run command: ${wrongCommand}`);
+  if (text.includes(imported ? "/start" : "/cleanup")) {
+    fail(`documents name /${imported ? "start" : "cleanup"}, which this foundation does not ship`);
+  }
+
   // Spec 66: the commands the documents tell the founder to run have to be the ones `/start` sets
   // up. A foundation whose START_HERE names `pnpm test` while `/start` wires `npm test` is the same
   // broken first experience as having no commands at all, just harder to spot.
   const start = files.find((f) => f.path === ".claude/commands/start.md")?.content ?? "";
-  if (!start) fail("missing /start command");
+  if (!imported && !start) fail("missing /start command");
   const run = fx.answers.framework === "vite" ? "npm run" : "pnpm";
   const here = files.find((f) => f.path === "START_HERE.md")?.content ?? "";
   const azure = fx.answers.repoProvider === "azure_devops";
@@ -172,14 +208,15 @@ for (const fx of fixtures) {
   if (!ci) fail(`missing CI definition: ${ciPath}`);
   for (const script of ["dev", "typecheck", "lint", "test"]) {
     const command = `${run} ${script}`;
-    if (!start.includes(command)) fail(`/start does not set up \`${command}\``);
+    // Only /start wires the toolchain; /cleanup measures the one that is already there.
+    if (!imported && !start.includes(command)) fail(`/start does not set up \`${command}\``);
     if (!here.includes(command)) fail(`START_HERE.md does not name \`${command}\``);
   }
   for (const script of ["typecheck", "lint", "test"]) {
     if (!ci.includes(`${run} ${script}`)) fail(`${ciPath} does not run \`${run} ${script}\``);
   }
   const gate = azure ? "dependencies.detect.outputs" : "needs.detect.outputs.ready";
-  if (!ci.includes(gate)) fail(`${ciPath} is not gated on /start having run`);
+  if (!ci.includes(gate)) fail(`${ciPath} is not gated on there being a stack to verify`);
   // A foundation must never describe someone else's tooling.
   if (azure && text.includes("GitHub")) fail("GitHub named in an Azure DevOps project");
   if (!azure && text.includes("Azure DevOps")) fail("Azure DevOps named in a GitHub project");

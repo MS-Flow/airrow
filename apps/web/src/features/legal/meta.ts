@@ -9,7 +9,7 @@ export const LEGAL = {
   serviceName: "Airrow",
   domain: "airrow.app",
   contactEmail: "hello@airrow.app",
-  lastUpdated: "25 July 2026",
+  lastUpdated: "27 July 2026",
   earlyAccess:
     "Airrow is in early access. These pages describe how the service actually works today. The operating entity, registered address and governing law are published here before general availability, and the date above changes whenever anything on this page does."
 };

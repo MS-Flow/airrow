@@ -1,4 +1,5 @@
 // Create Project — step one of the wizard: the basics, then the interview.
+import Link from "next/link";
 import { PageContainer } from "@/components/shell/page-container";
 import { Card, CardBody } from "@/components/ui/card";
 import { Input, Textarea } from "@/components/ui/input";
@@ -62,6 +63,17 @@ export default async function NewProject({
           </form>
         </CardBody>
       </Card>
+
+      <p className="mt-6 text-sm text-fg-faint">
+        Already have a codebase?{" "}
+        <Link
+          href="/app/projects/import"
+          className="text-fg-muted underline underline-offset-4 hover:text-fg"
+        >
+          Import an existing project
+        </Link>{" "}
+        and Airrow fills in what&rsquo;s missing.
+      </p>
     </PageContainer>
   );
 }

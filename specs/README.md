@@ -39,6 +39,11 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Auto-set PR base branch per the hierarchy | [16-pr-base-branch.md](16-pr-base-branch.md) | 🔄 In progress |
 | Blocking advisories + secret scanning | [33-security-scanning.md](33-security-scanning.md) | ✅ Done |
 | Auto-request a reviewer on PRs into `develop` / `main` | [46-auto-assign-reviewer.md](46-auto-assign-reviewer.md) | ✅ Done |
+| Import an existing project into Airrow | [63-import-existing-projects.md](63-import-existing-projects.md) | ✅ Done |
+| Project structure in the workspace + merged download | [68-workspace-tree-merged-zip.md](68-workspace-tree-merged-zip.md) | ✅ Done |
+| Preview shows the whole structure — the founder's files and Airrow's | [75-preview-full-tree.md](75-preview-full-tree.md) | ✅ Done |
+| A file picker that looks like Airrow — drop-to-import | [69-import-file-picker.md](69-import-file-picker.md) | ✅ Done |
+| Upload warnings + responsibility for uploaded content | [70-import-warnings-legal.md](70-import-warnings-legal.md) | ✅ Done |
 | Auto-generate the PR description when a PR is opened | [53-pr-description.md](53-pr-description.md) | ✅ Done |
 | Redesign interview into architecture-first question set | [6-fix-interview-template.md](6-fix-interview-template.md) | ✅ Done |
 | Fix UI design flaws — shell corrections + anonymous interview | [11-ui-design-flaws.md](11-ui-design-flaws.md) | ✅ Done |
@@ -46,4 +51,6 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Landing copy, the spec-driven story, smooth scroll and a real footer | [23-landing-copy-footer.md](23-landing-copy-footer.md) | 🔄 In progress |
 | Mobile UI: every screen works on a phone | [31-mobile-ui.md](31-mobile-ui.md) | 🔄 In progress |
 | `/start`: from empty repo to a running starting point | [66-start-command.md](66-start-command.md) | ✅ Done |
+| `/cleanup`: the right first-run command for the project's origin | [91-cleanup-command.md](91-cleanup-command.md) | ✅ Done |
 | Azure DevOps gets its own workflow, not GitHub's with different labels | [67-azure-devops-parity.md](67-azure-devops-parity.md) | 🔄 In progress |
+| Sign in with GitHub, and import a public repo without a ZIP | [67-github-login-import.md](67-github-login-import.md) | ✅ Done |

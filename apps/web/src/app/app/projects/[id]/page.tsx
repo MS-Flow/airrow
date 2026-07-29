@@ -5,15 +5,16 @@ import {
   ArrowRight,
   BookOpen,
   Boxes,
-  Download,
   FileCode2,
   FolderTree,
   Github,
-  Map
+  Map,
+  Undo2
 } from "lucide-react";
 import { PageContainer } from "@/components/shell/page-container";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DownloadProject } from "@/features/import/DownloadProject";
 import { Card, CardBody } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ComingSoon } from "@/components/ui/states";
@@ -44,6 +45,9 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
   const artifact = job && job.status === "completed" ? await loadArtifact(job.id) : null;
   const meta = STATUS_META[project.status];
   const ready = project.status === "ready";
+  // The interview is behind them, so there are answers to change. Mid-interview the primary button
+  // already says "Resume interview", and offering both would be the same link twice.
+  const answered = ready || project.status === "failed";
 
   const filesByPath = new Set(artifact?.files.map((f) => f.path) ?? []);
 
@@ -89,12 +93,7 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
             </Button>
             {ready ? (
               <>
-                <Button variant="secondary" asChild>
-                  <a href={`/api/projects/${id}/zip`}>
-                    <Download className="size-4" />
-                    Download project
-                  </a>
-                </Button>
+                <DownloadProject projectId={id} slug={project.slug} />
                 <Button variant="secondary" asChild>
                   <Link href={`/app/projects/${id}/continue`}>
                     <FolderTree className="size-4" />
@@ -107,7 +106,24 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
                 </Button>
               </>
             ) : null}
+            {/* Answered questions are the input to everything on this page, so the way back to them
+                belongs here — not only inside the file browser, which a founder reaches by going
+                deeper rather than by wanting to start over. */}
+            {answered ? (
+              <Button variant="ghost" asChild>
+                <Link href={`/app/projects/${id}/interview`}>
+                  <Undo2 className="size-4" />
+                  Change answers
+                </Link>
+              </Button>
+            ) : null}
           </div>
+          {answered ? (
+            <p className="mt-3 text-xs text-fg-faint">
+              Changing an answer regenerates the foundation. Files you edited here are replaced;
+              anything you have already downloaded is untouched.
+            </p>
+          ) : null}
         </CardBody>
       </Card>
 

@@ -13,16 +13,42 @@ import type {
   AuthoredSlots,
   AuthoredToolchain
 } from "../../schemas/src/authoring.ts";
-import { ENGINE_VERSION, resolveProjectModel, slugify } from "./model.ts";
+import { ENGINE_VERSION, commandPath, resolveProjectModel, slugify } from "./model.ts";
 import type { ResolveInput } from "./model.ts";
 import { hasUnresolvedToken, renderScaffold } from "./scaffold.ts";
 import type { TemplateFile } from "./scaffold.ts";
 
 export { ENGINE_VERSION, resolveProjectModel, slugify };
+export { commandFor, commandName, commandPath, shipsCleanup } from "./model.ts";
 export type { ResolveInput };
 
 export { renderScaffold, deriveScaffoldValues, shipsPath } from "./scaffold.ts";
 export type { TemplateFile, ScaffoldDecision, ScaffoldPlan, RenderedScaffold } from "./scaffold.ts";
+
+export {
+  analyzeImport,
+  applyResolutions,
+  buildPreviewTree,
+  checkImportLimits,
+  deliversSidecar,
+  diffAgainstExisting,
+  digestImported,
+  hasCodeSignal,
+  isIgnoredImportPath,
+  mergeOverlay,
+  mergePreviewFiles,
+  pathOverlap,
+  sidecarPath,
+  stripCommonRoot,
+  IGNORED_IMPORT_DIRECTORIES,
+  IMPORT_LIMITS
+} from "./import.ts";
+export type {
+  ImportLimitCheck,
+  PreviewFileEntry,
+  PreviewFileSource,
+  PreviewTreeNode
+} from "./import.ts";
 
 export class GenerationError extends Error {
   readonly issues: string[];
@@ -35,7 +61,7 @@ export class GenerationError extends Error {
 }
 
 /** Stage 4: validate completeness. Throws GenerationError on failure. */
-function validate(files: GeneratedFile[]): void {
+function validate(files: GeneratedFile[], model: ProjectModel): void {
   const issues: string[] = [];
   const seen = new Set<string>();
   const required = [
@@ -49,8 +75,10 @@ function validate(files: GeneratedFile[]): void {
     "specs/README.md",
     ".claude/spec-kit/constitution.md",
     ".claude/spec-kit/spec-template.md",
-    // Without it the foundation is documents describing commands that do not exist (spec 66).
-    ".claude/commands/start.md"
+    // The one first-run command this project's origin calls for — `/start` for a project beginning
+    // from nothing, `/cleanup` for one that already has code (spec 91). Without it the foundation is
+    // documents describing a command that does not exist (spec 66).
+    commandPath(model)
   ];
 
   for (const f of files) {
@@ -138,7 +166,7 @@ export function generate(
     options.authoredToolchain
   );
   files.forEach((f, i) => options.onFile?.(f.path, i + 1, files.length));
-  validate(files);
+  validate(files, model);
   // No prose landed, so there is nothing to attribute even if a caller passed provenance in.
   const authored = files.some((f) => f.source === "authored");
   return { files, manifest: buildManifest(model, files, authored ? options.authoring ?? null : null) };
