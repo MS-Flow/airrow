@@ -8,9 +8,45 @@ import Stripe from "stripe";
 
 let client: Stripe | null = null;
 
-/** Whether payment is wired up at all. Cheap, side-effect free, safe to call on every render. */
+/**
+ * Everything the paid path needs end to end.
+ *
+ * The webhook secret belongs in this list even though nothing about *taking* money needs it: the
+ * webhook is the only writer of `organizations.plan`, so a deployment that can charge a card and
+ * cannot verify the event that follows takes a founder's money and never grants them Pro. Refusing
+ * to sell is the only safe failure here.
+ */
+const REQUIRED_STRIPE_VARS = [
+  "STRIPE_SECRET_KEY",
+  "STRIPE_PRICE_MONTHLY",
+  "STRIPE_WEBHOOK_SECRET"
+] as const;
+
+/** Which of them this deployment is missing. Names only — a value never reaches a log (§II). */
+export function missingStripeConfig(): string[] {
+  return REQUIRED_STRIPE_VARS.filter((name) => !process.env[name]);
+}
+
+let warned = false;
+
+/**
+ * Whether payment is wired up at all. Cheap, side-effect free, safe to call on every render.
+ *
+ * Warns once per server instance when it is not, naming the variables that are absent. Without that
+ * line, a deployment with `STRIPE_PRICE_MONTLY` set instead of `STRIPE_PRICE_MONTHLY` renders a
+ * disabled Upgrade button, logs nothing, and looks identical to a deployment that was never meant to
+ * sell anything — which is exactly how one typo cost an afternoon.
+ */
 export function stripeConfigured(): boolean {
-  return Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_MONTHLY);
+  const missing = missingStripeConfig();
+  if (missing.length === 0) return true;
+  if (!warned) {
+    warned = true;
+    console.warn(
+      `Stripe is not configured — missing ${missing.join(", ")}. The upgrade path stays disabled.`
+    );
+  }
+  return false;
 }
 
 export function stripe(): Stripe {

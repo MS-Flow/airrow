@@ -324,6 +324,87 @@ resolves and the engine does not — the engine reaches shared types by relative
 
 ---
 
+### Fixed after the first deploy (2026-07-30)
+
+Two things this spec shipped were only visible on a deployment, and both were found by using it.
+
+**1. `column generation_jobs.reused_authoring does not exist` — a 500 on the interview screen.**
+Digest `1549084546` in the preview deployment's runtime log, on
+`GET /app/projects/[id]/interview`. The column arrives with `20260729120000_pro_plan.sql`, which had
+not been pushed to the cloud database: Vercel deploys code and nothing deploys the schema. So every
+allowance read — `countGenerations`, `projectUsage`, and therefore `AllowanceNotice` on both the
+project list and the interview — failed on a column the code knows about and the database does not.
+
+The durable fix is `pnpm dlx supabase db push`, and it is now written into
+`INFRASTRUCTURE_SETUP.md` where the first push already lives, with the symptom named so the next
+person recognises it. The code fix is narrower and deliberately so: `jobCharges` in `store.ts` falls
+back to `select id, status` when that one column is missing, which keeps the *read* surfaces up — a
+column that does not exist means no job can have reused a payload, so the ledger counts exactly what
+it counted before the column existed, and `isMissingPlanColumn` generalised into `isMissingColumn(error,
+column)` so a caller has to name the column it is prepared to do without. An unrelated error still
+throws, which is the point: this is not a blanket catch, and a stale schema is not made harmless.
+Generation still writes the flag and billing still needs tables from the same batch, so the migration
+is not optional — the shim only keeps the screens that merely *report* the allowance from taking the
+whole app down with them.
+
+**2. "Start with Pro" went to the new-project form.** The pricing section's Pro action reused
+`primaryHref`, so the one visitor who had actually met the free limit was handed the single screen
+that cannot lift it — and would have met the same wall again thirty questions later.
+`features/landing/pro-cta.ts` now decides from the founder's entitlement rather than from which card
+they pressed: nothing generated yet → `/app/projects/new` (nobody is asked to pay before the product
+has done anything for them), a foundation already spent → `/app/upgrade` directly, signed out → the
+guest interview, since Pro cannot be bought without an account either way. Already-Pro also lands on
+`/app/upgrade`, which recognises the case and offers the billing portal, so no branch is a dead end.
+
+It takes the whole `Entitlement` for the same reason `AllowanceNotice` does, so the link cannot drift
+from what the founder is told one section higher up the page.
+
+**And the copy was still lying, in the future tense.** `pricing.body` said "Pro lifts the limit when
+it lands". Spec 100 swept the page for "coming soon" and "not available" and this survived, so the
+test that was supposed to catch exactly this drift did not — it now checks for the promise as well as
+the disclaimer. The criterion above was ticked with the sentence still on the page, which is the
+argument for testing the copy rather than reading it.
+
+**3. "Upgrade to Pro" was not clickable.** The deployment had `STRIPE_PRICE_MONTLY` set — no `H` — so
+`stripeConfigured()` was false and `BillingUnavailable` rendered: a disabled button whose only
+explanation was a `title` attribute. Invisible on a phone, invisible to anyone who does not think to
+hover a control that looks broken, and nothing in the server log said anything at all. The deployment
+was indistinguishable from one where Pro had never been built.
+
+Fixing the variable name is the deployment's job. Three things here make sure the next typo announces
+itself:
+
+- `missingStripeConfig()` in `lib/stripe.ts` names the absent variables, and `stripeConfigured()`
+  warns once per server instance with that list. Names only — a value never reaches a log (§II).
+- `BillingUnavailable` puts the reason on the page, in a `Notice`, beside the still-disabled button.
+  The plan boundary stays visible (the criterion above), but it is no longer the only thing on screen.
+- `STRIPE_WEBHOOK_SECRET` joined the required set. Nothing about *taking* money needs it, which is
+  exactly the problem: the webhook is the only writer of `organizations.plan`, so a deployment that
+  can charge a card and cannot verify the event that follows takes a founder's money and grants them
+  nothing. Refusing to sell is the only safe failure.
+
+**Verification (2026-07-30)**
+
+```
+pnpm -r typecheck   Done — clean across schemas, engine, web
+pnpm -r lint        Done — no new issues
+pnpm -r test        schemas   35 passed
+                    engine   219 passed
+                    web      390 passed (55 files)
+pnpm test:scripts     13 passed
+pnpm build          Done
+```
+
+New tests: `lib/data/store.usage-compat.test.ts` (4) — the fallback, that it still excludes failed
+jobs, and that any other error stays loud; `features/landing/pro-cta.test.ts` (4) — the four
+destinations; `app/smoke.test.tsx` (+2) — the signed-in landing page routes the Pro action by
+entitlement, which is the level the bug actually lived at; `features/landing/copy.test.ts` (+1) — the
+future-tense promise; `features/billing/BillingUnavailable.test.tsx` (2) — the reason is on the page,
+including that nothing already generated is affected; `lib/stripe.test.ts` (+3) — the webhook secret
+is required, and a misspelled variable is reported by name.
+
+---
+
 ## Out of scope
 
 _Deliberately excluded, so nobody wonders whether it was forgotten._

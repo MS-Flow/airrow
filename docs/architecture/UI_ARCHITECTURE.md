@@ -115,6 +115,11 @@ project and answer every question, and meets `/app/upgrade` at the button that w
 call. Screens that need Pro are shown disabled with an explanation rather than hidden — seeing what
 you are missing is what converts; not knowing it exists does not.
 
+The landing page's Pro action follows the same rule from the other side (`features/landing/pro-cta.ts`):
+a visitor with nothing generated goes to their free foundation, and one who has already spent it goes
+straight to `/app/upgrade`. Sending everyone to `/app/projects/new` handed the only visitor who had met
+the limit the one screen that cannot lift it.
+
 Shell: collapsible sidebar + sticky top bar with breadcrumbs derived from the URL + ⌘K command
 palette + a reserved `ChatSlot` column for the future repository-aware assistant. The sidebar logo
 links to `/`, not `/app` — the rail already has Projects. Theme switch and account menu sit top-right

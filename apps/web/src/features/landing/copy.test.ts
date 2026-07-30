@@ -42,6 +42,15 @@ describe("landing copy", () => {
     expect(offenders).toEqual([]);
   });
 
+  // The same lie in the future tense. "Pro lifts the limit when it lands" passed the check above
+  // untouched, so the check above was not the check that was needed.
+  it("does not promise Pro as something still to arrive", () => {
+    const offenders = LANDING_STRINGS.filter((s) =>
+      /when it lands|when it ships|will be available|launching soon/i.test(s)
+    );
+    expect(offenders).toEqual([]);
+  });
+
   it("names no price, because the amount lives in Stripe", () => {
     // Spec 99 keeps every figure in the dashboard so it changes without a deploy. A number here
     // would be a second source of truth, and the one customers read first.

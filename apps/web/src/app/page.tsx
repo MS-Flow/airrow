@@ -34,6 +34,8 @@ import {
   type DeliverableIcon
 } from "@/features/landing/copy";
 import { readFoundation } from "@/features/landing/foundation";
+import { proCtaHref } from "@/features/landing/pro-cta";
+import { checkAllowance } from "@/features/generation/allowance";
 import { getSession, signOut } from "@/lib/auth";
 import { readTheme } from "@/lib/theme";
 
@@ -64,6 +66,16 @@ export default async function Landing() {
   const foundation = readFoundation();
   // Signed out, "get started" is the interview itself — the account comes at generate.
   const primaryHref = session ? "/app/projects/new" : GUEST_INTERVIEW_PATH;
+  // The Pro action needs to know what the founder has already used, so it can offer Pro to the
+  // person who has met the limit and the free foundation to the person who has not.
+  const allowance = session
+    ? await checkAllowance({
+        orgId: session.org.id,
+        plan: session.org.plan,
+        userId: session.user.id
+      })
+    : null;
+  const proHref = proCtaHref(allowance);
 
   return (
     <div className="min-h-screen bg-bg">
@@ -189,9 +201,9 @@ export default async function Landing() {
           <SpecDrivenShowcase foundation={foundation} />
         </section>
 
-        {/* Pricing. Two cards, and only the first is real — Pro is dimmed and carries no price
-            because it has none yet. Showing it anyway is what makes the free limit read as a
-            starting point rather than a wall. */}
+        {/* Pricing. Two cards, both real: free is the whole first foundation and Pro is purchasable
+            (spec 99). The actions differ, because the same destination cannot serve both — see
+            `proCtaHref`. */}
         <section id="pricing" className="scroll-mt-20 border-t border-border py-24">
           <h2 className="text-2xl font-semibold tracking-tight text-fg">
             {SECTIONS.pricing.title}
@@ -239,7 +251,7 @@ export default async function Landing() {
                   ))}
                 </ul>
                 <Button variant="secondary" className="mt-8 w-full" asChild>
-                  <Link href={primaryHref}>{SECTIONS.pricing.pro.action}</Link>
+                  <Link href={proHref}>{SECTIONS.pricing.pro.action}</Link>
                 </Button>
               </CardBody>
             </Card>

@@ -28,6 +28,12 @@ Day-to-day local database work lives in [`DEVELOPER_GUIDE.md`](./DEVELOPER_GUIDE
    - If `supabase link` fails with `Your account does not have the necessary privileges`, the CLI
      is authenticated as an account that cannot see the project. Log out, log back in with the
      Supabase owner/admin account, or ask the project owner to grant access, then rerun the link.
+   - **`db push` again after every merge that adds a migration.** Vercel deploys code; nothing deploys
+     the schema. A deployment running ahead of its database fails on the column it cannot see —
+     `column generation_jobs.reused_authoring does not exist` was a 500 on the interview screen for
+     exactly this reason, and no amount of redeploying fixes it. `supabase migration list` compares
+     local to cloud and is the fastest way to see the gap. The migrations are idempotent, so pushing
+     when there is nothing to push is safe.
 4. Verify RLS in the dashboard: **Table Editor** shows `organizations` and `organization_members`;
    **Authentication → Policies** shows each has RLS **enabled** with the read policies from the
    migration. (This is the proof-of-concept schema; the full product schema is a separate issue.)

@@ -51,8 +51,15 @@ deploy.
 STRIPE_SECRET_KEY=sk_test_…        # Developers → API keys. Server-only; never NEXT_PUBLIC_
 STRIPE_PRICE_MONTHLY=price_…       # required to enable the upgrade path at all
 STRIPE_PRICE_YEARLY=price_…        # optional; leave unset to offer monthly only
-STRIPE_WEBHOOK_SECRET=whsec_…      # from step 3
+STRIPE_WEBHOOK_SECRET=whsec_…      # from step 3 — also required; see below
 ```
+
+All three non-optional names must match **exactly**, in `.env.local` and in Vercel. Miss one and
+`stripeConfigured()` is false, so Settings and `/app/upgrade` show a disabled Upgrade button with the
+reason on the page, and the server log names the variable that is absent — `STRIPE_PRICE_MONTLY`
+(no `H`) in a deployment looked exactly like Pro having never been built. The webhook secret counts
+towards "configured" on purpose: charging a card while unable to verify the event that grants the plan
+would take a founder's money and give them nothing.
 
 **3. The webhook, which is the part that actually grants Pro.** A Checkout redirect proves the browser
 reached a URL, not that money moved, so `organizations.plan` is written *only* here.

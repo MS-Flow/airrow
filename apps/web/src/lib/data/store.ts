@@ -127,10 +127,18 @@ const toOrg = (r: OrgRow): OrgRecord => ({
 
 type SupabaseError = { message: string; code?: string };
 
-function isMissingPlanColumn(error: SupabaseError): boolean {
+/**
+ * A column this code knows about and the database does not — a deployment running ahead of its
+ * migrations.
+ *
+ * Postgres reports `42703` (undefined_column); the qualified name is matched as well because
+ * PostgREST does not always forward the code. Callers name the column they are prepared to do
+ * without, so an unrelated typo in a select still throws instead of being quietly swallowed.
+ */
+function isMissingColumn(error: SupabaseError, column: string): boolean {
   return (
     error.code === "42703" ||
-    /column .*organizations\.plan does not exist/i.test(error.message)
+    error.message.toLowerCase().includes(`${column.toLowerCase()} does not exist`)
   );
 }
 
@@ -236,7 +244,9 @@ export async function getOrgForUser(userId: string): Promise<OrgRecord | null> {
     .maybeSingle();
 
   if (query.error) {
-    if (!isMissingPlanColumn(query.error)) throw new Error(`Supabase: ${query.error.message}`);
+    if (!isMissingColumn(query.error, "organizations.plan")) {
+      throw new Error(`Supabase: ${query.error.message}`);
+    }
 
     const fallback = await db()
       .from("organizations")
@@ -450,15 +460,44 @@ async function chargedUsage(column: "organization_id" | "project_id", id: string
   const jobIds = usage.map((u) => u.generation_job_id).filter((v): v is string => v !== null);
   if (jobIds.length === 0) return usage;
 
-  const jobs = rows<{ id: string; status: JobStatus; reused_authoring: boolean }>(
-    await db().from("generation_jobs").select("id, status, reused_authoring").in("id", jobIds)
-  );
+  const jobs = await jobCharges(jobIds);
   // Filtered here rather than in the query: two independent conditions expressed as a PostgREST
   // `or` string is the kind of thing that stays syntactically valid while meaning something else.
   const uncharged = new Set(
-    jobs.filter((j) => j.status === "failed" || j.reused_authoring).map((j) => j.id)
+    jobs.filter((j) => j.status === "failed" || j.reused_authoring === true).map((j) => j.id)
   );
   return usage.filter((u) => u.generation_job_id === null || !uncharged.has(u.generation_job_id));
+}
+
+interface JobChargeRow {
+  id: string;
+  status: JobStatus;
+  /** Optional for the same reason `OrgRow.plan` is: a database still behind its migrations. */
+  reused_authoring?: boolean;
+}
+
+/**
+ * Status and memoisation flag for the jobs a ledger read refers to.
+ *
+ * `reused_authoring` arrived with the Pro plan migration (`20260729120000_pro_plan.sql`). A
+ * deployment whose database is behind that migration used to have every allowance read fail on it,
+ * which took down the project list and the interview screen — the screens where a founder is merely
+ * being *told* where they stand. A column that does not exist means no job can have reused a payload,
+ * so the flag reads absent and the ledger counts exactly what it counted before the column existed.
+ *
+ * This keeps the read surfaces up; it does not make a stale schema harmless. Generation writes the
+ * flag (`saveAuthoringProvenance`) and billing needs tables from the same batch of migrations, so a
+ * deployment in this state still has to run `supabase db push`.
+ */
+async function jobCharges(jobIds: string[]): Promise<JobChargeRow[]> {
+  const query = await db().from("generation_jobs").select("id, status, reused_authoring").in("id", jobIds);
+  if (!query.error) return (query.data ?? []) as JobChargeRow[];
+  if (!isMissingColumn(query.error, "generation_jobs.reused_authoring")) {
+    throw new Error(`Supabase: ${query.error.message}`);
+  }
+  return rows<JobChargeRow>(
+    await db().from("generation_jobs").select("id, status").in("id", jobIds)
+  );
 }
 
 /**

@@ -5,7 +5,7 @@
 // card expired before Stripe has finished trying, or even emailed them. So this file mostly exists
 // to pin down what does *not* end a subscription.
 import { describe, it, expect, afterEach } from "vitest";
-import { planForStatus, stripeConfigured, stripePrices } from "./stripe";
+import { missingStripeConfig, planForStatus, stripeConfigured, stripePrices } from "./stripe";
 
 describe("planForStatus", () => {
   it.each(["active", "trialing"])("keeps %s on Pro", (status) => {
@@ -37,18 +37,50 @@ describe("configuration", () => {
     process.env = { ...env };
   });
 
-  it("is unconfigured without a secret key, so nothing offers to charge anyone", () => {
-    delete process.env.STRIPE_SECRET_KEY;
+  function configured(): void {
+    process.env.STRIPE_SECRET_KEY = "sk_test";
     process.env.STRIPE_PRICE_MONTHLY = "price_monthly";
+    process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
+  }
+
+  it("is unconfigured without a secret key, so nothing offers to charge anyone", () => {
+    configured();
+    delete process.env.STRIPE_SECRET_KEY;
 
     expect(stripeConfigured()).toBe(false);
   });
 
   it("is unconfigured without a price, because a key alone cannot sell anything", () => {
-    process.env.STRIPE_SECRET_KEY = "sk_test";
+    configured();
     delete process.env.STRIPE_PRICE_MONTHLY;
 
     expect(stripeConfigured()).toBe(false);
+  });
+
+  it("refuses to sell without the webhook secret, which is what grants the plan", () => {
+    // Charging a card the webhook cannot then be verified for takes money and delivers nothing. The
+    // founder would be Pro in Stripe and free in Airrow, and only they would notice.
+    configured();
+    delete process.env.STRIPE_WEBHOOK_SECRET;
+
+    expect(stripeConfigured()).toBe(false);
+  });
+
+  it("is configured when all three are present", () => {
+    configured();
+
+    expect(stripeConfigured()).toBe(true);
+    expect(missingStripeConfig()).toEqual([]);
+  });
+
+  it("names what is missing, because a typo in a variable name looks like nothing at all", () => {
+    // The real one: `STRIPE_PRICE_MONTLY` was set in the deployment. Every screen behaved as if Pro
+    // had never been built, and no log said otherwise.
+    configured();
+    delete process.env.STRIPE_PRICE_MONTHLY;
+    process.env.STRIPE_PRICE_MONTLY = "price_monthly";
+
+    expect(missingStripeConfig()).toEqual(["STRIPE_PRICE_MONTHLY"]);
   });
 
   it("offers monthly only when yearly is unset", () => {
