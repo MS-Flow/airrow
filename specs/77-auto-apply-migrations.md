@@ -125,7 +125,7 @@ _How each criterion above is proven._
   step, not merely that the CLI exited zero. No throwaway project is needed; the assertion is against
   the real linked database.
 - **New tests** — [scripts/supabase-migration-drift.test.mjs](../scripts/supabase-migration-drift.test.mjs),
-  25 cases: in-sync, one unapplied migration, several unapplied, the database ahead of the branch, a
+  26 cases: in-sync, one unapplied migration, several unapplied, the database ahead of the branch, a
   header with no rows, output that is not a table, empty output, the format-change guard, the repo's own
   migration filenames, the credential guard (all missing / one missing / empty-string value / points at
   the runbook), and fork detection (fork PR, same-repo PR, push event, missing payload). Runs via
@@ -151,7 +151,7 @@ _How each criterion above is proven._
    files, so a CLI output-format change surfaces as a loud error rather than a silent "in sync".
    The script also owns the credential contract — which variables are required, and the fork-PR case —
    so both workflows are one `run:` line and the awkward parts are unit-testable.
-2. [scripts/supabase-migration-drift.test.mjs](../scripts/supabase-migration-drift.test.mjs) — 25 cases,
+2. [scripts/supabase-migration-drift.test.mjs](../scripts/supabase-migration-drift.test.mjs) — 26 cases,
    including the 2026-07-27 listing replayed as a fixture.
 3. [.github/workflows/supabase-migrate.yml](../.github/workflows/supabase-migrate.yml) — push to
    `develop`/`main` → link → `db push` → assert no drift. Serialized via `concurrency` with
@@ -194,7 +194,8 @@ is an explicit non-interactive flag on that one step.
 
 **Verification run** (2026-07-30, local).
 
-- `pnpm test:scripts` 38 passed (2 files) · `pnpm -r typecheck` clean across all three packages ·
+- `pnpm test:scripts` 39 passed (2 files), green both with and without `GITHUB_EVENT_PATH` set ·
+  `pnpm -r typecheck` clean across all three packages ·
   `pnpm -r lint` clean · `pnpm -r test` 258 passed / 28 skipped (40 files in `apps/web`, 8 in
   `packages/engine`, 2 in `packages/schemas`) — **no failures**. The skips are pre-existing.
 - All three workflow files parse, and the step order was checked from the parsed YAML: `checkout` first in
@@ -208,6 +209,10 @@ is an explicit non-interactive flag on that one step.
   | fork-PR event payload | `::warning::Hoppar över migrationskontrollen…` exit **0** |
   | same-repo + credentials, no CLI | `kommandot \`supabase\` finns inte på PATH…` exit 1 |
 - Repository secrets confirmed present via `gh secret list`: all three.
+- **First CI run caught a non-deterministic test of mine** (§V): `readGitHubEvent(undefined)` falls through
+  to the `process.env.GITHUB_EVENT_PATH` default, so it passed locally where the variable is unset and
+  parsed the real push payload in Actions. Now stubbed with `vi.stubEnv`, and the suite is checked green
+  both with and without the variable set.
 
 ---
 
@@ -218,7 +223,7 @@ _The plan, for whoever implements it. Every change grounded in current code; exp
 1. **`scripts/supabase-migration-drift.mjs`** (new) — owns the whole contract: which credentials are
    required, the fork-PR case, `supabase link`, then parse `supabase migration list --linked` and report
    migrations present locally but not remotely. Exits non-zero with a readable list when they drift.
-2. **`scripts/supabase-migration-drift.test.mjs`** (new) — 25 cases, run by `pnpm test:scripts`.
+2. **`scripts/supabase-migration-drift.test.mjs`** (new) — 26 cases, run by `pnpm test:scripts`.
 3. **`.github/workflows/supabase-migrate.yml`** (new) — `on: push: branches: [develop, main]`;
    `setup-cli` → `link` + `db push` → assert no drift. Credentials at job level: every step is migration
    work.

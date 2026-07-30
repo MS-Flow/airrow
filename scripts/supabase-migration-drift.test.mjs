@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   MigrationListError,
@@ -178,12 +178,25 @@ describe("isForkPullRequest", () => {
 });
 
 describe("readGitHubEvent", () => {
-  it("returns null outside Actions, where there is no event path", () => {
-    expect(readGitHubEvent(undefined)).toBeNull();
+  // Stubbing the variable rather than passing `undefined`: the argument defaults to
+  // `process.env.GITHUB_EVENT_PATH`, so `readGitHubEvent(undefined)` reads whatever the
+  // surrounding environment has — green locally, and in CI it parsed the real push payload.
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("returns null outside Actions, where GITHUB_EVENT_PATH is not set", () => {
+    vi.stubEnv("GITHUB_EVENT_PATH", "");
+
+    expect(readGitHubEvent()).toBeNull();
   });
 
   it("returns null for an unreadable payload rather than crashing the check", () => {
     expect(readGitHubEvent("./does-not-exist.json")).toBeNull();
+  });
+
+  it("parses a payload that is there", () => {
+    expect(readGitHubEvent("./package.json")).toMatchObject({ name: "airrow" });
   });
 });
 
