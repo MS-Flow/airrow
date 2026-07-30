@@ -135,36 +135,44 @@ alter table public.deliveries       enable row level security;
 alter table public.repo_connections enable row level security;
 
 -- A user sees only their own profile.
+drop policy if exists "own profile" on public.profiles;
 create policy "own profile" on public.profiles
   for all using (id = auth.uid()) with check (id = auth.uid());
 
 -- Org-scoped resources: membership of the row's organization.
+drop policy if exists "org members access projects" on public.projects;
 create policy "org members access projects" on public.projects
   for all using (public.is_org_member(organization_id))
   with check (public.is_org_member(organization_id));
 
+drop policy if exists "org members access repo_connections" on public.repo_connections;
 create policy "org members access repo_connections" on public.repo_connections
   for all using (public.is_org_member(organization_id))
   with check (public.is_org_member(organization_id));
 
 -- Project-scoped resources: membership of the parent project's organization.
+drop policy if exists "org members access interviews" on public.interviews;
 create policy "org members access interviews" on public.interviews
   for all using (public.is_project_member(project_id))
   with check (public.is_project_member(project_id));
 
+drop policy if exists "org members access project_models" on public.project_models;
 create policy "org members access project_models" on public.project_models
   for all using (public.is_project_member(project_id))
   with check (public.is_project_member(project_id));
 
+drop policy if exists "org members access generation_jobs" on public.generation_jobs;
 create policy "org members access generation_jobs" on public.generation_jobs
   for all using (public.is_project_member(project_id))
   with check (public.is_project_member(project_id));
 
+drop policy if exists "org members access deliveries" on public.deliveries;
 create policy "org members access deliveries" on public.deliveries
   for all using (public.is_project_member(project_id))
   with check (public.is_project_member(project_id));
 
 -- Artifacts join through their job to the project.
+drop policy if exists "org members access artifacts" on public.artifacts;
 create policy "org members access artifacts" on public.artifacts
   for all using (
     exists (
@@ -200,9 +208,12 @@ grant all on public.organizations        to service_role;
 grant all on public.organization_members to service_role;
 
 -- Write policies for the tenancy tables (read policies exist from #9).
+drop policy if exists "org members write organizations" on public.organizations;
 create policy "org members write organizations" on public.organizations
   for insert to authenticated with check (public.is_org_member(id));
+drop policy if exists "org members update organizations" on public.organizations;
 create policy "org members update organizations" on public.organizations
   for update to authenticated using (public.is_org_member(id));
+drop policy if exists "org members write memberships" on public.organization_members;
 create policy "org members write memberships" on public.organization_members
   for insert to authenticated with check (public.is_org_member(organization_id));

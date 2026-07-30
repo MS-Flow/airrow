@@ -47,6 +47,21 @@ export interface ImportFormState {
 
 const DETAILS_REQUIRED = "A name (min 2 chars) and a description (min 10 chars) are required.";
 
+/**
+ * Two failures the founder did not cause and cannot fix by retrying. Both used to escape as thrown
+ * errors, which Next.js turns into a bare "a server-side exception has occurred" page — so the
+ * founder lost the form they had filled in and learned nothing. Said plainly instead, and kept
+ * distinct: one is a deployment that is missing configuration, the other is a write that failed.
+ */
+const MISCONFIGURED =
+  "Importing is not available on this deployment — it is missing configuration Airrow needs to " +
+  "store your project safely. Nothing was saved. This is on us, not your project: a ZIP would fail " +
+  "the same way, so please report it rather than retrying.";
+
+const NOT_SAVED =
+  "Your project was read, but saving it failed. Nothing was kept. Try again in a moment — if it " +
+  "keeps failing, report it: the reason is in our logs, not in your project.";
+
 interface ImportDetails {
   name: string;
   description: string;
@@ -73,19 +88,39 @@ async function completeImport(
   if (!validated.success) return { error: "The project could not be analysed." };
   const prefill = pruneHiddenAnswers(validated.data as InterviewAnswers);
 
-  const digestVersion = currentDigestVersion();
-  const project = await createProject(orgId, details.name, details.description, slugify);
-  await createImportSource(
-    project.id,
-    details.source,
-    originalName,
-    analysis,
-    digestImported(read.files, digestFor(digestVersion)),
-    digestVersion
-  );
-  await saveInterviewAnswers(project.id, prefill);
+  // A deployment that cannot hash imports safely must refuse to import — but as a state the founder
+  // can read, not as a thrown error. Unhandled, this reached the browser as "a server-side exception
+  // has occurred" plus a digest, which tells the founder nothing and tells us nothing either without
+  // the server log. The reason is logged; the message names the environment, because a founder
+  // cannot fix this one and should not be left retrying a ZIP that will fail the same way.
+  let digestVersion: number;
+  try {
+    digestVersion = currentDigestVersion();
+  } catch (error) {
+    console.error("[import] refusing to import without a digest pepper:", error);
+    return { error: MISCONFIGURED };
+  }
 
-  return { projectId: project.id };
+  // The writes are the other way this used to 500: a migration that is committed but not applied to
+  // the deployed database fails here as a PostgREST error about a column that does not exist, which
+  // is a real thing that happened (issue #77). Same treatment — say that it failed, log why.
+  try {
+    const project = await createProject(orgId, details.name, details.description, slugify);
+    await createImportSource(
+      project.id,
+      details.source,
+      originalName,
+      analysis,
+      digestImported(read.files, digestFor(digestVersion)),
+      digestVersion
+    );
+    await saveInterviewAnswers(project.id, prefill);
+
+    return { projectId: project.id };
+  } catch (error) {
+    console.error("[import] persisting the import failed:", error);
+    return { error: NOT_SAVED };
+  }
 }
 
 export async function importProjectAction(

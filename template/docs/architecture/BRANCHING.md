@@ -20,6 +20,7 @@ Issue branches are named `<nr>-<short>` (issue number + short name), **without**
    git push -u origin feature/<name>
 2. **Take an issue** from the feature:
    git checkout feature/<name> && git pull
+   git merge origin/develop && git push   # only if the feature is behind — `/createspec` does this for you
    git checkout -b <nr>-<short>
 3. **PR** `<nr>-<short>` → `feature/<name>`.
 4. When the feature is done: **PR** `feature/<name>` → `develop`.
@@ -35,4 +36,6 @@ Issue branches are named `<nr>-<short>` (issue number + short name), **without**
 
 ## Keep branches in sync
 - Update your issue against the feature often: `git merge feature/<name>`.
-- Update the feature against develop: `git merge develop`.
+- Update the feature against develop: `git merge develop`. **`/createspec` already does this** — it
+  merges `origin/develop` into `feature/<name>` and pushes it before cutting the issue branch, so a new
+  branch is never born behind. Do it by hand for a feature branch you have had open for a while.
