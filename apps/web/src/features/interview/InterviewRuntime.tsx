@@ -3,6 +3,7 @@
 // Adaptive interview runtime (F-301). One question per screen, schema-driven,
 // conditions evaluated live, answers persisted per change.
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Pencil } from "lucide-react";
 import {
@@ -21,7 +22,7 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
-import { InlineError } from "@/components/ui/states";
+import { InlineError, UpgradeNotice } from "@/components/ui/states";
 import { cn } from "@/lib/utils";
 
 /**
@@ -36,8 +37,13 @@ interface Props {
   regenerating?: boolean;
   /** Called (debounced) on every answer change with the pruned answer set. */
   persist: (answers: InterviewAnswers) => void;
-  /** Final action. Resolve with an error message to show it inline; void means handled. */
-  submit: (answers: InterviewAnswers) => Promise<{ error?: string } | void>;
+  /**
+   * Final action. Resolve with an error message to show it inline; void means handled.
+   *
+   * `upgrade` distinguishes "you have run out" from "something went wrong" (spec 100). They are not
+   * the same event and must not look the same: one is a failure, the other is a price.
+   */
+  submit: (answers: InterviewAnswers) => Promise<{ error?: string; upgrade?: boolean } | void>;
   submitLabel: string;
   pendingLabel: string;
   /** Where the "back" affordance leads out of the interview. */
@@ -79,6 +85,7 @@ export function InterviewRuntime({
     return idx === -1 ? 0 : idx;
   });
   const [error, setError] = useState<string | null>(null);
+  const [upgrade, setUpgrade] = useState(false);
   const [submitting, startSubmit] = useTransition();
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -121,9 +128,11 @@ export function InterviewRuntime({
 
   const submit = () => {
     setError(null);
+    setUpgrade(false);
     startSubmit(async () => {
       const res = await submitAnswers(pruneHiddenAnswers(answers));
       if (res?.error) setError(res.error);
+      if (res?.upgrade) setUpgrade(true);
     });
   };
 
@@ -171,7 +180,23 @@ export function InterviewRuntime({
             Some questions are still unanswered — edit above to finish them.
           </p>
         ) : null}
-        {error ? <InlineError className="mt-4">{error}</InlineError> : null}
+        {/* Running out is not a failure, so it does not borrow the danger tone. The answers are
+            saved either way — the founder loses nothing by following this link (spec 100). */}
+        {upgrade ? (
+          <UpgradeNotice
+            role="status"
+            className="mt-4"
+            action={
+              <Button size="sm" asChild>
+                <Link href="/app/upgrade">See what Pro gives</Link>
+              </Button>
+            }
+          >
+            {error}
+          </UpgradeNotice>
+        ) : error ? (
+          <InlineError className="mt-4">{error}</InlineError>
+        ) : null}
         <div className="mt-6 flex items-center justify-between gap-4">
           {regenerating ? (
             <Button variant="ghost" size="lg" onClick={() => router.push(back.href)} disabled={submitting}>

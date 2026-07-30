@@ -37,6 +37,102 @@ pnpm dlx supabase stop           # tear the local stack down
 - **RLS tests** (`*.rls.test.ts`) run against this local DB and are **skipped automatically** when it
   isn't reachable, so `pnpm -r test` stays green without Docker. Start Supabase to exercise them.
 
+## Stripe / Pro billing (spec 99)
+Airrow runs without any of this: with no Stripe keys the app starts normally, Settings shows Pro as
+unavailable, and nothing throws. You only need it to exercise the paid path.
+
+**1. Product and price, once.** In the [Stripe dashboard](https://dashboard.stripe.com) (test mode),
+create a product with a recurring monthly price. Copy the **price id** (`price_…`), not the amount —
+no figure exists anywhere in this repository, so changing the price is a dashboard edit and never a
+deploy.
+
+**2. Keys into `apps/web/.env.local`:**
+```bash
+STRIPE_SECRET_KEY=sk_test_…        # Developers → API keys. Server-only; never NEXT_PUBLIC_
+STRIPE_PRICE_MONTHLY=price_…       # required to enable the upgrade path at all
+STRIPE_PRICE_YEARLY=price_…        # optional; leave unset to offer monthly only
+STRIPE_WEBHOOK_SECRET=whsec_…      # from step 3 — also required; see below
+```
+
+All three non-optional names must match **exactly**, and so must the values: each is checked for the
+prefix Stripe gives it (`sk_`/`rk_`, `price_`, `whsec_`) and trimmed. A variable that is absent, or set
+to something that does not start with its prefix, makes `stripeConfigured()` false — Settings and
+`/app/upgrade` then show a disabled Upgrade button with the reason on the page, and the server log says
+which variable and which of the two mistakes it is. Both happened for real: `STRIPE_PRICE_MONTLY`
+(no `H`) looked exactly like Pro having never been built, and a price id pasted as `:price_…` reached
+Checkout and came back as `No such price` — a runtime error on the button a founder had just pressed to
+pay. A Stripe call that fails anyway is now reported inline ("nothing has been charged") with the
+detail in the server log, never thrown at the browser.
+
+The webhook secret counts towards "configured" on purpose: charging a card while unable to verify the
+event that grants the plan would take a founder's money and give them nothing.
+
+**3. The webhook, which is the part that actually grants Pro.** A Checkout redirect proves the browser
+reached a URL, not that money moved, so `organizations.plan` is written *only* here.
+
+The Stripe **CLI** is a standalone binary, not the npm `stripe` package — `pnpm dlx stripe` installs
+the SDK and fails with `ERR_PNPM_DLX_NO_BIN`. Install it properly:
+```powershell
+winget install Stripe.StripeCli          # Windows
+# macOS: brew install stripe/stripe-cli/stripe
+```
+Then, in its own terminal:
+```bash
+stripe login                              # opens the browser to pair the CLI with your account
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+# prints "Ready! Your webhook signing secret is whsec_…" — that is STRIPE_WEBHOOK_SECRET
+```
+Leave `stripe listen` running while you test; the secret it prints is stable per machine, so you
+paste it into `.env.local` once. Deployed, register the endpoint under Developers → Webhooks at
+`https://<your-domain>/api/stripe/webhook` and take the signing secret from there — the local and
+deployed secrets are different. A wrong value means every event is rejected, which is correct
+behaviour and looks exactly like nothing happening.
+
+**4. Try it.** `pnpm dev`, sign in, generate a foundation to spend the free one, then hit generate
+again — you land on `/app/upgrade`. Pay with Stripe's test card `4242 4242 4242 4242`, any future
+expiry, any CVC. The plan flips when the webhook lands, not when the browser returns, so a reload may
+be a second behind.
+
+Useful while debugging:
+```bash
+stripe trigger customer.subscription.deleted   # replay a cancellation
+stripe logs tail                               # every API call, as Stripe saw it
+```
+
+- **A failed payment does not downgrade.** Stripe retries a declined card for days and reports
+  `past_due`, which stays Pro. Only `customer.subscription.deleted` ends it.
+- **Cancelling runs to the end of the paid period** (`cancel_at_period_end`), so Settings says "Pro
+  runs until …" rather than cutting off mid-month.
+- Events are recorded in `stripe_events` so a redelivery is a no-op; if applying one fails the row is
+  released, so Stripe's retry is a real second attempt rather than a "duplicate" no-op.
+- To grant yourself Pro without paying, do it the same way admin accounts are granted — SQL, not app
+  code: `update organizations set plan = 'pro' where id = '…';`
+
+### Paid, and still on Free
+Checkout returns to `/app/upgrade/return`, which asks Stripe's API what this customer actually has and
+applies it before Settings renders — so the ordinary case is now correct with or without a webhook, and
+Settings says "Payment confirmed" only when the plan column says so. If it still reports that Stripe
+has nothing active, press **"Already paid? Check again"** first: that is the same reconciliation on
+demand. When even that finds nothing, the payment did not reach the customer we are asking about, or
+the write failed. In order:
+
+1. **Is anything listening?** Locally, `stripe listen --forward-to localhost:3000/api/stripe/webhook`
+   must be running *at the moment you pay* — without it Stripe has nowhere to deliver, and the app
+   never hears that money moved. Its signing secret is not the dashboard endpoint's: put the `whsec_…`
+   it prints into `.env.local` and restart `pnpm dev`, or every delivery is rejected as an invalid
+   signature and looks identical to nothing happening.
+2. **What did Stripe get back?** Dashboard → Developers → Events → the `checkout.session.completed`
+   event shows every delivery attempt and the response. A 400 is the signature, a 503 is
+   `stripeConfigured()`, a 500 is the database.
+3. **Is the schema there?** `applySubscriptionState` writes `organizations.plan`, which arrives with
+   `20260729120000_pro_plan.sql`. Against a database that migration never reached, the webhook fails,
+   releases its `stripe_events` claim, and Stripe retries into the same wall — a paid founder stays
+   on free indefinitely. Locally that means `supabase db reset`; deployed, CI applies migrations on
+   the push to `develop`/`main` (spec 77), so check that workflow run rather than pushing by hand.
+4. **Then replay it.** Fix the cause, make sure the listener is running, and use **Resend** on that
+   event in the dashboard (or `stripe events resend <evt_…>`). The claim was released, so the retry
+   applies for real rather than returning "duplicate".
+
 ## Code organization
 ```
 apps/web/src/

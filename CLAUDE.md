@@ -50,14 +50,14 @@ pnpm workspaces monorepo (pnpm 9, Node ≥20). Run from the repo root:
 Layered, and data flows in one direction:
 
 `app/**` routes (RSC by default) → client components → **Server Actions / Route Handlers** →
-feature `queries.ts` / `actions.ts` → `apps/web/src/lib/data/store.ts` (the DataStore) → Supabase
-(or the local file-backed store). The **generation engine** (`packages/engine`) is a pure, headless
+feature `queries.ts` / `actions.ts` → `apps/web/src/lib/data/store.ts` (the DataStore) → Supabase.
+The **generation engine** (`packages/engine`) is a pure, headless
 `generate(templateFiles, projectModel) → RepoTree + Manifest` — no app imports, no env access. All
 generated output comes from the canonical scaffold in `template/`; the app reads it from disk and
 passes it in.
 
 - External calls happen **only server-side**: Claude API via the engine's authoring provider;
-  Supabase / GitHub App via the DataStore and server actions. Never from client components; never
+  Supabase / GitHub App / Stripe via the DataStore and server actions. Never from client components; never
   from `packages/engine` or `packages/schemas` directly.
 - Pure logic lives in `packages/engine` and `packages/schemas`; they must never import from `apps/*`
   and never read `process.env`.
@@ -81,3 +81,10 @@ passes it in.
   `/cleanup` in its place (spec 91): it reads the existing codebase and rewrites the foundation's
   documents to match, changes no code and deletes nothing. Exactly one of the two ships, decided by
   the project's origin. ZIP delivery must always work with no integration connected.
+- **Plans:** an organization carries a `plan` (`free` | `pro`). Free is one foundation plus two free
+  regenerations within 24h; Pro is unlimited and adds importing an existing project. `checkAllowance`
+  is the only place that decides, always server-side from Postgres. **`organizations.plan` is written
+  only from something Stripe told us**: the webhook (`api/stripe/webhook`) and the direct API read in
+  `features/billing/sync.ts`, both through `applySubscriptionState`. A Checkout redirect still proves
+  nothing and grants nothing — spec 100 amended spec 99's "webhook only" to name the second path,
+  because a founder whose webhook never arrives must not be stuck paying for free. Specs 74, 99, 100.

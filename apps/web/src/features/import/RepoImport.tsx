@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { InlineError } from "@/components/ui/states";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { importRepoAction, type ImportFormState } from "./actions";
+import { ProPreview } from "./ProPreview";
 
 export function RepoImport({ repos }: { repos: GitHubRepo[] }) {
   const [selected, setSelected] = useState<GitHubRepo | null>(null);
@@ -76,13 +77,30 @@ function RepoDetails({ repo, onBack }: { repo: GitHubRepo; onBack: () => void })
     if (state.projectId !== undefined) router.push(`/app/projects/${state.projectId}/interview`);
   }, [state.projectId, router]);
 
+  // The analysis ran and produced a real result; only keeping it needs Pro (spec 74). The back
+  // button stays, because "look at another repository" is still a reasonable next move.
+  const back = (
+    <Button variant="ghost" size="sm" className="-ml-2 mb-4" onClick={onBack}>
+      <ArrowLeft className="size-4" />
+      All repositories
+    </Button>
+  );
+
+  if (state.requiresPro && state.preview) {
+    return (
+      <Card>
+        <CardBody className="p-6">
+          {back}
+          <ProPreview preview={state.preview} />
+        </CardBody>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardBody className="p-6">
-        <Button variant="ghost" size="sm" className="-ml-2 mb-4" onClick={onBack}>
-          <ArrowLeft className="size-4" />
-          All repositories
-        </Button>
+        {back}
 
         <form action={action} className="space-y-5">
           {state.error ? <InlineError>{state.error}</InlineError> : null}

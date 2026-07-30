@@ -91,7 +91,7 @@ export function requireCredentials(env) {
   const missing = REQUIRED_CREDENTIALS.filter((name) => !env[name]);
   if (missing.length > 0) {
     throw new MissingCredentialsError(
-      `Saknar ${missing.join(", ")}. Se docs/guides/INFRASTRUCTURE_SETUP.md § 6.`
+      `Saknar ${missing.join(", ")}. Se docs/guides/INFRASTRUCTURE_SETUP.md § 7 (Auth email).`
     );
   }
 

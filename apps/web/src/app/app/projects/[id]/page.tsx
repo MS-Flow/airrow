@@ -21,8 +21,10 @@ import { ComingSoon } from "@/components/ui/states";
 import { DeleteProjectDialog } from "@/features/projects/DeleteProjectDialog";
 import { STATUS_META } from "@/features/projects/ProjectCard";
 import { deleteProjectAction } from "@/features/projects/actions";
+import { diffGenerations } from "@airrow/engine";
+import { RevisionDiff } from "@/features/preview/RevisionDiff";
 import { requireSession } from "@/lib/auth";
-import { getProject, latestJob, loadArtifact } from "@/lib/data/store";
+import { getProject, latestJob, loadArtifact, previousCompletedJob } from "@/lib/data/store";
 import { timeAgo } from "@/lib/utils";
 
 export const metadata = { title: "Project" };
@@ -43,6 +45,17 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
 
   const job = await latestJob(id);
   const artifact = job && job.status === "completed" ? await loadArtifact(job.id) : null;
+
+  // What the last regeneration moved (spec 100). Loaded here rather than in the preview because the
+  // preview is a full-height file browser and this is the screen a founder lands on — and it is
+  // still before the download, which is the point where anything reaches their machine (§0).
+  const previous = job && artifact ? await previousCompletedJob(id, job.id) : null;
+  const previousArtifact = previous ? await loadArtifact(previous.id) : null;
+  const revision =
+    artifact && previousArtifact
+      ? diffGenerations(previousArtifact.files, artifact.files)
+      : null;
+
   const meta = STATUS_META[project.status];
   const ready = project.status === "ready";
   // The interview is behind them, so there are answers to change. Mid-interview the primary button
@@ -126,6 +139,8 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
           ) : null}
         </CardBody>
       </Card>
+
+      {revision ? <RevisionDiff diff={revision} projectId={id} /> : null}
 
       {ready ? (
         <>

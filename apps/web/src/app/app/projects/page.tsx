@@ -5,14 +5,17 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/states";
 import { ProjectActions } from "@/features/projects/ProjectActions";
 import { ProjectRow } from "@/features/projects/ProjectCard";
+import { AllowanceNotice } from "@/features/generation/AllowanceNotice";
+import { checkAllowance } from "@/features/generation/allowance";
 import { requireSession } from "@/lib/auth";
 import { listProjects } from "@/lib/data/store";
 
 export const metadata = { title: "Projects" };
 
 export default async function ProjectsPage() {
-  const { org } = await requireSession();
+  const { user, org } = await requireSession();
   const projects = await listProjects(org.id);
+  const allowance = await checkAllowance({ orgId: org.id, plan: org.plan, userId: user.id });
 
   return (
     <PageContainer>
@@ -25,6 +28,8 @@ export default async function ProjectsPage() {
         </div>
         <ProjectActions />
       </div>
+
+      <AllowanceNotice allowance={allowance} className="mt-4 text-sm" />
 
       {projects.length === 0 ? (
         <EmptyState

@@ -109,7 +109,7 @@ _What "done" means. Every line is something a reviewer can check._
       secrets from the environment, sends the Resend key only in the request body, and `--dry-run`
       redacts it so the output can be pasted anywhere.
 - [x] [docs/guides/INFRASTRUCTURE_SETUP.md](../docs/guides/INFRASTRUCTURE_SETUP.md) documents the setup in
-      the same change (constitution §IV), separating the dashboard steps from what is versioned. New §6
+      the same change (constitution §IV), separating the dashboard steps from what is versioned. New §7
       _Auth email (Resend)_ carries the six setup steps and says plainly that the dashboard template is
       derived; the *Email confirmation* note now points at it instead of standing alone.
 - [x] Local development is unaffected: `enable_confirmations = false` and the local inbox still apply to
@@ -155,7 +155,7 @@ _How each criterion above is proven._
    [supabase/config.toml](../supabase/config.toml). `[auth.email.smtp]` is documented there but
    commented out — see the correction below.
 6. [scripts/sync-supabase-auth.mjs](../scripts/sync-supabase-auth.mjs) (new) + its test.
-7. `docs/guides/INFRASTRUCTURE_SETUP.md` §6 and `apps/web/.env.example`.
+7. `docs/guides/INFRASTRUCTURE_SETUP.md` §7 and `apps/web/.env.example`.
 8. [apps/web/vercel.json](../apps/web/vercel.json) — the `noindex` host rule, plus the runbook lines that
    named the wrong dev hostname. Outside the original scope; see the note below for why it is here.
 
@@ -194,7 +194,7 @@ Two safety properties that are tested rather than assumed:
   a second test fails if it can no longer find that list, so the check cannot pass by failing to look.
 
 **Still outside a diff, and unprovable here:** creating the Resend account, adding `airrow.app` to it, and
-publishing the DKIM records. §6 of the runbook is the checklist. Until they are done the app still signs
+publishing the DKIM records. §7 of the runbook is the checklist. Until they are done the app still signs
 founders up — mail simply keeps coming from Supabase, exactly as before, so nothing regresses meanwhile.
 
 **No open dependency on the dev hostname.** The dev environment is `airrow-dev.vercel.app` (verified
@@ -243,7 +243,7 @@ configures the **local** stack, where enabling SMTP overrides `[local_smtp]` —
 54324 — so a developer with no `RESEND_API_KEY` would get failed sends instead of a local inbox, and one
 with a key would mail real people from their laptop. Exactly the opposite of the criterion it was meant
 to satisfy. The block is now commented out with the reason, the hosted project is configured through the
-dashboard as it always was, and `.env.example` and §6 say the same thing.
+dashboard as it always was, and `.env.example` and §7 say the same thing.
 
 Worth naming how this was missed: Docker was unavailable, so `supabase start` could never have caught it,
 and nothing in the test suite reaches the local stack's mail configuration. It was found by reading the

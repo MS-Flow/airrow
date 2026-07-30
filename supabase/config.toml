@@ -248,7 +248,7 @@ otp_expiry = 3600
 # mails an hour. Plain SMTP, so no integration code: the API key is the password.
 #
 # Left commented on purpose. This file governs the **local** stack only — the hosted project takes
-# these values through its dashboard SMTP fields (INFRASTRUCTURE_SETUP.md §6). Enabling it here would
+# these values through its dashboard SMTP fields (INFRASTRUCTURE_SETUP.md §7). Enabling it here would
 # override `[local_smtp]` above and point local mail at Resend, so a developer with no
 # RESEND_API_KEY gets failed sends instead of the local inbox, and a developer with one mails real
 # people from their laptop. Uncomment deliberately, and only to test real delivery.

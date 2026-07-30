@@ -32,6 +32,11 @@ Day-to-day local database work lives in [`DEVELOPER_GUIDE.md`](./DEVELOPER_GUIDE
    - If `supabase link` fails with `Your account does not have the necessary privileges`, the CLI
      is authenticated as an account that cannot see the project. Log out, log back in with the
      Supabase owner/admin account, or ask the project owner to grant access, then rerun the link.
+   - The failure this bootstrap prevents, for anyone who meets it on a project CI does not cover
+     yet: a deployment running ahead of its database fails on the column it cannot see.
+     `column generation_jobs.reused_authoring does not exist` was a 500 on the interview screen for
+     exactly that reason, and no amount of redeploying fixes it. `supabase migration list` compares
+     local to cloud and is the fastest way to see the gap.
 4. Verify RLS in the dashboard: **Table Editor** shows `organizations` and `organization_members`;
    **Authentication → Policies** shows each has RLS **enabled** with the read policies from the
    migration. (This is the proof-of-concept schema; the full product schema is a separate issue.)
@@ -179,7 +184,58 @@ the same push, but it only touches the database schema; it cannot gate the deplo
 
 ---
 
-## 6. Auth email (Resend)
+## 6. Taking Pro live (specs 99, 100)
+
+Test mode and live mode are two separate Stripe accounts wearing one dashboard. Nothing carries over:
+not the product, not the price id, not the keys, not the webhook endpoint or its signing secret. Every
+value below has a live twin that has to be created and pasted once.
+
+**Before the first real card:**
+
+1. **Schema.** Confirm `supabase migration list` shows nothing pending — the merge to `main` should
+   already have applied it (see [_Migrations after the bootstrap_](#migrations-after-the-bootstrap)),
+   and this is the check that it did. `organizations.plan` and the `subscriptions` / `stripe_events`
+   tables all arrive in migrations, and a production database behind them cannot grant Pro to
+   anyone: the failure looks like a payment that vanished.
+2. **Product and price, in live mode.** Recreate the monthly product and copy the live `price_…`.
+   Optional yearly likewise. No amount lives in this repository, so the figure is only ever right in
+   one place.
+3. **Keys, in Vercel → Production.** `STRIPE_SECRET_KEY` (`sk_live_…`), `STRIPE_PRICE_MONTHLY`,
+   `STRIPE_WEBHOOK_SECRET`. Names and values are both checked at runtime (prefix + trim) — get one
+   wrong and the deploy shows a disabled Upgrade button with the reason on the page and the variable
+   named in the log, rather than a broken checkout.
+4. **Webhook endpoint, live mode.** Developers → Webhooks → Add endpoint →
+   `https://airrow.app/api/stripe/webhook`, subscribed to `checkout.session.completed`,
+   `customer.subscription.created`, `customer.subscription.updated`,
+   `customer.subscription.deleted`. Its signing secret is the `STRIPE_WEBHOOK_SECRET` above — the
+   test-mode one will reject every live delivery, which looks exactly like nothing happening.
+5. **Business settings Stripe requires of you, not of the code:** company details and statement
+   descriptor, a support email or URL on the receipt, and the customer portal enabled with
+   cancellation on (Settings → Billing → Customer portal) — `Manage billing` opens it and a portal
+   that is not configured 400s.
+6. **VAT / Tax.** Selling a subscription from Sweden to consumers means VAT, and Airrow does not
+   compute it: Checkout is created without `automatic_tax`. Either enable **Stripe Tax** and add
+   `automatic_tax: { enabled: true }` (plus address collection) in `startCheckoutAction`, or price
+   inclusive and account for it yourself. This is a decision to make deliberately before launch, not
+   a default to inherit.
+7. **Terms and refunds.** `/terms` and `/privacy` exist; make sure they say what the subscription is,
+   when it renews and how to cancel, because the portal is where people will look for it.
+
+**Then prove it with one real payment**, and use a real card rather than a test one — live mode has no
+`4242…`. Buy Pro, land back on `/app/upgrade/return`, and confirm Settings says "Payment confirmed"
+immediately. That screen is now reconciled against Stripe's API on arrival, so it is honest even if the
+webhook is slow or misconfigured — but check the webhook delivered anyway (Developers → Events, a 200),
+because it is what carries renewals and cancellations later. Then cancel from the portal and confirm
+the plan returns to free at period end. Refund yourself from the dashboard afterwards.
+
+If a payment ever lands without the plan following, the founder-facing repair is on Settings —
+**"Already paid? Check again"** re-reads the subscription from Stripe — and the developer-facing
+diagnosis is the "Paid, and still on Free" runbook in
+[`DEVELOPER_GUIDE.md`](./DEVELOPER_GUIDE.md#paid-and-still-on-free).
+
+---
+
+## 7. Auth email (Resend)
 
 Without this, Supabase sends the verification email from its own domain with its own wording — and its
 built-in mailer is rate-limited to a couple of messages an hour, so mail starts disappearing under any
@@ -275,4 +331,4 @@ developer machine. Enabling it is a deliberate act, and the point at which that 
   creates the account but no session — the UI sends you to "Confirm your email" instead of the
   dashboard. `supabase/config.toml` (`enable_confirmations = false`) only governs a **local** stack.
   Turn it off for the dev project under _Authentication → Sign In / Providers → Email_ if you want
-  signup to log you straight in. Who that email comes from, and what it says, is §6 below.
+  signup to log you straight in. Who that email comes from, and what it says, is §7 below.

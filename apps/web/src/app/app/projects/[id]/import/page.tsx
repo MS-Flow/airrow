@@ -19,6 +19,7 @@ import {
   loadArtifact
 } from "@/lib/data/store";
 import { digestFor } from "@/features/import/digest";
+import { AnalysisEvidence, AnalysisNotes } from "@/features/import/AnalysisEvidence";
 import { ConflictRow } from "@/features/import/ConflictRow";
 
 export const metadata = { title: "Import review" };
@@ -48,37 +49,11 @@ export default async function ImportReview({ params }: { params: Promise<{ id: s
           <CardTitle>What Airrow could work out</CardTitle>
         </CardHeader>
         <CardBody className="p-0">
-          {source.analysis.evidence.length === 0 ? (
-            <p className="px-5 py-4 text-sm text-fg-muted">
-              Nothing could be derived from this project, so the interview asks everything.
-            </p>
-          ) : (
-            <ul>
-              {source.analysis.evidence.map((e) => (
-                <li
-                  key={`${e.field}:${e.value}`}
-                  className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-3 last:border-b-0"
-                >
-                  <span className="text-sm text-fg">
-                    <span className="text-fg-faint">{e.field}</span> — {e.value}
-                  </span>
-                  <span className="font-mono text-2xs text-fg-faint">{e.source}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <AnalysisEvidence evidence={source.analysis.evidence} />
         </CardBody>
       </Card>
 
-      {source.analysis.notes.length > 0 ? (
-        <ul className="mt-4 space-y-2">
-          {source.analysis.notes.map((note) => (
-            <li key={note} className="rounded-md border border-border bg-bg-subtle px-4 py-3 text-sm text-fg-muted">
-              {note}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <AnalysisNotes notes={source.analysis.notes} />
 
       {artifact && job ? (
         <ImportDiffSection
