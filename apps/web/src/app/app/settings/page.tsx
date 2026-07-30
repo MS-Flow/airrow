@@ -1,6 +1,8 @@
-// Settings: profile, theme, workspace, and every connection we don't have yet.
+// Settings: profile, theme, workspace, and every connection — the ones that exist and the ones that
+// don't yet.
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Github } from "lucide-react";
+import { Github, ShieldCheck } from "lucide-react";
 import { profileUpdateSchema } from "@airrow/schemas";
 import { PageContainer } from "@/components/shell/page-container";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ComingSoon } from "@/components/ui/states";
 import { ThemeToggle } from "@/features/settings/ThemeToggle";
-import { requireSession, updateName } from "@/lib/auth";
+import { signInWithGitHubAction } from "@/features/auth/actions";
+import { FREE_GENERATION_LIMIT, checkAllowance } from "@/features/generation/allowance";
+import { githubIdentity, requireSession, updateName } from "@/lib/auth";
 import { readTheme } from "@/lib/theme";
 
 async function updateProfileAction(formData: FormData) {
@@ -31,6 +35,8 @@ export default async function SettingsPage({
   const { saved } = await searchParams;
   const { user, org } = await requireSession();
   const theme = await readTheme();
+  const allowance = await checkAllowance(org.id, user.id);
+  const github = await githubIdentity();
   const githubConfigured = Boolean(process.env.GITHUB_APP_ID && process.env.GITHUB_APP_PRIVATE_KEY);
 
   return (
@@ -40,7 +46,15 @@ export default async function SettingsPage({
 
       <Card className="mt-8">
         <CardHeader>
-          <CardTitle>Profile</CardTitle>
+          <CardTitle className="flex items-center gap-2.5">
+            Profile
+            {allowance.unlimited ? (
+              <Badge tone="accent" className="inline-flex items-center gap-1">
+                <ShieldCheck className="size-3.5" />
+                Admin
+              </Badge>
+            ) : null}
+          </CardTitle>
         </CardHeader>
         <CardBody>
           {saved ? <p className="mb-4 text-sm text-success">Saved.</p> : null}
@@ -60,6 +74,33 @@ export default async function SettingsPage({
               Save changes
             </Button>
           </form>
+        </CardBody>
+      </Card>
+
+      {/* What is left, in the one place a founder looks when they wonder. Shown to everyone rather
+          than only on the way out: a limit discovered at the moment it stops you reads as a trap. */}
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Plan</CardTitle>
+        </CardHeader>
+        <CardBody>
+          {allowance.unlimited ? (
+            <p className="text-sm text-fg-muted">
+              <span className="font-medium text-fg">Admin</span> · unlimited generations.{" "}
+              {allowance.used} used so far.
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-fg-muted">
+                <span className="font-medium text-fg">Free</span> · {allowance.remaining} of{" "}
+                {FREE_GENERATION_LIMIT} generations left.
+              </p>
+              <p className="mt-1.5 text-xs text-fg-faint">
+                Deleting a project doesn&apos;t return a generation — each one is authored the moment
+                you start it. Pro lifts the limit, coming soon.
+              </p>
+            </>
+          )}
         </CardBody>
       </Card>
 
@@ -83,20 +124,71 @@ export default async function SettingsPage({
         </CardBody>
       </Card>
 
+      {/* Two GitHub connections, and they are not the same thing (spec 67). This one is the
+          founder's own account: it signs them in and reads their public repositories. The App
+          below writes, and does not exist yet. Showing them as one control made a founder who had
+          just signed in with GitHub read "Not connected" about themselves. */}
       <Card className="mt-4">
         <CardHeader>
           <CardTitle className="flex items-center gap-2.5">
             <Github className="size-4 text-fg-muted" />
-            GitHub
+            GitHub account
+            <Badge tone={github ? "success" : "neutral"}>
+              {github ? "Connected" : "Not connected"}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardBody className="flex flex-wrap items-start justify-between gap-4">
+          {github ? (
+            <>
+              <p className="max-w-md text-sm leading-relaxed text-fg-muted">
+                Signed in as{" "}
+                <span className="font-medium text-fg">
+                  {github.login ? `@${github.login}` : user.email}
+                </span>
+                . Airrow reads your <strong className="font-medium text-fg">public</strong>{" "}
+                repositories with this identity and asks GitHub for no repository permissions at all,
+                so a private project stays invisible to it.
+              </p>
+              <Button variant="secondary" size="sm" asChild>
+                <Link href="/app/projects/import">Import a repository</Link>
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="max-w-md text-sm leading-relaxed text-fg-muted">
+                Connect GitHub to import a public repository without packing a ZIP. Airrow asks for no
+                repository permissions, so it sees exactly what a signed-out visitor sees. If your
+                GitHub address is the same as this account&rsquo;s, you land back in this workspace —
+                a different address signs you into that account instead.
+              </p>
+              <form action={signInWithGitHubAction}>
+                <Button type="submit" variant="secondary" size="sm">
+                  <Github className="size-4" />
+                  Sign in with GitHub
+                </Button>
+              </form>
+            </>
+          )}
+        </CardBody>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2.5">
+            <Github className="size-4 text-fg-muted" />
+            GitHub App — repository delivery
             <Badge tone={githubConfigured ? "success" : "neutral"}>
-              {githubConfigured ? "Configured" : "Not connected"}
+              {githubConfigured ? "Configured" : "Not set up"}
             </Badge>
           </CardTitle>
         </CardHeader>
         <CardBody className="flex flex-wrap items-start justify-between gap-4">
           <p className="max-w-md text-sm leading-relaxed text-fg-muted">
-            One-click &quot;create repository and push&quot; for generated foundations. Requires a
-            GitHub App and <code className="font-mono text-xs">GITHUB_APP_ID</code>,{" "}
+            One-click &quot;create repository and push&quot; for generated foundations, and the only
+            way into a <strong className="font-medium text-fg">private</strong> repository. Writing
+            anywhere needs a GitHub App — your sign-in above deliberately cannot. Requires{" "}
+            <code className="font-mono text-xs">GITHUB_APP_ID</code>,{" "}
             <code className="font-mono text-xs">GITHUB_APP_PRIVATE_KEY</code> and{" "}
             <code className="font-mono text-xs">GITHUB_APP_SLUG</code> in{" "}
             <code className="font-mono text-xs">apps/web/.env.local</code>. Until then, ZIP download
@@ -125,8 +217,8 @@ export default async function SettingsPage({
           description="Invite your team, share projects and set roles beyond your personal workspace."
         />
         <ComingSoon
-          title="Billing"
-          description="Plans, invoices and payment method, once pricing is set."
+          title="Pro"
+          description="Unlimited generations, push straight to GitHub, and regeneration as your product changes."
         />
         <ComingSoon
           title="API keys"

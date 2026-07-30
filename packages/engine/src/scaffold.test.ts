@@ -119,6 +119,19 @@ describe("renderScaffold", () => {
     expect(c).toContain("co-located");
   });
 
+  it("makes /createspec sync develop into the feature branch before cutting the issue branch", () => {
+    // Spec 104: an issue branch cut from a feature branch that is behind `develop` is born stale, and
+    // the drift only surfaces as conflicts in its PR. The sync belongs to the generated command, not
+    // to a habit the founder has to remember.
+    const cmd = byPath.get(".claude/commands/createspec.md") ?? "";
+    expect(cmd).toContain("git fetch origin develop");
+    expect(cmd).toContain("git merge origin/develop");
+    expect(cmd).toContain("git log feature/<name>..origin/develop --oneline");
+    // Direction is the constitution's, and a failed sync must never fall through to branch creation.
+    expect(cmd).toContain("never straight into an issue branch");
+    expect(cmd).toContain("blocking, not best-effort");
+  });
+
   it("returns a preview plan for founder approval before anything is written", () => {
     expect(plan.projectName).toBe("Loop CRM");
     expect(plan.fileCount).toBe(files.length);
@@ -239,8 +252,18 @@ describe("every interview answer reaches the output", () => {
   it("hosting names the deploy target instead of assuming Vercel", () => {
     const { byPath, files } = render({ hosting: "azure" });
     expect(byPath.get("README.md")).toContain("Azure");
-    expect(byPath.get(".github/workflows/deploy-dev.yml")).toContain("Deploy to Azure (DEV)");
+    // Azure is wired, not warned about: real deploy steps, guarded on the credential the way the
+    // Vercel path is. Only self-hosting is genuinely unknowable.
+    const deploy = byPath.get(".github/workflows/deploy-dev.yml") ?? "";
+    expect(deploy).toContain("Deploy to Azure App Service (DEV)");
+    expect(deploy).toContain("azure/webapps-deploy");
+    expect(deploy).not.toContain("No deploy steps wired");
     expect(allText(files)).not.toContain("Vercel");
+  });
+
+  it("still admits it cannot wire a deploy to the founder's own server", () => {
+    const deploy = render({ hosting: "self_host" }).byPath.get(".github/workflows/deploy-dev.yml") ?? "";
+    expect(deploy).toContain("No deploy steps wired");
   });
 
   it("database drives the setup steps", () => {
@@ -301,25 +324,26 @@ describe("the generated stack is stated consistently", () => {
   it("uses the package manager the chosen framework actually ships with", () => {
     const next = render({ framework: "nextjs" });
     expect(next.byPath.get("README.md")).toContain("pnpm dev");
-    expect(next.byPath.get("START_HERE.md")).toContain("pnpm install");
+    // Installing is `/start`'s job since spec 66 — START_HERE.md points at it rather than repeating it.
+    expect(next.byPath.get(".claude/commands/start.md")).toContain("pnpm install");
     expect(next.byPath.get(".github/workflows/ci.yml")).toContain("pnpm/action-setup");
 
     const vite = render({ framework: "vite" });
-    const start = vite.byPath.get("START_HERE.md") ?? "";
     expect(vite.byPath.get("README.md")).toContain("npm run dev");
-    expect(start).toContain("npm install");
-    expect(start).not.toContain("pnpm");
+    expect(vite.byPath.get(".claude/commands/start.md")).toContain("npm install");
     // CI, the deploy workflow and every command must agree — no pnpm left anywhere.
     expect(allText(vite.files)).not.toContain("pnpm");
     expect(vite.byPath.get(".github/workflows/ci.yml")).toContain("npm ci");
     expect(vite.byPath.get(".github/workflows/deploy-dev.yml")).toContain("npx vercel@latest");
   });
 
-  it("gives ordered next steps from setup to the implement loop", () => {
+  it("gives ordered next steps from /start to the implement loop", () => {
     const { byPath } = render();
     const start = byPath.get("START_HERE.md") ?? "";
-    for (const step of ["Install dependencies", "/createspec", "/clarify", "/implement", "/analyze", "/pr-check"]) {
+    for (const step of ["/start", "/createspec", "/clarify", "/implement", "/analyze", "/pr-check"]) {
       expect(start, `START_HERE.md is missing "${step}"`).toContain(step);
     }
+    // The first step has to be the one that makes the others runnable.
+    expect(start.indexOf("/start")).toBeLessThan(start.indexOf("/createspec"));
   });
 });

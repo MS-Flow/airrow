@@ -7,12 +7,15 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Pencil } from "lucide-react";
 import {
   firstUnanswered,
+  isRecommendedOption,
   pruneHiddenAnswers,
   visibleQuestions,
+  withSuggestions,
   type InterviewAnswers,
   type Question
 } from "@airrow/schemas";
 import { PageContainer } from "@/components/shell/page-container";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
@@ -62,14 +65,17 @@ export function InterviewRuntime({
   back
 }: Props) {
   const router = useRouter();
-  const [answers, setAnswers] = useState<InterviewAnswers>(initialAnswers);
+  // A resumed interview is seeded the same way a live one is, so where the founder left off is
+  // measured against the answers they will actually see.
+  const seeded = useMemo(() => withSuggestions(initialAnswers), [initialAnswers]);
+  const [answers, setAnswers] = useState<InterviewAnswers>(seeded);
   const [mode, setMode] = useState<"questions" | "review">(() =>
-    firstUnanswered(initialAnswers) === null ? "review" : "questions"
+    firstUnanswered(seeded) === null ? "review" : "questions"
   );
   const [cursor, setCursor] = useState<number>(() => {
-    const open = firstUnanswered(initialAnswers);
+    const open = firstUnanswered(seeded);
     if (!open) return 0;
-    const idx = visibleQuestions(initialAnswers).findIndex((q) => q.id === open.id);
+    const idx = visibleQuestions(seeded).findIndex((q) => q.id === open.id);
     return idx === -1 ? 0 : idx;
   });
   const [error, setError] = useState<string | null>(null);
@@ -93,7 +99,9 @@ export function InterviewRuntime({
   const setAnswer = useCallback(
     (id: Question["id"], value: unknown) => {
       setAnswers((prev) => {
-        const next = { ...prev, [id]: value } as InterviewAnswers;
+        // Suggestions are re-applied on every change, not once: one answer can suggest another, and
+        // an earlier answer is editable from the review screen long after it was first given.
+        const next = withSuggestions({ ...prev, [id]: value } as InterviewAnswers);
         persist(next);
         return next;
       });
@@ -228,7 +236,15 @@ export function InterviewRuntime({
                       : "border-border bg-surface hover:border-border-strong hover:shadow-e2"
                   )}
                 >
-                  <span className="block text-base font-medium text-fg">{o.label}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-base font-medium text-fg">{o.label}</span>
+                    {/* Which option is recommended can depend on an earlier answer — a mobile app
+                        and a SaaS are pointed at different stacks — so it is rendered here rather
+                        than written into the label. */}
+                    {isRecommendedOption(current, o, answers) ? (
+                      <Badge tone="accent">Recommended</Badge>
+                    ) : null}
+                  </span>
                   {o.description ? (
                     <span className="mt-0.5 block text-sm leading-snug text-fg-muted">
                       {o.description}
@@ -299,7 +315,9 @@ export function InterviewRuntime({
               autoFocus
               value={typeof value === "string" ? value : ""}
               placeholder={current.placeholder}
-              maxLength={2000}
+              // The question carries its own ceiling; the same number backs the Zod schema, so the
+              // field can't accept something the save would silently reject.
+              maxLength={current.maxChars}
               onChange={(e) => setAnswer(current.id, e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -308,8 +326,9 @@ export function InterviewRuntime({
                 }
               }}
             />
-            <div className="mt-5 flex items-center justify-between">
-              <span className="font-mono text-2xs text-fg-faint">⌘↵ to continue</span>
+            <div className="mt-5 flex items-center justify-between max-sm:justify-end">
+              {/* Hidden on a phone: it points at a keyboard shortcut there is no keyboard for. */}
+              <span className="font-mono text-2xs text-fg-faint max-sm:hidden">⌘↵ to continue</span>
               <Button onClick={advance} disabled={typeof value !== "string" || !value.trim()}>
                 Continue
               </Button>

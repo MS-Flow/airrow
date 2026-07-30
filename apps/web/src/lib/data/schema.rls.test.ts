@@ -29,6 +29,16 @@ const DELIVERY_A = "00000000-0000-0000-0000-0000000000a7";
 const DELIVERY_B = "00000000-0000-0000-0000-0000000000b7";
 const REPO_A = "00000000-0000-0000-0000-0000000000a8";
 const REPO_B = "00000000-0000-0000-0000-0000000000b8";
+const IMPORT_A = "00000000-0000-0000-0000-0000000000a9";
+const IMPORT_B = "00000000-0000-0000-0000-0000000000b9";
+const IMPORT_FILE_A = "00000000-0000-0000-0000-0000000000ca";
+const IMPORT_FILE_B = "00000000-0000-0000-0000-0000000000cb";
+const CONFLICT_A = "00000000-0000-0000-0000-0000000000cc";
+const CONFLICT_B = "00000000-0000-0000-0000-0000000000cd";
+// `ce`/`cf` rather than the `a9`/`b9` develop gave these: the import fixtures above already
+// hold those, and two tables seeded with one id would make the denial assertions lie.
+const USAGE_A = "00000000-0000-0000-0000-0000000000ce";
+const USAGE_B = "00000000-0000-0000-0000-0000000000cf";
 
 async function reachable(): Promise<boolean> {
   const probe = new Client({ connectionString: DB_URL, connectionTimeoutMillis: 1500 });
@@ -58,7 +68,13 @@ const cases: Case[] = [
   { name: "generation_jobs", table: "generation_jobs", idA: JOB_A, idB: JOB_B },
   { name: "artifacts", table: "artifacts", idA: ARTIFACT_A, idB: ARTIFACT_B },
   { name: "deliveries", table: "deliveries", idA: DELIVERY_A, idB: DELIVERY_B },
-  { name: "repo_connections", table: "repo_connections", idA: REPO_A, idB: REPO_B }
+  { name: "repo_connections", table: "repo_connections", idA: REPO_A, idB: REPO_B },
+  { name: "import_sources", table: "import_sources", idA: IMPORT_A, idB: IMPORT_B },
+  { name: "import_files", table: "import_files", idA: IMPORT_FILE_A, idB: IMPORT_FILE_B },
+  { name: "import_conflicts", table: "import_conflicts", idA: CONFLICT_A, idB: CONFLICT_B },
+  // The allowance ledger. It outlives the projects it refers to, so it is the one org-scoped table
+  // whose rows can carry a null project_id — all the more reason its own policy has to hold.
+  { name: "generation_usage", table: "generation_usage", idA: USAGE_A, idB: USAGE_B }
   // `profiles` RLS is covered by auth.trigger.test.ts, which creates a real auth user
   // (profiles.id is FK'd to auth.users as of #18, so synthetic ids can't be seeded here).
 ];
@@ -94,6 +110,20 @@ describe.skipIf(!dbUp)("full schema RLS (local Supabase)", () => {
     await db.query(
       "insert into public.repo_connections (id, organization_id, provider, installation_id) values ($1,$2,'github','i1'),($3,$4,'github','i2')",
       [REPO_A, ORG_A, REPO_B, ORG_B]);
+    await db.query(
+      "insert into public.import_sources (id, project_id, kind) values ($1,$2,'zip'),($3,$4,'zip')",
+      [IMPORT_A, PROJECT_A, IMPORT_B, PROJECT_B]);
+    await db.query(
+      "insert into public.import_files (id, import_source_id, path, bytes, digest) values ($1,$2,'README.md',10,'d1'),($3,$4,'README.md',10,'d2')",
+      [IMPORT_FILE_A, IMPORT_A, IMPORT_FILE_B, IMPORT_B]);
+    await db.query(
+      "insert into public.import_conflicts (id, import_source_id, generation_job_id, path, resolution) values ($1,$2,$3,'README.md','keep_existing'),($4,$5,$6,'README.md','keep_existing')",
+      [CONFLICT_A, IMPORT_A, JOB_A, CONFLICT_B, IMPORT_B, JOB_B]);
+    // The generation_jobs insert above already fired the usage trigger; these are the rows with
+    // known ids that the per-table assertions select on.
+    await db.query(
+      "insert into public.generation_usage (id, organization_id, project_id) values ($1,$2,$3),($4,$5,$6)",
+      [USAGE_A, ORG_A, PROJECT_A, USAGE_B, ORG_B, PROJECT_B]);
   });
 
   afterAll(async () => {

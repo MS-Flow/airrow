@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
-import { ArrowRight, Download, Undo2 } from "lucide-react";
+import { ArrowRight, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DownloadProject } from "@/features/import/DownloadProject";
 import { LoadingState } from "@/components/ui/states";
 import { requireSession } from "@/lib/auth";
 import { getProject, latestJob, loadArtifact } from "@/lib/data/store";
 import { PreviewBrowser } from "@/features/preview/PreviewBrowser";
 import { highlight } from "@/features/preview/highlight";
+import { loadPreviewFiles } from "@/features/preview/project-files";
 
 export const metadata = { title: "Preview" };
 
@@ -29,9 +31,11 @@ export default async function PreviewPage({
 
   const job = await latestJob(id);
   const artifact = job && job.status === "completed" ? await loadArtifact(job.id) : null;
-  if (!artifact) redirect(`/app/projects/${id}`);
+  if (!job || !artifact) redirect(`/app/projects/${id}`);
 
   const files = artifact.files.map((f) => ({ path: f.path, content: f.content }));
+  // The founder's own paths join the tree here — structure only, never their content (spec 75).
+  const { entries, yoursCount } = await loadPreviewFiles(id, job.id, artifact.files);
   const activePath = file && files.some((f) => f.path === file) ? file : "README.md";
   const active = files.find((f) => f.path === activePath);
   // Markdown is rendered (and sanitized) client-side; code is highlighted here.
@@ -49,7 +53,10 @@ export default async function PreviewPage({
             {project.name}
           </Link>
           <span className="font-mono text-xs text-fg-faint">
-            {artifact.manifest.fileCount} files · engine v{artifact.manifest.engineVersion}
+            {yoursCount > 0
+              ? `${yoursCount} yours · ${artifact.manifest.fileCount} from Airrow`
+              : `${artifact.manifest.fileCount} files`}{" "}
+            · engine v{artifact.manifest.engineVersion}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -59,12 +66,7 @@ export default async function PreviewPage({
               Change answers
             </Link>
           </Button>
-          <Button size="sm" asChild>
-            <a href={`/api/projects/${id}/zip`}>
-              <Download className="size-3.5" />
-              Download ZIP
-            </a>
-          </Button>
+          <DownloadProject projectId={id} slug={project.slug} />
           <Button variant="secondary" size="sm" asChild>
             <Link href={`/app/projects/${id}/continue`}>
               Continue locally
@@ -77,6 +79,7 @@ export default async function PreviewPage({
         <PreviewBrowser
           projectId={id}
           files={files}
+          entries={entries}
           highlightedHtml={highlighted}
           highlightedFor={highlighted ? activePath : null}
         />

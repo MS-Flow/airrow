@@ -9,6 +9,7 @@ import { AirrowMark } from "@/components/brand/mark";
 import { Tooltip } from "@/components/ui/tooltip";
 import { NAV_ITEMS, type NavItem } from "./nav-items";
 import { useRail } from "./rail";
+import { useOverlay } from "@/lib/use-overlay";
 import { cn } from "@/lib/utils";
 
 const icons = {
@@ -70,24 +71,21 @@ export function Sidebar() {
   const closeDrawer = React.useCallback(() => setDrawerOpen(false), []);
 
   // The drawer has no close button of its own, so Escape has to work — tapping the page
-  // behind it should not be the only way out.
-  React.useEffect(() => {
-    if (!drawerOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setDrawerOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [drawerOpen]);
+  // behind it should not be the only way out — and the page underneath must hold still.
+  useOverlay({ open: drawerOpen, onDismiss: closeDrawer });
 
   return (
     <>
-      {/* Mobile: a button in the flow of the top bar opens the drawer. */}
+      {/* Mobile: a button in the flow of the top bar opens the drawer. A full 44px target,
+          centred in the bar's 68px (`top-3`), because it is the only way into navigation
+          on a phone — the icon inside stays the size it was. */}
       <button
         type="button"
         onClick={() => setDrawerOpen(true)}
         aria-label="Open navigation"
-        className="fixed top-5 left-4 z-30 cursor-pointer rounded-md p-1.5 text-fg-muted transition-colors hover:bg-surface hover:text-fg md:hidden"
+        aria-expanded={drawerOpen}
+        aria-controls="app-nav-drawer"
+        className="fixed top-3 left-2 z-30 flex size-11 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-surface hover:text-fg md:hidden"
       >
         <Menu className="size-4" />
       </button>
@@ -102,6 +100,7 @@ export function Sidebar() {
       ) : null}
 
       <aside
+        id="app-nav-drawer"
         className={cn(
           "fixed inset-y-0 left-0 z-40 flex flex-col border-r border-border bg-bg-subtle transition-[width,transform] duration-200 ease-out-quart",
           collapsed ? "w-16" : "w-52",

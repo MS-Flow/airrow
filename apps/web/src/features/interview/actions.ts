@@ -19,6 +19,8 @@ import {
   saveInterviewAnswers,
   setProjectStatus
 } from "@/lib/data/store";
+import { ALLOWANCE_REACHED_MESSAGE, checkAllowance } from "@/features/generation/allowance";
+import { projectOrigin } from "@/features/import/origin";
 
 export async function saveAnswersAction(projectId: string, raw: unknown): Promise<{ ok: boolean }> {
   const { org } = await requireSession();
@@ -31,7 +33,7 @@ export async function saveAnswersAction(projectId: string, raw: unknown): Promis
 }
 
 export async function submitInterviewAction(projectId: string, raw: unknown): Promise<{ error?: string }> {
-  const { org } = await requireSession();
+  const { org, user } = await requireSession();
   const project = await getProject(org.id, projectId);
   if (!project) return { error: "Project not found." };
 
@@ -45,7 +47,10 @@ export async function submitInterviewAction(projectId: string, raw: unknown): Pr
   const model = resolveProjectModel({
     name: project.name,
     description: project.description,
-    answers: validated.answers as InterviewAnswers
+    answers: validated.answers as InterviewAnswers,
+    // The only place a ProjectModel is built, so the only place the origin can be stamped on it —
+    // and it decides whether the foundation ships `/start` or `/cleanup` (spec 91).
+    origin: await projectOrigin(projectId)
   });
   const modelVersion = await createModelVersion(projectId, model);
 
@@ -54,6 +59,12 @@ export async function submitInterviewAction(projectId: string, raw: unknown): Pr
   if (existing && existing.modelVersionId === modelVersion.id && existing.status === "running") {
     redirect(`/app/projects/${projectId}/generating`);
   }
+
+  // Checked here rather than at the point of generation: a founder who is out of allowance should
+  // hear it now, not after landing on a progress screen that will never move. The idempotent
+  // re-entry above is deliberately allowed through — resuming a running job costs nothing new.
+  const allowance = await checkAllowance(org.id, user.id);
+  if (!allowance.allowed) return { error: ALLOWANCE_REACHED_MESSAGE };
 
   await createJob(projectId, modelVersion.id);
   await setProjectStatus(projectId, "generating");

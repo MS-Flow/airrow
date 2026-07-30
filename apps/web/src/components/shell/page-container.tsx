@@ -13,7 +13,12 @@ import { cn } from "@/lib/utils";
 export function PageContainer({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div className="viewport-column">
-      <div className={cn("mx-auto w-full max-w-6xl px-6 py-10", className)} {...props} />
+      {/* Tighter gutters on a phone: 48px of 360 spent on margins is a column nobody can read
+          in. Written as `max-sm:` overrides so the screens that pass their own `py-*` keep it. */}
+      <div
+        className={cn("mx-auto w-full max-w-6xl px-6 py-10 max-sm:px-4 max-sm:py-8", className)}
+        {...props}
+      />
     </div>
   );
 }

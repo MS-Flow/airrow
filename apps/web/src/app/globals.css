@@ -23,6 +23,7 @@
   --color-accent-soft: var(--a-accent-soft);
   --color-info: var(--a-info);
   --color-success: var(--a-success);
+  --color-warn: var(--a-warn);
   --color-danger: var(--a-danger);
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
@@ -130,6 +131,7 @@
   --a-accent-soft: #cbd1da1f;
   --a-info: #7aa2f7;
   --a-success: #4ec99a;
+  --a-warn: #e3a94e;
   --a-danger: #f0564a;
 
   --a-shadow-e1: 0 1px 2px rgb(0 0 0 / 0.4);
@@ -154,6 +156,7 @@
   --a-accent-soft: #3f3f4614;
   --a-info: #2f5fd0;
   --a-success: #17845a;
+  --a-warn: #8f6108;
   --a-danger: #c33025;
 
   --a-shadow-e1: 0 1px 2px rgb(9 9 11 / 0.06);
@@ -216,11 +219,18 @@ html {
 .preview-reader {
   --tree: 0rem;
   --measure: 48rem;
+  /* The gutter a phone can afford. From `sm` up it is the 2.5rem the reader was designed with. */
+  --gutter: 1.25rem;
   /* content-box, so the measure stays 48rem however large the centring inset grows. */
   box-sizing: content-box;
   max-width: var(--measure);
-  padding-left: max(2.5rem, calc((100vw - var(--measure)) / 2 - var(--rail) - var(--tree)));
-  padding-right: 2.5rem;
+  padding-left: max(var(--gutter), calc((100vw - var(--measure)) / 2 - var(--rail) - var(--tree)));
+  padding-right: var(--gutter);
+}
+@media (min-width: 40rem) {
+  .preview-reader {
+    --gutter: 2.5rem;
+  }
 }
 @media (min-width: 48rem) {
   .preview-reader {

@@ -43,6 +43,33 @@ export default function TermsPage() {
         delivering your files. Nothing you write is used to train models by us.
       </p>
 
+      <h2>What you upload</h2>
+      <p>
+        Importing an existing project means sending us an archive of it. By uploading one you
+        confirm that the material is yours or that you are otherwise allowed to hand it over, and
+        that doing so breaks no agreement you have with anyone else.
+      </p>
+      <p>
+        <strong>Do not upload secrets</strong> — <code>.env</code> files, API keys, tokens, private
+        keys or certificates. <strong>Do not upload personal data</strong> about anyone, including
+        real data sitting in test fixtures. That second one is a flat rule rather than a balancing
+        act: {LEGAL.serviceName} is not built to hold personal data on your behalf, and telling you
+        to keep it out is worth more than a promise about how carefully we would look after it.
+      </p>
+      <p>
+        We do not scan uploads, so normally we will never know what was in one. If we do become
+        aware of a secret in an archive — because you tell us, or because we run into it while
+        investigating a fault — we will delete what we hold, tell you which file it was in so you
+        can rotate the credential, and we will not use it or pass it on. We can refuse or remove an
+        upload that breaks these rules.
+      </p>
+      <p>
+        What you upload stays your responsibility. If someone else brings a claim against us because
+        of it — about the content of your archive, about material you were not entitled to share, or
+        about personal data you were asked not to send — you will cover us for that claim and its
+        reasonable costs.
+      </p>
+
       <h2>Review before you rely on it</h2>
       <p>
         Generated documents are written by a language model from your answers. They are a
@@ -75,7 +102,14 @@ export default function TermsPage() {
       <p>
         To the extent the law allows, {LEGAL.serviceName} is not liable for indirect or
         consequential loss, lost profits, or lost or corrupted data arising from your use of a
-        free early-access service. Nothing here limits liability that cannot be limited by law.
+        free early-access service.
+      </p>
+      <p>
+        Some liability cannot be limited by agreement, and the paragraph above does not try to.
+        Nothing in these terms affects liability for death or personal injury caused by negligence,
+        for fraud, or any right you have as a consumer that cannot be signed away. If a limit here
+        reaches further than the law allows, it applies only as far as the law allows and the rest
+        of these terms stands.
       </p>
 
       <h2>Privacy</h2>

@@ -31,6 +31,7 @@ the utility name stays put.
 | `fg-faint` | `#7c8492` | `#71717a` |
 | `accent` (silver) | `#cbd1da` | `#3f3f46` |
 | `info` / `success` / `danger` | `#7aa2f7` / `#4ec99a` / `#f0564a` | `#2f5fd0` / `#17845a` / `#c33025` |
+| `warn` | `#e3a94e` | `#8f6108` |
 
 **Contrast on `bg`** — dark: `fg` 19.4:1 · `fg-muted` 7.7:1 · `fg-faint` 5.3:1. Light: `fg` 19.0:1 ·
 `fg-muted` 7.5:1 · `fg-faint` 4.7:1. All clear the 4.5:1 AA bar at every size we use; `fg-faint` is
@@ -67,9 +68,14 @@ One component per file in `apps/web/src/components/ui`, **no barrel** (constitut
 directly: `@/components/ui/button`.
 
 `button` · `card` (+ Header/Title/Description/Body/Footer) · `input` (Input, Textarea) · `label` ·
-`select` · `choice` (Checkbox, RadioGroup) · `dialog` · `dropdown` · `tooltip` · `tabs` ·
-`breadcrumbs` · `table` · `badge` · `progress` · `skeleton` · `spinner` · `separator` · `toast` ·
-`command-palette` · `states` (EmptyState, ErrorState, InlineError, LoadingState, **ComingSoon**).
+`file-dropzone` · `select` · `choice` (Checkbox, RadioGroup) · `dialog` · `dropdown` · `tooltip` ·
+`tabs` · `breadcrumbs` · `table` · `badge` · `progress` · `skeleton` · `spinner` · `separator` ·
+`toast` · `command-palette` · `states` (EmptyState, ErrorState, InlineError, **Notice**,
+LoadingState, **ComingSoon**).
+
+`file-dropzone` is the file field: click or drop, with the chosen file named back. It keeps a real
+`<input type="file">` — visually hidden, still `required`, still submitted — so a form gets the same
+`FormData` a bare input would give it.
 
 Brand lives in `components/brand`: `mark`, `logo` (the mark+wordmark lockup), `splash`. Both render
 **the approved artwork** from `public/brand/*.png` via `next/image` — not redrawn vectors, because no
@@ -80,7 +86,9 @@ Shell lives in `components/shell`: `sidebar`, `top-bar`, `user-menu`, `chat-slot
 
 **Rules.** Loading / error / empty are these components, never inline conditionals. A surface with no
 backend uses `<ComingSoon>` — visible so the product's shape is honest, disabled so nothing pretends
-to work. Below ~24px the mark drops the gradient for flat `currentColor`.
+to work. `<Notice>` carries the `warn` tone for a caution before an action or a consequence after
+one; it never takes `role="alert"` and never borrows `danger`, because a warning that looks like a
+failure teaches founders to dismiss both. Below ~24px the mark drops the gradient for flat `currentColor`.
 
 ## Route map
 

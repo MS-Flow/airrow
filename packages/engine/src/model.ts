@@ -13,9 +13,11 @@ import type {
   InterviewAnswers,
   ProductType,
   ProjectModel,
+  ProjectOrigin,
   SecurityLevel,
   Tenancy
 } from "../../schemas/src/types.ts";
+import { STANDARD_STACK } from "../../schemas/src/questions.ts";
 
 export const ENGINE_VERSION = "0.1.0";
 
@@ -23,6 +25,11 @@ export interface ResolveInput {
   name: string;
   description: string;
   answers: InterviewAnswers;
+  /**
+   * Where the project came from (spec 91). Omitted means new: a project with no import source *is*
+   * one started from nothing, so the default is a fact rather than a guess.
+   */
+  origin?: ProjectOrigin;
 }
 
 export function slugify(name: string): string {
@@ -64,8 +71,11 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
       ? "internal"
       : (a.audience ?? (productType === "hobby" ? "b2c" : "b2b"));
 
-  const framework: Framework =
-    a.framework ?? (productType === "mobile_app" || productType === "browser_extension" ? "vite" : "nextjs");
+  // Unanswered only for a draft saved before the stack question was asked of every product type.
+  // The fallback is the same table the interview recommends from, so an old draft resolves to what
+  // the founder would have been shown — never to a web SPA because nothing better was reachable.
+  const standard = STANDARD_STACK[productType];
+  const framework: Framework = a.framework ?? standard.framework;
 
   const dataSensitivity: DataSensitivity = a.dataSensitivity ?? "standard";
   const security: SecurityLevel = dataSensitivity === "standard" ? "standard" : "elevated";
@@ -78,6 +88,7 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
     name: input.name.trim(),
     slug: slugify(input.name),
     description: input.description.trim(),
+    origin: input.origin ?? { kind: "new" },
     vision: (a.vision ?? "").trim(),
     productType,
     audience,
@@ -90,6 +101,8 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
     hosting: a.hosting ?? "vercel",
     stack: {
       framework,
+      customFramework:
+        framework === "custom" ? (a.frameworkOther ?? "").trim() || (standard.describe ?? "") : "",
       language: "typescript",
       styling: "tailwind",
       ui: "shadcn/ui",
@@ -106,6 +119,8 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
     scale: a.scale ?? "validate",
     mvpFocus: (a.mvpFocus ?? "").trim(),
     coreEntities: (a.coreEntities ?? "").trim(),
+    problem: (a.problem ?? "").trim(),
+    nonGoals: (a.nonGoals ?? "").trim(),
     derived: {
       multiTenant,
       hasPayments: features.includes("payments"),
@@ -162,11 +177,63 @@ export const teamLabel: Record<ProjectModel["team"], string> = {
 };
 
 export function frameworkLabel(m: ProjectModel): string {
+  // A custom stack is named by the founder, so it is echoed rather than mapped — the whole point is
+  // that the documents say what they actually build in.
+  if (m.stack.framework === "custom") return m.stack.customFramework || "your stack";
   return m.stack.framework === "nextjs" ? "Next.js (App Router)" : "Vite + React";
+}
+
+/** True when the founder described their own stack, so nothing about its toolchain can be derived. */
+export function isCustomStack(m: ProjectModel): boolean {
+  return m.stack.framework === "custom";
+}
+
+/**
+ * The one command this foundation ships, and the only place that decision is made (spec 91).
+ *
+ * `/start` scaffolds a stack and takes the project to the bare minimum that runs; `/cleanup` reads
+ * the stack that is already there and rewrites the documents to match it. Shipping both would hand a
+ * founder two commands with opposite assumptions about their repository, so a foundation gets
+ * exactly one — and an import with no code in it gets `/start`, because there is nothing to read.
+ */
+export function commandFor(m: ProjectModel): "start" | "cleanup" {
+  return m.origin.kind === "imported" && m.origin.stackDetected ? "cleanup" : "start";
+}
+
+/** Where that command lives in the generated repository. */
+export function commandPath(m: ProjectModel): string {
+  return `.claude/commands/${commandFor(m)}.md`;
+}
+
+/** The command as the founder types it — for the documents that tell them to run it. */
+export function commandName(m: ProjectModel): string {
+  return `/${commandFor(m)}`;
+}
+
+/**
+ * True when this foundation lands in a codebase that already exists.
+ *
+ * Asked through `commandFor` rather than `origin.kind`: an import with nothing but documents in it
+ * has no existing codebase to describe, so every document should read as it does for a new project.
+ */
+export function shipsCleanup(m: ProjectModel): boolean {
+  return commandFor(m) === "cleanup";
 }
 
 export function repoLabel(m: ProjectModel): string {
   return m.stack.repoProvider === "github" ? "GitHub" : "Azure DevOps";
+}
+
+/**
+ * True when the founder's code, work items and pipelines live in Azure DevOps.
+ *
+ * This decides more than a label. The whole spec workflow is expressed in a provider's own
+ * vocabulary and CLI — issues vs work items, `gh` vs `az repos`, Actions vs Pipelines — and a
+ * foundation that ships GitHub Actions to an Azure DevOps team is documentation about someone
+ * else's project.
+ */
+export function usesAzureRepos(m: ProjectModel): boolean {
+  return m.stack.repoProvider === "azure_devops";
 }
 
 export const tenancyLabel: Record<Tenancy, string> = {

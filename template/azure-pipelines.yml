@@ -1,0 +1,58 @@
+# CI for {{PROJECT_NAME}} — Azure Pipelines.
+#
+# Register once: Pipelines → New pipeline → Azure Repos Git → this repository → Existing YAML file →
+# /azure-pipelines.yml. After that it runs on every push and every pull request.
+#
+# Branch policies (required reviewers, "build must pass", merge direction) are not YAML in Azure
+# DevOps — they are configured per branch under Repos → Branches → Branch policies. START_HERE.md
+# step 2 lists the ones this project's branch model expects.
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+      - feature/*
+pr:
+  branches:
+    include:
+      - main
+      - develop
+      - feature/*
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  TZ: UTC
+
+stages:
+  # There is nothing to typecheck in a repository with no stack in it. Without this gate the very
+  # first push goes red before a line has been written — which says nothing true about the code and
+  # trains everyone to ignore the badge.
+  - stage: detect
+    displayName: Is there a stack to verify?
+    jobs:
+      - job: check
+        steps:
+          - checkout: self
+          - bash: |
+{{CI_READY_CHECK_AZ}}
+            displayName: Look for a stack
+            name: check
+
+  - stage: verify
+    displayName: Verification bar
+    dependsOn: detect
+    condition: eq(dependencies.detect.outputs['check.check.ready'], 'true')
+    jobs:
+      - job: verify
+        steps:
+          - checkout: self
+{{CI_SETUP_STEPS_AZ}}
+          - bash: {{CMD_TYPECHECK}}
+            displayName: Typecheck
+          - bash: {{CMD_LINT}}
+            displayName: Lint
+          - bash: {{CMD_TEST}}
+            displayName: Test

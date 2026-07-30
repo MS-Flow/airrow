@@ -19,7 +19,7 @@ export const HERO = {
   /* Split so the brand name can carry emphasis inside the muted lead line. */
   leadBrand: "Airrow",
   leadRest:
-    " generates the architecture, specifications, standards and AI context your project needs, so your AI agents build like a senior team instead of guessing.",
+    " generates the architecture, specifications, standards and AI context your project needs, then sets the project up on your machine until it runs. Your AI agents build like a senior team instead of guessing.",
   primaryCta: "Generate your foundation",
   secondaryCta: "See how it works",
   strapline: "Idea → Airrow → Code → Company",
@@ -40,12 +40,12 @@ export const STEPS = [
   {
     n: "02",
     title: "Airrow generates your foundation",
-    body: "Architecture, specifications, standards, roadmap, prompt library and an AI context system, personalised to your product instead of filled in from a template.",
+    body: "A language model turns your answers into the architecture, specifications, standards, roadmap and AI context your project needs. Your stack decisions are applied exactly as you chose them; the writing around them is done for your product, not filled in from a template.",
   },
   {
     n: "03",
     title: "Build with your AI agents",
-    body: "Download your repository, open it in your editor and start implementing. Your agents finally have the context of a senior engineering team.",
+    body: "Download your repository, open it and run one command to take it from documents to a project that runs. You stay in control of what gets built after that, one spec at a time, and your agents finally have the context of a senior engineering team.",
   },
 ];
 
@@ -71,8 +71,11 @@ export const DELIVERABLES: {
   },
   {
     icon: "pipeline",
-    title: "CI/CD pipeline",
-    body: "GitHub Actions that lint, typecheck, test and deploy from your first commit",
+    // Two clauses, one promise each: the pipeline catches a bad commit, the branch structure stops
+    // two agents writing over each other. Kept to the length of the other five cards — this one ran
+    // to twice that and the claim got lost in it.
+    title: "CI/CD and branching",
+    body: "GitHub Actions that lint, typecheck, test and deploy, plus an automated branch structure that prevents merge conflicts",
   },
   {
     icon: "standards",
@@ -98,9 +101,14 @@ export const SPEC_LOOP = ["createspec", "clarify", "implement", "analyze"];
  */
 export const FOUNDATION_HIGHLIGHTS = [
   {
+    path: "START_HERE.md",
+    reason:
+      "A clear guide to how it all works: how to get started, and how to carry it to a finished product.",
+  },
+  {
     path: ".claude/spec-kit/constitution.md",
     reason:
-      "The rules your agents cannot drift from, written once and enforced in review.",
+      "Clear rules for your project, taken straight from your interview answers and followed in every file after.",
   },
   {
     path: "CLAUDE.md",
@@ -125,21 +133,31 @@ export const FOUNDATION_HIGHLIGHTS = [
 ];
 
 export const WHY_SDD = [
+  "Without a spec, an agent optimises for looking finished. It invents requirements you never gave it and quietly reopens decisions you made last week.",
   "The spec is the source of truth. Code is reviewed against it, not the other way round.",
-  "An AI agent with a written architecture stops inventing one per session.",
-  "Decisions made once, in writing, survive the context window.",
+  "It replaces “does this look right?” with “does this match what we agreed?”, which is a question you can actually answer.",
+  "Decisions made once, in writing, survive the context window and the three months after it.",
   "You spend far fewer tokens when the agent knows exactly what to build. Guessing, exploring and undoing the wrong thing is the expensive part.",
 ];
 
-/* Everything is free for now. No invented tiers and no "TBD" — if a price isn't decided,
-   the honest thing is to say the product is free, not to imply a paywall that isn't built. */
+/* Two tiers, and only one of them is real. Pro is labelled "coming soon" and carries no price
+   because it has none yet — naming a figure we have not decided would be a promise, and the free
+   tier is what someone can actually have today. */
 export const INCLUDED = [
-  "Unlimited projects",
+  "Two generated foundations",
   "The full CTO interview",
-  "The complete generated foundation",
+  "Documents written for your product, not filled in from a template",
   "ZIP delivery of your repository",
-  "Regenerate whenever your answers change",
   "Every document type Airrow produces",
+  "Yours to keep, with no lock-in",
+];
+
+/** What Pro adds. Deliberately short: everything here is unbuilt, and a long list would read as one. */
+export const PRO_INCLUDED = [
+  "Unlimited generated foundations",
+  "Push straight to a GitHub repository",
+  "Regenerate as your product changes",
+  "Priority on new document types",
 ];
 
 export const SECTIONS = {
@@ -150,7 +168,7 @@ export const SECTIONS = {
   },
   specDriven: {
     title: "Why spec-driven development",
-    body: "AI writes code faster than any team can review it. The bottleneck moved: it is no longer typing, it is deciding. Specs are how decisions survive.",
+    body: "AI writes code faster than any team can review it. The bottleneck moved: it is no longer typing, it is deciding. Specs are how decisions survive, and how you stay the one making them.",
     loopTitle: "The loop your agents run",
     loopNote:
       "Every issue goes round this loop. The commands ship in your repository, ready to run.",
@@ -159,9 +177,22 @@ export const SECTIONS = {
   },
   pricing: {
     title: "Pricing",
-    body: "Airrow is free while it's in early access. Every feature, no project limit, no card.",
-    amount: "$0",
-    note: "Everything included.",
+    body: "Start free: two complete foundations, every feature, no card. Pro lifts the limit when it lands.",
+    free: {
+      name: "Free",
+      amount: "$0",
+      note: "Two foundations, everything included.",
+      action: "Create your project",
+    },
+    pro: {
+      name: "Pro",
+      badge: "Coming soon",
+      /* No figure, because none is decided. Naming one would be a promise, and "TBD" at the size
+         of a price is just a shrug. The word says what the card is for. */
+      amount: "Monthly",
+      note: "Unlimited foundations, and the features that follow.",
+      action: "Not available yet",
+    },
   },
   cta: {
     title: "Start with the foundation.",

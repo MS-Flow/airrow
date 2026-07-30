@@ -1,13 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Plus } from "lucide-react";
 import { Breadcrumbs, type Crumb } from "@/components/ui/breadcrumbs";
-import { Button } from "@/components/ui/button";
+import { ProjectActions } from "@/features/projects/ProjectActions";
 
 const SEGMENT_LABELS: Record<string, string> = {
   new: "New project",
+  import: "Import",
   interview: "Interview",
   generating: "Generating",
   preview: "Preview",
@@ -51,15 +50,13 @@ export function TopBar({
   return (
     // `h-17` is the landing header's height (its `py-3.5` around an `h-10` logo), so
     // moving from the public site into the app doesn't shift the horizon line.
-    <header className="sticky top-0 z-20 flex h-17 shrink-0 items-center justify-between gap-4 border-b border-border bg-bg/80 px-6 backdrop-blur-md max-md:pl-14">
+    <header className="sticky top-0 z-20 flex h-17 min-w-0 shrink-0 items-center justify-between gap-4 border-b border-border bg-bg/80 px-6 backdrop-blur-md max-md:pl-14">
       <Breadcrumbs items={crumbs} />
       <div className="flex shrink-0 items-center gap-2">
-        <Button size="md" asChild>
-          <Link href="/app/projects/new">
-            <Plus className="size-4" />
-            New project
-          </Link>
-        </Button>
+        {/* Both entry points, from the one component that owns them — and on a phone the labels
+            are what the trail gets back, `compact` handling that inside `ProjectActions` so the
+            top bar and the dashboard cannot drift apart again. */}
+        <ProjectActions size="md" compact />
         {themeSwitch}
         {userMenu}
       </div>
