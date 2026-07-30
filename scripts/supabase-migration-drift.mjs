@@ -69,6 +69,36 @@ export function requireCredentials(env) {
 }
 
 /**
+ * The CLI's own machine-readable shape, which `--output-format json` asks for:
+ *
+ *   {"migrations":[{"local":"20260726120000","remote":"","time":"…"}, …],"message":"…"}
+ *
+ * Preferred over the table because it is not formatting. The object arrives after a couple of
+ * progress lines, so the JSON is looked for line by line rather than parsed from the whole output.
+ * Returns null when this output is not JSON, which is the signal to fall back to the table.
+ */
+export function parseMigrationJson(stdout) {
+  for (const line of stdout.split(/\r?\n/)) {
+    if (!line.trim().startsWith("{")) continue;
+    try {
+      const parsed = JSON.parse(line);
+      if (!Array.isArray(parsed?.migrations)) continue;
+
+      const localOnly = [];
+      const remoteOnly = [];
+      for (const { local, remote } of parsed.migrations) {
+        if (local && !remote) localOnly.push(local);
+        else if (remote && !local) remoteOnly.push(remote);
+      }
+      return { localOnly, remoteOnly, rowCount: parsed.migrations.length };
+    } catch {
+      continue; // a line that merely starts with `{` and is not the payload
+    }
+  }
+  return null;
+}
+
+/**
  * `supabase migration list --linked` prints a three-column table: the version present locally,
  * the version present remotely, and its timestamp. A row with only one side filled is drift.
  *
@@ -86,6 +116,12 @@ export function requireCredentials(env) {
  * understand a word of this output" — see `describeDrift`.
  */
 export function parseMigrationList(stdout) {
+  // JSON first: what the CLI emits when asked, and what it emits by itself in some versions.
+  // The table is the fallback, because both shapes turned up from real runs of "latest" — the
+  // GitHub Action installed a build that printed the table while `pnpm dlx supabase` printed JSON.
+  const asJson = parseMigrationJson(stdout);
+  if (asJson) return asJson;
+
   const lines = stdout.split(/\r?\n/);
 
   // The CLI prefixes progress lines and version notices, so find the table rather than assume it
@@ -135,15 +171,32 @@ export function localMigrationVersions(dir = MIGRATIONS_DIR) {
     .sort();
 }
 
+/** `supabase/migrations/20260726120000_import.sql` -> `20260726120000`, from `git diff` output. */
+export function parseAddedMigrations(gitDiffOutput) {
+  return gitDiffOutput
+    .split(/\r?\n/)
+    .map((line) => line.trim().match(/(\d{14})_[^/]*\.sql$/))
+    .filter((match) => match !== null)
+    .map((match) => match[1]);
+}
+
 /**
  * Turns a parsed listing into a verdict plus GitHub annotations, matching the style the audit
  * step in `ci.yml` already uses.
  *
- * Only the repo being *ahead* fails. A version the database has but the repo does not is normal
- * — any branch cut before that migration landed sees exactly that — so it warns instead of
- * failing, which would turn every slightly-behind PR red for no reason.
+ * Three states, not two:
+ *
+ * - **The repo is ahead because of this pull request** — the migration is committed here and will
+ *   be applied when it merges. Reported, never a failure: failing would make every PR that adds a
+ *   migration permanently red, since the only thing that can apply it is the merge the check is
+ *   blocking.
+ * - **The repo is ahead for reasons that predate this pull request** — something merged and never
+ *   reached the database. That is the 2026-07-27 incident, and it fails: stacking more schema on
+ *   top of a broken apply pipeline is how one missed migration becomes several.
+ * - **The database is ahead** — normal on any branch cut before that migration landed, so it
+ *   warns rather than failing, which would redden every slightly-behind PR for no reason.
  */
-export function describeDrift({ localOnly, remoteOnly, rowCount }, localVersions) {
+export function describeDrift({ localOnly, remoteOnly, rowCount }, localVersions, addedHere = []) {
   const messages = [];
 
   // A table we parsed into zero rows while the repo holds migrations means the CLI changed its
@@ -164,23 +217,34 @@ export function describeDrift({ localOnly, remoteOnly, rowCount }, localVersions
     });
   }
 
-  if (localOnly.length > 0) {
-    for (const version of localOnly) {
+  const addedInThisChange = new Set(addedHere);
+  const pending = localOnly.filter((version) => addedInThisChange.has(version));
+  const blocking = localOnly.filter((version) => !addedInThisChange.has(version));
+
+  for (const version of pending) {
+    messages.push({
+      level: "log",
+      text: `Migration ${version} läggs till av den här ändringen och appliceras när den merge:as.`
+    });
+  }
+
+  if (blocking.length > 0) {
+    for (const version of blocking) {
       messages.push({
         level: "error",
-        text: `Migration ${version} finns i supabase/migrations men är inte applicerad på den länkade databasen.`
+        text: `Migration ${version} finns i supabase/migrations men är inte applicerad på den länkade databasen, och läggs inte till av den här ändringen.`
       });
     }
     messages.push({
       level: "error",
-      text: `${localOnly.length} oapplicerad(e) migration(er). Koden går annars ut mot ett schema som saknar det den räknar med — se specs/77-auto-apply-migrations.md.`
+      text: `${blocking.length} oapplicerad(e) migration(er) som redan var merge:ad(e). Koden går ut mot ett schema som saknar det den räknar med — kör om apply-jobbet (.github/workflows/supabase-migrate.yml) innan mer schema staplas ovanpå. Se specs/77-auto-apply-migrations.md.`
     });
     return { ok: false, messages };
   }
 
   messages.push({
     level: "log",
-    text: `OK: schemat är i takt med koden (${localVersions.length} migration(er) applicerade).`
+    text: `OK: schemat är i takt med koden (${localVersions.length} migration(er), ${pending.length} tillkommer i den här ändringen).`
   });
   return { ok: true, messages };
 }
@@ -208,6 +272,38 @@ function supabase(args) {
   }
 }
 
+/**
+ * The migrations this pull request adds on top of its base branch. Empty outside a PR, and empty
+ * when the base cannot be resolved — failing closed on purpose: blocking on drift we cannot
+ * explain is the safe direction, waving it through is not.
+ */
+function migrationsAddedInPullRequest() {
+  const base = process.env.GITHUB_BASE_REF;
+  if (!base) return [];
+
+  try {
+    return parseAddedMigrations(
+      execFileSync(
+        "git",
+        [
+          "diff",
+          "--name-only",
+          "--diff-filter=A",
+          `origin/${base}...HEAD`,
+          "--",
+          "supabase/migrations"
+        ],
+        { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }
+      )
+    );
+  } catch {
+    console.log(
+      `::warning::Kunde inte jämföra mot origin/${base}, så alla oapplicerade migrationer räknas som redan merge:ade. Hämtades basgrenen i workflowet?`
+    );
+    return [];
+  }
+}
+
 function main() {
   if (isForkPullRequest(readGitHubEvent())) {
     report({
@@ -221,9 +317,21 @@ function main() {
     requireCredentials(process.env);
     supabase(["link", "--project-ref", process.env.SUPABASE_PROJECT_ID]);
 
+    const list = ["migration", "list", "--linked"];
+    // Ask for JSON, but do not depend on the flag existing: `--output-format` is not in every
+    // release, and the version is deliberately unpinned. An older CLI rejects it and gets the
+    // table instead, which `parseMigrationList` also reads.
+    let stdout;
+    try {
+      stdout = supabase([...list, "--output-format", "json"]);
+    } catch {
+      stdout = supabase(list);
+    }
+
     const verdict = describeDrift(
-      parseMigrationList(supabase(["migration", "list", "--linked"])),
-      localMigrationVersions()
+      parseMigrationList(stdout),
+      localMigrationVersions(),
+      migrationsAddedInPullRequest()
     );
     verdict.messages.forEach(report);
     process.exit(verdict.ok ? 0 : 1);

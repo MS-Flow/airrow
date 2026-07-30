@@ -104,4 +104,12 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
-        run: node scripts/supabase-migration-drift.mjs
+        run: |
+          # A migration this PR adds is expected to be unapplied — the merge is what applies it.
+          # The script needs the base branch to tell those apart from drift that was already there,
+          # and `checkout` clones one commit deep, so fetch it. Without this the script warns and
+          # falls back to treating every unapplied migration as pre-existing.
+          if [ -n "$GITHUB_BASE_REF" ]; then
+            git fetch --no-tags --depth=50 origin "$GITHUB_BASE_REF"
+          fi
+          node scripts/supabase-migration-drift.mjs

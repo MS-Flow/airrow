@@ -39,12 +39,16 @@ jobs:
         with:
           version: latest
 
-      # Applies only what is missing, in timestamp order, and resumes from the first unapplied
-      # migration if an earlier run died halfway.
+      # `--include-all` is not optional here. Plain `db push` refuses outright when a committed
+      # migration has an older timestamp than the last one already applied — which is the normal
+      # outcome of two branches merging in a different order than their timestamps
+      # (`LegacyDbPushMissingRemoteError`). Without the flag the job errors instead of applying,
+      # and the schema stays behind exactly as before. Verified against the real project on
+      # 2026-07-30: `db push` refused, `db push --include-all` applied the two pending migrations.
       - name: Apply migrations
         run: |
           supabase link --project-ref "$SUPABASE_PROJECT_ID"
-          supabase db push
+          supabase db push --include-all --yes
 
       # The proof. `db push` exiting zero says the command ran; this says the database actually
       # holds every migration the repo does — so a green job means code and schema are in step.

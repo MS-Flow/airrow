@@ -59,14 +59,27 @@ _The approach we picked, and what we deliberately leave alone._
 Two GitHub Actions entry points over one shared comparison:
 
 - **Apply on push to `develop` and `main`.** A new workflow links the CLI to the single cloud project
-  and runs `supabase db push`. `develop` is where the schema is genuinely needed first — `dev.airrow.app`
+  and runs `supabase db push --include-all --yes`. **`--include-all` is not optional:** plain `db push`
+  refuses outright when a committed migration carries an older timestamp than the last one already
+  applied (`LegacyDbPushMissingRemoteError`), which is the ordinary outcome of two branches merging in a
+  different order than their timestamps. Without the flag the job errors instead of applying and the
+  schema stays behind — the very failure this spec exists to remove.
+  `develop` is where the schema is genuinely needed first — `dev.airrow.app`
   runs `develop` code against the *same* Supabase project ([INFRASTRUCTURE_SETUP.md:45-46](../docs/guides/INFRASTRUCTURE_SETUP.md)) —
   and the `main` run is an idempotent no-op that still guarantees production if the `develop` run was
   missed or someone merged past it.
 - **Check on every PR.** A step in [.github/workflows/ci.yml](../.github/workflows/ci.yml) runs the same
-  comparison read-only and fails when `supabase/migrations` holds something the linked database does
-  not. Living in `ci.yml` makes it a required status check — it blocks, and nobody has to remember to
-  run it.
+  comparison read-only. Living in `ci.yml` makes it a required status check — it blocks, and nobody has
+  to remember to run it. It distinguishes three states rather than two:
+  - a migration **this change adds** is expected to be unapplied and is reported, not failed — the merge
+    is the only thing that can apply it, so failing would make every schema PR permanently red;
+  - a migration that was **already merged** and still is not applied **fails** — that is the
+    2026-07-27 incident, and stacking more schema on a broken apply pipeline is how one missed
+    migration becomes several;
+  - the **database being ahead** warns, since any branch cut before that migration landed sees it.
+
+  The base branch is fetched in the step so the first two can be told apart; if it cannot be resolved
+  the check fails closed and treats everything as pre-existing.
 - **The comparison is one script, not two copies of a shell pipeline.** Both entry points shell out to a
   helper under `scripts/` that parses `supabase migration list --linked` and reports unapplied
   migrations, which also makes it unit-testable through `pnpm test:scripts` (spec 53) instead of only
@@ -98,9 +111,11 @@ _What "done" means. Every line is something a reviewer can check._
       that cannot reach the project reports the exit code and the likely reasons, unreadable output is
       refused outright, and missing secrets fail on the secret's own name. The parse and verdict paths
       are covered by tests.
-- [ ] A PR whose `supabase/migrations` contains something the linked database does not have fails a step
+- [x] A PR whose `supabase/migrations` contains something the linked database does not have fails a step
       in `ci.yml` — a required status check, so it blocks the merge rather than advising against it. A PR
-      with no new migration passes without noise. _(Wired; blocked on the three secrets existing.)_
+      with no new migration passes without noise. **Refined during implementation:** a migration the PR
+      *itself* adds does not fail, because the merge is the only thing that can apply it — failing there
+      would make every schema PR permanently red. Drift that predates the PR fails. See _Design decision_.
 - [x] Secrets (`SUPABASE_ACCESS_TOKEN`, project ref, DB password) live in GitHub Secrets — never in the
       repo, never printed in logs. All three are configured on the repo (`gh secret list`). Read as
       `"$VAR"` inside `run:`, so no value is interpolated into a rendered command line, and in `ci.yml`
@@ -185,16 +200,34 @@ step-level scoping above, and the fork-PR path — GitHub withholds secrets from
 run, so the check now passes with a warning there instead of failing a contributor's PR for something
 structural.
 
-**Not yet observed end-to-end.** The apply path (`link` → `db push` → assert) has been reviewed but not
-executed — it cannot run locally without pointing at the real production database, which is precisely
-what this spec exists to stop happening by hand. Its first real run is the push that merges it. One thing
-to watch on that run: whether `supabase db push` prompts for confirmation under the CLI version the
-runner installs. It is non-interactive in Actions (no TTY), but if the job hangs or aborts there, the fix
-is an explicit non-interactive flag on that one step.
+**What the first real CI run and the catch-up taught us** — four things no amount of reading would have:
+
+1. **The CLI has two output shapes, both from "latest".** The GitHub Action installed a build that prints
+   a markdown-ish table with backticked cells and a `Local | Remote` header; `pnpm dlx supabase` (2.110.0)
+   prints `{"migrations":[…]}`. The first parser was written against a plausible-looking fixture and
+   matched neither. The script now asks for `--output-format json`, reads JSON when it gets it, and falls
+   back to the table — with a real captured fixture for each.
+2. **The rowCount guard earned itself immediately.** Faced with output it could not read, the check
+   refused rather than reporting "in sync". A naive parser would have gone green and been wrong, which is
+   exactly the failure mode this spec exists to prevent.
+3. **`db push` refuses out-of-order migrations** — see the `--include-all` note in _Design decision_.
+4. **The migrations were not idempotent** — see _Data model_.
+
+**Cloud was two migrations behind, including the one from the incident.** The issue records
+`20260727093000_import_digest_version.sql` as manually pushed and back in sync; the linked project said
+otherwise, and `20260726120000_import.sql` was missing too. Both applied 2026-07-30 with
+`db push --include-all` once the policy guards were in place — so imports against cloud work again, and
+`migration list --linked` now reports 9 migrations with 0 out of step. That was the last hand-run push.
+
+**The apply workflow is still not observed end-to-end.** Its pieces have each been run by hand against the
+real project — `link`, `db push --include-all` (both refused and successful), the drift assertion — but the
+workflow itself has not run, because it triggers on push to `develop`/`main` and this branch is neither.
+Its first run is the merge. `--yes` is already on the push step, so the confirmation prompt seen locally
+cannot hang it.
 
 **Verification run** (2026-07-30, local).
 
-- `pnpm test:scripts` 39 passed (2 files), green both with and without `GITHUB_EVENT_PATH` set ·
+- `pnpm test:scripts` 51 passed (2 files), green both with and without `GITHUB_EVENT_PATH` set ·
   `pnpm -r typecheck` clean across all three packages ·
   `pnpm -r lint` clean · `pnpm -r test` 258 passed / 28 skipped (40 files in `apps/web`, 8 in
   `packages/engine`, 2 in `packages/schemas`) — **no failures**. The skips are pre-existing.
@@ -209,6 +242,10 @@ is an explicit non-interactive flag on that one step.
   | fork-PR event payload | `::warning::Hoppar över migrationskontrollen…` exit **0** |
   | same-repo + credentials, no CLI | `kommandot \`supabase\` finns inte på PATH…` exit 1 |
 - Repository secrets confirmed present via `gh secret list`: all three.
+- **Not verifiable here:** replaying the migrations from zero against a local stack — Docker was not
+  running, so `supabase db reset` could not be used to prove the policy guards replay cleanly. The guards
+  are `drop policy if exists`, which is a no-op on an empty database, and the real `db push` against cloud
+  applied them successfully. Still worth a `db reset` the next time a local stack is up.
 - **First CI run caught a non-deterministic test of mine** (§V): `readGitHubEvent(undefined)` falls through
   to the `process.env.GITHUB_EVENT_PATH` default, so it passed locally where the variable is unset and
   parsed the real push payload in Actions. Now stubbed with `vi.stubEnv`, and the suite is checked green
@@ -236,7 +273,10 @@ _The plan, for whoever implements it. Every change grounded in current code; exp
    ([:65](../docs/guides/INFRASTRUCTURE_SETUP.md#L65)) becomes wrong on merge and must be corrected in the
    same change (constitution §IV).
 
-**No change needed:** `supabase/migrations` itself, the branch-policy / issue-housekeeping workflows, and
+5. **`supabase/migrations/*.sql`** — a `drop policy if exists` before each of the 17 `create policy`
+   statements. Forced by the apply, not planned; see _Data model_.
+
+**No change needed:** the branch-policy / issue-housekeeping workflows, and
 `scripts/setup-branch-protection.sh` — the drift check is a step inside the existing `verify` context, so
 no new required status check has to be registered.
 
@@ -250,8 +290,23 @@ credential guard unit-testable, so the wrapper had nothing left to do.
 
 ## Data model
 
-**No schema changes.** This spec changes *how* migrations reach the database, not what they contain.
-The constitution's data invariants are the thing being enforced, not amended.
+**No schema changes** — no new tables, columns, or policies. The migrations themselves are edited, but
+only to make replaying them a no-op:
+
+**17 `create policy` statements gained a `drop policy if exists` guard** across
+`20260724132100_init.sql`, `20260725100000_schema.sql`, `20260726120000_import.sql` and
+`20260727160000_generation_allowance.sql`. Not one of them had a guard, while every `create table` in the
+same files already used `if not exists` — so the intent was idempotency and the policies were the gap.
+The resulting schema is identical; only re-running changed.
+
+This was not in the original plan. It was forced by what automating the apply exposed: the cloud project
+held the `import_sources` tables **and their policies** while
+[20260726120000_import.sql](../supabase/migrations/20260726120000_import.sql) was absent from its
+migration history, so applying it died on `create policy … already exists` — a schema ahead of its own
+recorded history, which nothing could move forward. Guarding the policies is what unblocked it, and it is
+what the constitution's *"migrations are idempotent"* asks for regardless. It grows this change and
+touches migrations belonging to specs 9, 63 and the allowance work; recorded here rather than done
+quietly.
 
 ---
 

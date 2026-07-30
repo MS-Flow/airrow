@@ -7,6 +7,8 @@ import {
   describeDrift,
   isForkPullRequest,
   localMigrationVersions,
+  parseAddedMigrations,
+  parseMigrationJson,
   parseMigrationList,
   readGitHubEvent,
   requireCredentials
@@ -67,7 +69,43 @@ const DATABASE_AHEAD = `        LOCAL      |     REMOTE     |     TIME (UTC)
 const errorsOf = (verdict) => verdict.messages.filter((m) => m.level === "error").map((m) => m.text);
 const warningsOf = (verdict) => verdict.messages.filter((m) => m.level === "warning").map((m) => m.text);
 
+// Captured verbatim from `supabase migration list --linked --output-format json` (CLI 2.110.0).
+// The same repo state as REAL_CLI_OUTPUT, in the other shape the CLI really produces.
+const REAL_CLI_JSON = `Initialising login role...
+Connecting to remote database...
+{"migrations":[{"local":"20260724132100","remote":"20260724132100","time":"2026-07-24 13:21:00"},{"local":"20260726120000","remote":"","time":"2026-07-26 12:00:00"},{"local":"20260727093000","remote":"","time":"2026-07-27 09:30:00"}],"message":"Migrations listed"}
+`;
+
 describe("parseMigrationList", () => {
+  it("prefers the CLI's JSON shape when that is what it printed", () => {
+    expect(parseMigrationList(REAL_CLI_JSON)).toEqual({
+      localOnly: ["20260726120000", "20260727093000"],
+      remoteOnly: [],
+      rowCount: 3
+    });
+  });
+
+  it("falls back to the table when the CLI printed no JSON", () => {
+    expect(parseMigrationList(REAL_CLI_OUTPUT).localOnly).toEqual([
+      "20260726120000",
+      "20260727093000"
+    ]);
+  });
+
+  it("both real shapes agree about the same repo state", () => {
+    expect(parseMigrationJson(REAL_CLI_JSON).localOnly).toEqual(
+      parseMigrationList(REAL_CLI_OUTPUT).localOnly
+    );
+  });
+
+  it("returns null from the JSON reader for output that has none, so the table is tried", () => {
+    expect(parseMigrationJson(REAL_CLI_OUTPUT)).toBeNull();
+  });
+
+  it("ignores a line that starts with a brace but is not the payload", () => {
+    expect(parseMigrationJson('{"message":"no migrations key here"}')).toBeNull();
+  });
+
   it("reads the real CLI output — backticked cells, mixed-case header, backticked-space gaps", () => {
     expect(parseMigrationList(REAL_CLI_OUTPUT)).toEqual({
       localOnly: ["20260726120000", "20260727093000"],
@@ -146,6 +184,31 @@ describe("describeDrift", () => {
     expect(errors).toContain("2 oapplicerad");
   });
 
+  it("passes a pull request that adds the only unapplied migration", () => {
+    const verdict = describeDrift(parseMigrationList(DIGEST_VERSION_NEVER_PUSHED), [], [
+      "20260727093000"
+    ]);
+
+    expect(verdict.ok).toBe(true);
+    expect(errorsOf(verdict)).toEqual([]);
+    expect(verdict.messages.map((m) => m.text).join("\n")).toContain("appliceras när den merge:as");
+  });
+
+  it("still fails on drift the pull request did not introduce", () => {
+    const verdict = describeDrift(parseMigrationList(SEVERAL_UNAPPLIED), [], ["20260727160000"]);
+    const errors = errorsOf(verdict).join("\n");
+
+    // The one it adds is fine; the one that was already merged and never applied is not.
+    expect(verdict.ok).toBe(false);
+    expect(errors).toContain("20260727140000");
+    expect(errors).not.toContain("20260727160000");
+    expect(errors).toContain("1 oapplicerad");
+  });
+
+  it("treats an unknown base as 'all pre-existing', failing closed", () => {
+    expect(describeDrift(parseMigrationList(SEVERAL_UNAPPLIED), [], []).ok).toBe(false);
+  });
+
   it("warns but stays green when the database is ahead of the branch", () => {
     const verdict = describeDrift(parseMigrationList(DATABASE_AHEAD), ["20260726120000"]);
 
@@ -162,6 +225,27 @@ describe("describeDrift", () => {
 
   it("accepts an empty table when the repo has no migrations either", () => {
     expect(describeDrift({ localOnly: [], remoteOnly: [], rowCount: 0 }, []).ok).toBe(true);
+  });
+});
+
+describe("parseAddedMigrations", () => {
+  it("reads versions out of git diff output", () => {
+    const diff = [
+      "supabase/migrations/20260726120000_import.sql",
+      "supabase/migrations/20260727093000_import_digest_version.sql"
+    ].join("\n");
+
+    expect(parseAddedMigrations(diff)).toEqual(["20260726120000", "20260727093000"]);
+  });
+
+  it("ignores anything that is not a timestamped migration", () => {
+    const diff = ["supabase/config.toml", "supabase/migrations/README.md", ""].join("\n");
+
+    expect(parseAddedMigrations(diff)).toEqual([]);
+  });
+
+  it("returns nothing for empty output — a change that adds no migration", () => {
+    expect(parseAddedMigrations("")).toEqual([]);
   });
 });
 
