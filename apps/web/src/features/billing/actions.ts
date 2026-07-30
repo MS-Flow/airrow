@@ -42,15 +42,26 @@ async function customerFor(orgId: string, email: string, name: string): Promise<
   const existing = await getSubscription(orgId);
   if (existing) return existing.customerId;
 
-  const customer = await stripe().customers.create({
-    email,
-    name,
-    // The organization id travels with the customer so a human debugging a payment in the Stripe
-    // dashboard can find the workspace without a database query.
-    metadata: { organization_id: orgId }
-  });
+  const customer = await stripe().customers.create(
+    {
+      email,
+      name,
+      // The organization id travels with the customer so a human debugging a payment in the Stripe
+      // dashboard can find the workspace without a database query.
+      metadata: { organization_id: orgId }
+    },
+    // Keyed on the organization, so a double-submitted upgrade or a retried request returns the
+    // customer that already exists instead of minting a second one.
+    { idempotencyKey: `airrow-customer-${orgId}` }
+  );
   await linkStripeCustomer(orgId, customer.id);
-  return customer.id;
+
+  // Read back rather than trusting what we just created. `linkStripeCustomer` ignores a duplicate
+  // insert, so if two requests raced here only one id was recorded — and Checkout must use *that*
+  // one. Returning the local id would send the founder to pay against a customer the webhook cannot
+  // resolve to an organization, which takes their money and never grants Pro.
+  const recorded = await getSubscription(orgId);
+  return recorded?.customerId ?? customer.id;
 }
 
 export async function startCheckoutAction(formData: FormData): Promise<BillingRedirect> {

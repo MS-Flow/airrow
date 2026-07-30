@@ -112,7 +112,7 @@ interface OrgRow {
   name: string;
   kind: "personal" | "team";
   created_by: string | null;
-  plan: string | null;
+  plan?: string | null;
 }
 const toOrg = (r: OrgRow): OrgRecord => ({
   id: r.id,
@@ -124,6 +124,15 @@ const toOrg = (r: OrgRow): OrgRecord => ({
   // is the one safe direction for an entitlement.
   plan: r.plan === "pro" ? "pro" : "free"
 });
+
+type SupabaseError = { message: string; code?: string };
+
+function isMissingPlanColumn(error: SupabaseError): boolean {
+  return (
+    error.code === "42703" ||
+    /column .*organizations\.plan does not exist/i.test(error.message)
+  );
+}
 
 interface ProjectRow {
   id: string;
@@ -220,14 +229,25 @@ export async function getOrgForUser(userId: string): Promise<OrgRecord | null> {
   );
   const orgId = memberships[0]?.organization_id;
   if (!orgId) return null;
-  const org = maybe<OrgRow>(
-    await db()
+  const query = await db()
+    .from("organizations")
+    .select("id, name, kind, created_by, plan")
+    .eq("id", orgId)
+    .maybeSingle();
+
+  if (query.error) {
+    if (!isMissingPlanColumn(query.error)) throw new Error(`Supabase: ${query.error.message}`);
+
+    const fallback = await db()
       .from("organizations")
-      .select("id, name, kind, created_by, plan")
+      .select("id, name, kind, created_by")
       .eq("id", orgId)
-      .maybeSingle()
-  );
-  return org ? toOrg(org) : null;
+      .maybeSingle();
+    if (fallback.error) throw new Error(`Supabase: ${fallback.error.message}`);
+    return fallback.data ? toOrg(fallback.data) : null;
+  }
+
+  return query.data ? toOrg(query.data) : null;
 }
 
 /** Keep profiles.display_name in sync with the auth user's name. */
