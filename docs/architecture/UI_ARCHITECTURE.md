@@ -108,6 +108,7 @@ failure teaches founders to dismiss both. Below ~24px the mark drops the gradien
 /app/projects/[id]/continue        "Continue locally" handoff
 /app/settings                      Profile, plan & billing, theme, workspace, connections
 /app/upgrade                       What Pro gives, and the way to buy it (specs 99, 100)
+/app/upgrade/return                Where Checkout returns: reconciles with Stripe, then Settings (spec 100)
 ```
 
 The paywall sits at **generate**, never earlier: a founder out of free foundations can still create a

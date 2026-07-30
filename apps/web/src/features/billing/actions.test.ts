@@ -98,6 +98,16 @@ describe("startCheckoutAction", () => {
     );
   });
 
+  it("returns through the route that reconciles with Stripe, not straight to Settings", async () => {
+    // Spec 100: the plan has to be right when the founder lands. Returning to Settings meant showing
+    // whatever the webhook had managed to write by then, which on a bad day was nothing at all.
+    await startCheckoutAction(form("month"));
+
+    expect(sessionsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ success_url: "https://airrow.test/app/upgrade/return" })
+    );
+  });
+
   it("never asks Checkout to grant anything itself", async () => {
     // The webhook is the only writer of the plan. Checkout only takes money.
     await startCheckoutAction(form("month"));

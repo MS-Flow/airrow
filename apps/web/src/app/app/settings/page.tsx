@@ -22,6 +22,7 @@ import {
 import {
   BillingUnavailable,
   ManageBillingButton,
+  RefreshPlanButton,
   UpgradeButtons
 } from "@/features/billing/BillingActions";
 import { githubIdentity, requireSession, updateName } from "@/lib/auth";
@@ -42,13 +43,15 @@ export const metadata = { title: "Settings" };
 export default async function SettingsPage({
   searchParams
 }: {
-  searchParams: Promise<{ saved?: string; upgraded?: string }>;
+  searchParams: Promise<{ saved?: string; upgraded?: string; refreshed?: string }>;
 }) {
-  const { saved, upgraded } = await searchParams;
+  const { saved, upgraded, refreshed } = await searchParams;
   const { user, org } = await requireSession();
   const theme = await readTheme();
   const allowance = await checkAllowance({ orgId: org.id, plan: org.plan, userId: user.id });
-  const subscription = org.plan === "pro" ? await getSubscription(org.id) : null;
+  // Read whatever the plan, not only on Pro: a founder who paid and is still on free has a customer
+  // record, and that record is what makes "check again" worth offering them.
+  const subscription = await getSubscription(org.id);
   const intervals = stripePrices().map((p) => p.interval);
   const github = await githubIdentity();
   const githubConfigured = Boolean(process.env.GITHUB_APP_ID && process.env.GITHUB_APP_PRIVATE_KEY);
@@ -105,15 +108,15 @@ export default async function SettingsPage({
               whose payment had gone through read "You're on Pro" directly above "Free · 0 of 1
               foundation left" and had no idea which half to believe. So the plan is read, not
               assumed. */}
-          {upgraded ? (
+          {upgraded || refreshed ? (
             org.plan === "pro" ? (
               <p className="mb-4 text-sm text-success">Payment confirmed. You&rsquo;re on Pro.</p>
             ) : (
-              <Notice title="Payment received, waiting for Stripe" className="mb-4" role="status">
-                Your card went through. Pro switches on when Stripe confirms it to us, which is
-                normally a few seconds away — reload this page. If it still says Free in a few
-                minutes, nothing is lost: the payment is recorded with Stripe and the plan can be
-                applied from it.
+              <Notice title="Stripe has no paid subscription for this workspace" className="mb-4" role="status">
+                We asked Stripe directly and it reports nothing active here yet. A payment taken
+                seconds ago can still be settling — try again in a moment. If you have a receipt and
+                this keeps saying the same thing, nothing is lost: the payment is recorded with
+                Stripe, and it is a support ticket rather than money gone.
               </Notice>
             )
           ) : null}
@@ -126,7 +129,7 @@ export default async function SettingsPage({
                 </span>{" "}
                 · unlimited generations. {allowance.used} used so far.
               </p>
-              {subscription ? (
+              {subscription && org.plan === "pro" ? (
                 <>
                   <p className="mt-1.5 text-xs text-fg-faint">
                     {subscription.cancelAtPeriodEnd
@@ -159,6 +162,10 @@ export default async function SettingsPage({
               ) : (
                 <BillingUnavailable />
               )}
+              {/* Only for someone who has actually been to Checkout: a customer record exists for
+                  this workspace and the plan still says free. Offered to everyone it would read as
+                  "the product is unsure whether you paid", which is its own kind of alarming. */}
+              {stripeConfigured() && subscription ? <RefreshPlanButton /> : null}
             </>
           )}
         </CardBody>

@@ -9,7 +9,12 @@ import { useActionState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { InlineError, Notice } from "@/components/ui/states";
 import { SubmitButton } from "@/components/ui/submit-button";
-import { openBillingPortalAction, startCheckoutAction, type BillingRedirect } from "./actions";
+import {
+  openBillingPortalAction,
+  refreshPlanAction,
+  startCheckoutAction,
+  type BillingRedirect
+} from "./actions";
 
 /** Leaves for Stripe as soon as the action hands back a URL. */
 function useStripeRedirect(state: BillingRedirect): void {
@@ -48,6 +53,22 @@ export function UpgradeButtons({ intervals }: { intervals: string[] }) {
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * "I have paid — look again."
+ *
+ * A plain form posting a server action rather than another `useActionState` pair: this one has
+ * nothing to report back, it redirects, and the plan it changes is read by the whole shell.
+ */
+export function RefreshPlanButton() {
+  return (
+    <form action={refreshPlanAction} className="mt-3">
+      <SubmitButton size="sm" variant="secondary" pendingLabel="Checking with Stripe…">
+        Already paid? Check again
+      </SubmitButton>
+    </form>
   );
 }
 

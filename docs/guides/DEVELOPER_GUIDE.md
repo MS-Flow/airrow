@@ -109,9 +109,12 @@ stripe logs tail                               # every API call, as Stripe saw i
   code: `update organizations set plan = 'pro' where id = '…';`
 
 ### Paid, and still on Free
-Settings now says "Payment received, waiting for Stripe" rather than "You're on Pro" until the plan
-column actually changes, because the redirect back from Checkout proves only that a browser returned.
-If it stays that way, the event never landed or never applied. In order:
+Checkout returns to `/app/upgrade/return`, which asks Stripe's API what this customer actually has and
+applies it before Settings renders — so the ordinary case is now correct with or without a webhook, and
+Settings says "Payment confirmed" only when the plan column says so. If it still reports that Stripe
+has nothing active, press **"Already paid? Check again"** first: that is the same reconciliation on
+demand. When even that finds nothing, the payment did not reach the customer we are asking about, or
+the write failed. In order:
 
 1. **Is anything listening?** Locally, `stripe listen --forward-to localhost:3000/api/stripe/webhook`
    must be running *at the moment you pay* — without it Stripe has nowhere to deliver, and the app

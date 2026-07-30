@@ -154,6 +154,22 @@ _What "done" means. Every line is something a reviewer can check._
 - [x] Free gets the repairs spec 74 defines; Pro is unlimited. No new entitlement rule is introduced.
 - [x] Pro-locked surfaces are shown disabled with an explanation rather than hidden.
 
+### Paying for real (added 2026-07-30, after the first live-ish run)
+
+- [x] A completed payment turns into Pro **without** depending on webhook delivery: Checkout returns
+      through a route that reconciles with Stripe's API before any screen renders.
+- [x] A founder who is on free and believes they have paid can resolve it themselves, from Settings,
+      without a support ticket or a SQL statement.
+- [x] Nothing grants Pro on the strength of the redirect. Every write still comes from something
+      Stripe said, through `applySubscriptionState`.
+- [x] The reconciliation applies a *cancellation* as readily as a purchase — it is a sync, not an
+      upgrade button in disguise.
+- [x] Settings never claims a plan the database does not hold.
+- [x] A misconfigured or unreachable Stripe degrades to the honest disabled state and a named
+      variable in the log, never to a crash on the button a founder pressed to pay.
+- [x] Going live is a written checklist, not folklore: live keys, live price, live webhook endpoint,
+      portal, VAT decision, and one real payment proved end to end.
+
 - [x] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures).
 
 ### Verification
@@ -420,11 +436,47 @@ second attempt — but a retry into an unmigrated database is a founder who paid
 indefinitely. `DEVELOPER_GUIDE.md` gained a "Paid, and still on Free" runbook in that order: listener,
 delivery response, schema, then resend the event.
 
-**Not done here: reconciling from Stripe.** The obvious next thought is a "refresh from Stripe" button
-that reads the subscription and applies it. It is deliberately not in this fix — §0 and spec 99 make
-the webhook the only non-migration writer of `organizations.plan`, and moving that boundary is a spec
-amendment, not a bug fix (§IV). The manual repair is the documented SQL, and it stays that way until a
-spec says otherwise.
+**6. And then the rule itself had to change.** The fix above told the founder the truth and left them
+stuck in it. Three failures in a row — no listener, an unmigrated database, a mistyped variable — were
+each enough on their own to turn a completed payment into a founder on free, and every one of them
+lived in webhook *delivery*. A payment path whose only route to the entitlement is an inbound HTTP call
+we do not control has a single point of failure by construction, and "run this SQL" is not a product.
+
+**Amendment to spec 99 (recorded here, per the constitution's amendment rule).** Spec 99 said the
+webhook is the only non-migration writer of `organizations.plan`. It now reads: *the plan is written
+only from something Stripe told us*, which is the webhook **or** a direct, server-side read of Stripe's
+API — both through `applySubscriptionState`, and neither ever from the browser. The sentence spec 99
+was actually defending is untouched: a Checkout redirect proves nothing and grants nothing. Asking
+Stripe with our own secret key is not the redirect; it is the same evidence the webhook carries,
+pulled instead of pushed.
+
+What that bought, in order of how much it matters:
+
+- **`features/billing/sync.ts`** — `syncPlanFromStripe(orgId)`. Reads the organization's own recorded
+  customer, lists its subscriptions, picks the one that decides the plan and applies it. It writes only
+  when Stripe has something to say (`unknown` is deliberately distinct from `free`), applies a
+  cancellation exactly as readily as a purchase, and never throws: it runs on the screen where someone
+  is confirming a payment, and taking that screen down would turn a delay into an outage.
+- **`app/app/upgrade/return/route.ts`** — Checkout's `success_url`. The plan is reconciled *before*
+  anything renders, so the ordinary case is now correct with or without the webhook. Inside `/app`, so
+  the auth gate covers it and `requireSession` scopes it to the caller's own organization.
+- **"Already paid? Check again"** on Settings, shown only to an organization that has a customer record
+  and is still on free. The founder's own way out of the exact state this spec's author sat in, without
+  a support ticket.
+- **`features/billing/subscription-state.ts`** — the webhook's reading of a subscription, lifted out so
+  both writers share it. Two places deciding a plan slightly differently is the kind of drift that is
+  only discovered by the person it charges.
+
+**The webhook is still required and is still primary.** Renewals, failed payments and cancellations
+arrive when nobody is looking at a screen, and no sync runs then. What changed is that it is no longer
+the *only* way a payment can become a plan.
+
+**Going live is now written down.** `INFRASTRUCTURE_SETUP.md` §6 covers what test mode does not carry
+over — live product and price, live keys, a live webhook endpoint and its own signing secret, the
+customer portal Stripe requires you to switch on before `Manage billing` works — plus the two things
+code cannot decide: VAT (Checkout is created without `automatic_tax`, which is a deliberate decision to
+make rather than a default to inherit) and what `/terms` says about renewal and cancellation. It ends
+with one real payment proved end to end, and a refund.
 
 **Verification (2026-07-30)**
 
@@ -433,7 +485,7 @@ pnpm -r typecheck   Done — clean across schemas, engine, web
 pnpm -r lint        Done — no new issues
 pnpm -r test        schemas   35 passed
                     engine   219 passed
-                    web      397 passed (55 files)
+                    web      407 passed (56 files)
 pnpm test:scripts     13 passed
 pnpm build          Done
 ```
@@ -447,8 +499,13 @@ including that nothing already generated is affected; `lib/stripe.test.ts` (+5) 
 is required, a misspelled variable is reported by name, and a price id with a stray colon is rejected
 before Stripe sees it; `features/billing/actions.test.ts` (+2) — a rejected Stripe call is reported
 inline with the detail in the log, for the checkout session and for the customer behind it;
-`app/app/settings/page.test.tsx` (+3) — coming back from Checkout claims Pro only when the plan says
-so, and says nothing about a payment when nobody came back from one.
+`app/app/settings/page.test.tsx` (+5) — coming back from Checkout claims Pro only when the plan says
+so, says nothing about a payment when nobody came back from one, and offers "check again" to exactly
+the organization that has been to Checkout and is still on free; `features/billing/sync.test.ts` (7) —
+the reconciliation grants from what Stripe reports, applies a cancellation the same way, prefers a paid
+subscription over an abandoned attempt, writes nothing when there is nothing to write, and reports
+rather than throws when Stripe is unreachable; `features/billing/actions.test.ts` (+1) — Checkout
+returns through the reconciling route rather than straight to Settings.
 
 ---
 

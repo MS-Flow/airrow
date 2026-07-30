@@ -1,5 +1,10 @@
-// The Stripe webhook (spec 99) — the only thing outside a migration that writes
-// `organizations.plan`.
+// The Stripe webhook (spec 99) — the primary path by which `organizations.plan` changes, and the only
+// one that runs when nobody is looking at a screen: renewals, failed payments, cancellations.
+//
+// Spec 100 added a second writer, `features/billing/sync.ts`, for the moment a founder *is* looking:
+// it asks Stripe's API directly and applies the same state through the same function. What has not
+// changed is the rule underneath both — the plan follows what Stripe says, never what a redirect
+// claims.
 //
 // It is a public, unauthenticated endpoint by necessity: Stripe has no session with us. The
 // signature check is therefore the whole of its authorization, and it runs against the *raw* body
@@ -17,35 +22,14 @@ import {
   releaseStripeEvent,
   type SubscriptionState
 } from "@/lib/data/store";
-import { planForStatus, stripe, stripeConfigured, stripeWebhookSecret } from "@/lib/stripe";
+import {
+  stripeCustomerId as customerId,
+  toSubscriptionState as toState
+} from "@/features/billing/subscription-state";
+import { stripe, stripeConfigured, stripeWebhookSecret } from "@/lib/stripe";
 
 /** Stripe signs the bytes it sent. Next's parsed body would be a different string. */
 export const runtime = "nodejs";
-
-/** Whatever Stripe puts a customer id in: a string on the way out, an object on the way back. */
-function customerId(value: string | Stripe.Customer | Stripe.DeletedCustomer | null): string | null {
-  if (typeof value === "string") return value;
-  return value?.id ?? null;
-}
-
-function toState(subscription: Stripe.Subscription): SubscriptionState | null {
-  const customer = customerId(subscription.customer);
-  if (!customer) return null;
-
-  // `current_period_end` is seconds since the epoch and is absent on some statuses. Reading it off
-  // the first item rather than the subscription: Stripe moved it there, and the top-level field is
-  // not present on newer API versions.
-  const periodEnd = subscription.items.data[0]?.current_period_end;
-
-  return {
-    customerId: customer,
-    subscriptionId: subscription.id,
-    status: subscription.status,
-    currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
-    cancelAtPeriodEnd: subscription.cancel_at_period_end,
-    plan: planForStatus(subscription.status)
-  };
-}
 
 /**
  * What a single event means for the organization, or null when it means nothing.

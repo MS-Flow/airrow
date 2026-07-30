@@ -6,9 +6,12 @@
 // Neither writes `organizations.plan`: Checkout returning successfully proves the browser reached a
 // URL, not that money moved. Only the webhook grants Pro.
 import { headers } from "next/headers";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { getSubscription, linkStripeCustomer } from "@/lib/data/store";
 import { stripe, stripeConfigured, stripePrices } from "@/lib/stripe";
+import { syncPlanFromStripe } from "./sync";
 
 export interface BillingRedirect {
   url?: string;
@@ -111,13 +114,31 @@ export async function startCheckoutAction(formData: FormData): Promise<BillingRe
       mode: "subscription",
       customer,
       line_items: [{ price: price.id, quantity: 1 }],
-      success_url: `${base}/app/settings?upgraded=1`,
+      // Not straight to Settings: the return route reconciles with Stripe first, so the plan is
+      // already right when the founder lands rather than depending on the webhook having won a race.
+      success_url: `${base}/app/upgrade/return`,
       cancel_url: `${base}/app/settings`,
       // Repeated on the subscription because `checkout.session.completed` and the subscription events
       // arrive separately, and the later ones carry only what the subscription itself holds.
       subscription_data: { metadata: { organization_id: org.id } }
     });
   });
+}
+
+/**
+ * Ask Stripe again what this organization has paid for.
+ *
+ * The founder's own way out of the one state nobody else can fix from a screen: paid, and still on
+ * free because the event never landed. It writes nothing of its own — `syncPlanFromStripe` applies
+ * what Stripe reports, or leaves the plan exactly as it was.
+ */
+export async function refreshPlanAction(): Promise<void> {
+  if (!stripeConfigured()) return;
+  const { org } = await requireSession();
+  await syncPlanFromStripe(org.id);
+  // The plan is read on render by Settings, the app shell and every allowance check.
+  revalidatePath("/app", "layout");
+  redirect("/app/settings?refreshed=1");
 }
 
 /**

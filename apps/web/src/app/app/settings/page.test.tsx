@@ -21,7 +21,12 @@ vi.mock("@/lib/auth", () => ({
   githubIdentity: async () => identity.current,
   updateName: vi.fn()
 }));
-vi.mock("@/lib/data/store", () => ({ getSubscription: async () => null }));
+const customer = vi.hoisted((): { current: unknown } => ({ current: null }));
+vi.mock("@/lib/data/store", () => ({ getSubscription: async () => customer.current }));
+vi.mock("@/lib/stripe", () => ({
+  stripeConfigured: () => true,
+  stripePrices: () => [{ id: "price_monthly", interval: "month" }]
+}));
 vi.mock("@/lib/theme", () => ({ readTheme: async () => "dark" }));
 vi.mock("@/features/generation/allowance", () => ({
   FREE_GENERATION_LIMIT: 1,
@@ -45,8 +50,8 @@ describe("Settings — coming back from Checkout", () => {
     plan.current = "free";
     render(await settings({ upgraded: "1" }));
 
-    expect(screen.queryByText(/you're on pro/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/payment received, waiting for stripe/i)).toBeInTheDocument();
+    expect(screen.queryByText(/you.re on pro/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/stripe has no paid subscription/i)).toBeInTheDocument();
     expect(screen.getByText(/nothing is lost/i)).toBeInTheDocument();
   });
 
@@ -61,8 +66,26 @@ describe("Settings — coming back from Checkout", () => {
     plan.current = "free";
     render(await settings());
 
-    expect(screen.queryByText(/payment received/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/stripe has no paid subscription/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/payment confirmed/i)).not.toBeInTheDocument();
+  });
+
+  it("offers a re-check to someone who has been to Checkout and is still on free", async () => {
+    // The way out of "I paid and it says free" without a support ticket: ask Stripe again.
+    plan.current = "free";
+    customer.current = { organizationId: "o1", customerId: "cus_1", status: "incomplete" };
+    render(await settings());
+
+    expect(screen.getByRole("button", { name: /already paid\? check again/i })).toBeEnabled();
+  });
+
+  it("does not offer it to someone who has never started a payment", async () => {
+    // Nothing to re-check, and asking would read as the product doubting whether they paid.
+    plan.current = "free";
+    customer.current = null;
+    render(await settings());
+
+    expect(screen.queryByRole("button", { name: /check again/i })).not.toBeInTheDocument();
   });
 });
 
