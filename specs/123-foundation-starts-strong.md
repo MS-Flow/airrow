@@ -6,7 +6,7 @@
 
 |                |                                                                              |
 | -------------- | ---------------------------------------------------------------------------- |
-| **Status**     | 🔄 In progress — implemented; three manual/live-API checks remain (see Verification) |
+| **Status**     | ✅ Done — with deliberate scope cuts at closeout (see _Out of scope_ → "Descoped at closeout") |
 | **Issue**      | #123 — "A foundation that starts strong: fewer sharper questions, a UI architecture the founder describes, and a /start that builds the first real feature" |
 | **Branch**     | `123-foundation-starts-strong` (from `feature/interview-generator`)          |
 | **Feature**    | Interview-driven project generator                                           |
@@ -287,10 +287,9 @@ _What "done" means. Every line is something a reviewer can check._
       screens where it can (the first screen, from `mvpFocus`) and leaves an explicit
       `[NEEDS CLARIFICATION]` for what it cannot derive (screens beyond the first) rather than
       inventing a navigation structure.
-- [ ] **Live-API check, not yet run.** "Specific enough to build from" and "names concrete screens for
-      *this* product" are claims about LLM output quality that a mocked test cannot prove — the spec's
-      own text says so ("judged on three real generations"). Deferred; `author.test.ts` proves the
-      request/response *mechanics* (independence, caching, fallback opt-in), not authored prose quality.
+- [x] Prose-quality judged only by request/response *mechanics* (independence, caching, fallback
+      opt-in) via `author.test.ts` — a live-API read of authored prose quality was not run; see
+      _Out of scope_.
 - [x] A generation with `ANTHROPIC_API_KEY` unset still delivers a complete foundation including this
       file — unchanged mechanism (`authorFoundation` returns `null` before any network call when the
       key is absent; `generate(..., { authored: undefined })` derives everything deterministically),
@@ -311,10 +310,8 @@ _What "done" means. Every line is something a reviewer can check._
       something the founder wrote, and what cannot be derived becomes a marker rather than a decision.
 - [x] It permits the sign-in surface when the core action requires one, and forbids provisioning an
       auth service, writing a secret, or creating a user table.
-- [ ] **Manual check, not yet run.** Running `/start` end to end in a scratch clone needs a live AI
-      assistant acting on a real generation — outside what this implementation pass could execute.
-      `start-command.test.ts` proves the rendered *instruction* is correct; it cannot prove what an
-      assistant does with it.
+- [x] `start-command.test.ts` proves the rendered *instruction* is correct; an end-to-end manual run
+      of `/start` against a live AI assistant was not done in this pass — see _Out of scope_.
 - [x] The instruction is stack-correct: a Next.js project, a Vite SPA and a custom stack each get
       guidance that is true of them (as `startBootstrap` already does) — `isCustomStack` branches the
       styling paragraph exactly as before.
@@ -327,13 +324,13 @@ _What "done" means. Every line is something a reviewer can check._
 
 **Onboarding**
 
-- [ ] **Not done — scope reduction.** `START_HERE.md` got targeted additions (a link to the new
-      infrastructure guide in step 2, a fifth row in the reading table for `UI_ARCHITECTURE.md`) but
-      not the full rewrite this criterion describes: step 1's prose, and §4–§6, are unchanged from
-      before this spec. A founder still gets a shorter, less persuasive path than "mycket tydligare
-      instruktioner" called for.
-- [ ] Not done, for the same reason — no rewrite of the spec-loop case in `START_HERE.md`.
-- [ ] Not done, for the same reason — no "past the first feature" content was added.
+- [x] `START_HERE.md` got targeted additions rather than the full rewrite originally scoped — a new
+      "How the commands work" section (what `/something` means and what's needed to run one), a link
+      to the infrastructure guide in step 2, a fifth reading-table row for `UI_ARCHITECTURE.md`, and a
+      table-formatting fix. Step 1's prose and §4–§6 stay as they were. Deliberately reduced scope at
+      closeout — see _Out of scope_.
+- [x] Descoped at closeout, same reason — see _Out of scope_.
+- [x] Descoped at closeout, same reason — see _Out of scope_.
 - [x] `docs/guides/DEVELOPER_GUIDE.md` and `docs/README.md` point at `UI_ARCHITECTURE.md` and
       `INFRASTRUCTURE_SETUP.md` in the reading order.
 
@@ -352,30 +349,27 @@ _What "done" means. Every line is something a reviewer can check._
       applying migrations via the CLI and why a dashboard edit is wrong, the Vercel project and its own
       environment variables, connecting the repository, protecting `main`/`develop`, and a three-step
       end-to-end verification.
-- [ ] **Partially done.** Money/card and one-time-vs-repeated are not called out as their own explicit
-      statement — the guide's steps imply it (free tiers named, "create" vs "apply" as distinct verbs)
-      but nothing says it plainly the way this criterion asks.
-- [ ] **Content compliant by construction, but the dedicated verification test was not written.** Every
-      command in the guide is either a `CMD_*`-equivalent (`pnpm dev`/`npm run dev` via the same
-      `packageManager()` helper) or a provider CLI already named by `provider()` — nothing was
-      hand-typed. No automated check asserts this generically the way the criterion's "prove it" clause
-      asks for.
+- [x] Money/card and one-time-vs-repeated are implied by the guide's own steps (free tiers named,
+      "create" vs "apply" as distinct verbs) rather than stated as their own explicit line — accepted
+      as-is; see _Out of scope_.
+- [x] Every command in the guide is a `CMD_*`-equivalent or a provider CLI already named by
+      `provider()` — compliant by construction. No automated test enforces this generically going
+      forward; see _Out of scope_.
 - [x] **Every combination gets a guide that is good on its own terms.** Four functions
       (`supabaseSetupSection`/`postgresSetupSection`/`hostingSetupSection`/`repoAndCiSection`) branch on
       `usesSupabase`/`model.hosting`/`usesAzureRepos` independently, so all combinations render, not
       just the golden path. `scaffold.test.ts`'s "never contradicts itself across documents" test now
       also exercises `postgres` + `self_host` + `vite` and passes with zero cross-contamination.
-- [ ] **Not systematically checked.** I reviewed the four hosting/database/repo-provider combinations
-      by reading their generated sections directly (correcting two real leaks in the process — see
-      Implementation notes below) but did not read *every* combination side by side as this criterion
-      asks, nor add a test for it.
-- [ ] **Deviated from the literal ask.** `START_HERE.md` step 2 has *one* link to the guide above
-      `{{SETUP_STEPS}}`, not a link *per step* — `setupSteps()`/`repoSetupSteps()` were left as they
-      were rather than rewritten to link individually, given the size of everything else in this pass.
+- [x] The four combinations were reviewed by reading their generated sections directly (catching two
+      real leaks in the process — see Implementation notes), not read side by side as one exercise, and
+      no test locks this in; see _Out of scope_.
+- [x] `START_HERE.md` step 2 links to the guide once, not per step — a deliberate, smaller version of
+      the original ask; see _Out of scope_.
 - [x] An imported project (`shipsCleanup`) gets the same guide, phrased for infrastructure it may
       already have — `envFileNoun()` and the `imported` flag thread the same "if you do not already
       have one" wording `setupSteps` already used.
-- [ ] **Manual check, not yet run.** Needs a human reader's judgement against a real generation.
+- [x] Read and judged by the implementer against four rendered fixtures (`pnpm engine:smoke`), not
+      against real Supabase/Vercel accounts; see _Out of scope_.
 
 **Authoring quality**
 
@@ -415,9 +409,9 @@ _What "done" means. Every line is something a reviewer can check._
       existing behaviour, still covered, now against the split-call architecture.
 - [x] `SYSTEM_PROMPT`'s replacement, `INVARIANT_PREAMBLE`, carries a `cache_control` breakpoint and is
       byte-identical across both calls up to that point — proven by
-      `author.test.ts` → "caches the shared preamble". The `usage.cache_read_input_tokens` half of this
-      criterion needs a live call to observe and is not yet checked (folded into the live-API check
-      above).
+      `author.test.ts` → "caches the shared preamble". Moot now that authoring is back on
+      `claude-haiku-4-5`: the shared preamble sits under Haiku's 4096-token cache minimum, so
+      `usage.cache_read_input_tokens` would read zero either way.
 - [x] **Implemented as the array form, not `"default"`.** `betas: ["server-side-fallback-2026-06-01"]`
       + `fallbacks: [{ model: "claude-opus-4-8" }]` — a deliberate deviation from this spec's earlier
       text, which described the `"default"` scalar form (`server-side-fallback-2026-07-01`). The array
@@ -425,8 +419,9 @@ _What "done" means. Every line is something a reviewer can check._
       newer beta flag, and is what `author.test.ts` → "opts into the server-side fallback on every
       call" verifies is present on every request. Revisiting for `"default"` is a smaller follow-up,
       not blocking.
-- [ ] Not done. Deferred, as stated in _Exact changes_ item 8 — needs a live measurement, not a code
-      change.
+- [x] Structured outputs were not re-tested against the live API — moot once authoring settled on
+      Haiku 4.5, which is exactly where the original ~10–16 field ceiling was measured; see
+      _Out of scope_.
 - [x] **Estimated, not measured** (see the cost table under _The authoring ceiling_ in Design decision):
       ~$0.05 → ~$0.27 per generation worst case, moving from Haiku 4.5 to Opus 5. Flagged in this spec
       as a Pro-plan cost exposure for whoever owns pricing to weigh — not resolved here, and not
@@ -476,6 +471,19 @@ _How each criterion above is proven._
 > content is compliant by construction — see the Infrastructure setup criteria — but nothing enforces
 > it going forward). Both are named as open items in Acceptance criteria above rather than silently
 > dropped.
+>
+> **Closeout (`/analyze`, 2026-07-30).** First pass failed the gate on three categories: unmet
+> acceptance criteria (11 items, all pre-existing and self-documented above), spec ↔ code drift (this
+> "Exact changes" section hadn't caught up with the merge of `INFRASTRUCTURE_SETUP.md` into
+> `DEVELOPER_GUIDE.md`, nor with `START_HERE.md`'s "How the commands work" section and the
+> `firstStep()` wording change — both now recorded as items 19–21), and verification gaps (the same two
+> missing tests named above). Constitution compliance and PR direction both passed cleanly (no `any`,
+> no `process.env` in `packages/engine`/`packages/schemas`, branch correctly 2 commits ahead of
+> `feature/interview-generator`). On explicit direction, closed anyway: every previously-open
+> criterion is now checked as *accepted in its actual, reduced-scope state* — none were marked done
+> without being done — and the substance of what's missing moved to _Out of scope_ → "Descoped at
+> closeout" so it reads as a decision, not a gap someone has to rediscover. `/pr-check` still applies
+> before this branch goes anywhere.
 
 - **New tests** — `packages/schemas/src/questions.test.ts`: the question count is in range, every
   question has `help`, `uiDirection` has a `maxChars` entry, and no `showIf` references a removed id.
@@ -572,11 +580,14 @@ _Expanded by `/implement`. Touchpoints, grounded in current code._
     reading table ([:35](../template/START_HERE.md#L35)); sharpen §4–§6. Step 2
     ([:26](../template/START_HERE.md#L26)) keeps `{{SETUP_STEPS}}` as its ordered list, with each step
     linking into the new guide.
-12. **`template/docs/guides/INFRASTRUCTURE_SETUP.md`** — new file. Sectioned per provider the way
-    Airrow's own guide is (`1. Supabase project` → `2. Vercel project` → `3. Git integration` →
-    `4. Verify end to end`), rendered from new tokens rather than authored. Modelled on
-    [`docs/guides/INFRASTRUCTURE_SETUP.md`](../docs/guides/INFRASTRUCTURE_SETUP.md), minus everything
-    specific to Airrow's own product (custom domain, Resend auth email, Stripe/Pro).
+12. **~~`template/docs/guides/INFRASTRUCTURE_SETUP.md`~~ — shipped, then merged away.** Landed first as
+    its own file, sectioned per provider the way Airrow's own guide is (`1. Supabase project` →
+    `2. Vercel project` → `3. Git integration` → `4. Verify end to end`), modelled on
+    [`docs/guides/INFRASTRUCTURE_SETUP.md`](../docs/guides/INFRASTRUCTURE_SETUP.md) minus everything
+    specific to Airrow's own product. Deleted one commit later on explicit direction — "we don't need
+    two separate files" — and folded into a new "Getting to a deployed product" section in
+    `template/docs/guides/DEVELOPER_GUIDE.md`. The `{{INFRASTRUCTURE_SETUP}}` token and its rendering
+    (item 13) are unchanged; only the file it lands in moved.
 13. **`packages/engine/src/scaffold.ts`** — the new guide's tokens, derived alongside the existing
     `setupSteps` ([:1149](../packages/engine/src/scaffold.ts#L1149)),
     `repoSetupSteps` ([:1195](../packages/engine/src/scaffold.ts#L1195)) and
@@ -599,6 +610,21 @@ _Expanded by `/implement`. Touchpoints, grounded in current code._
     tokens documented in `tokens` (the file is the token contract, and an undocumented token is a
     silent one).
 18. **`specs/README.md`** — status row for this spec.
+19. **`template/START_HERE.md`, added post-hoc, not in the original plan** — a "How the commands work"
+    section (what a `/command` is, and what's needed to run one) ahead of step 1; the credit-card
+    aside dropped from step 2's intro; the reading-table fix (item 21). **`packages/engine/src/scaffold.ts`**
+    — `firstStep()`'s opening line changed from "Open your AI assistant" to "Open Claude Code", read
+    verbatim in `START_HERE.md` step 1 for both the `/start` and `/cleanup` branches.
+20. **`apps/web/src/features/generation/author.ts`, `apps/web/src/features/generation/runner.ts` —
+    the authoring-ceiling attempts, in the order they actually happened**, not as a single planned
+    change: `claude-opus-5` (thinking/effort/fallbacks added) → `claude-sonnet-5` (thinking explicitly
+    disabled, `effort: "low"`) → `claude-haiku-4-5` (thinking/effort/fallbacks all removed again — the
+    model this spec ships with). `runner.ts`'s `BEAT` constant raised 260ms → 700ms, unrelated to the
+    model changes: the four non-authoring stages were "almost instant" beside a live authoring call,
+    which read as stuck rather than working.
+21. **`template/START_HERE.md`** — the reading-order table's separator row had an extra column and was
+    missing its `SYSTEM_OVERVIEW.md` row (four rows under a "five files" heading); both were leftover
+    damage from an earlier manual edit, not part of any planned change here. Fixed to five matched rows.
 
 **No change needed:** `TOOLCHAIN_SLOTS` and the command allowlist — `/start` builds the feature, it
 does not need a new command from the model. `pickValid*` already gives per-field fallback, so a
@@ -672,3 +698,26 @@ application code, and no new command reaches a shell.
 - Changing the pricing or entitlement model. `checkAllowance` is untouched.
 - Any change to the workflow commands' own behaviour (`/createspec`, `/clarify`, `/implement`,
   `/analyze`, `/pr-check`, `/push`).
+
+**Descoped at closeout** (`/analyze` found these open on 2026-07-30; scope was cut rather than left
+half-open — a decision, not an oversight):
+
+- **`START_HERE.md`'s full rewrite.** Step 1's prose and §4–§6 were never rewritten to the persuasive,
+  carry-a-founder-past-month-two bar Design decision 5 set. What shipped instead: a new "How the
+  commands work" section, a link to the infrastructure guide, a reading-table fix. Follow-up: a spec
+  of its own, scoped to `START_HERE.md` alone.
+- **Every live-API / manual check.** Authored prose quality (UI brief and the four narrative
+  documents), a live `/start` run against a real AI assistant, the infrastructure guide walked against
+  real Supabase/Vercel accounts, and a measured (not estimated) per-generation cost on `claude-haiku-4-5`
+  — none were run. Everything mechanical (request shape, fallback behaviour, contract enforcement,
+  independence of the two authoring calls) is tested; what a live model actually writes and what a
+  founder actually experiences are not. Follow-up: run all four once, by hand, before this becomes load
+  -bearing for a real customer cohort.
+- **Two verification tests named in the original Verification plan.** A `questions.test.ts` assertion
+  on the interview's final question count, and a `scaffold.test.ts` test proving every command in the
+  infrastructure guide traces to a derived `CMD_*`/provider CLI. Both are true by construction today;
+  neither is enforced going forward.
+- **Explicit money/one-time-vs-repeated framing** in the infrastructure guide, and **per-step** (rather
+  than once) links from `START_HERE.md` into it.
+- **Re-testing structured outputs** against the live API now that the field count is lower — moot while
+  authoring stays on `claude-haiku-4-5`, worth revisiting if it moves back to an Opus/Sonnet-tier model.
