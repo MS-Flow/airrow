@@ -25,6 +25,9 @@ export type { ResolveInput };
 export { renderScaffold, deriveScaffoldValues, shipsPath } from "./scaffold.ts";
 export type { TemplateFile, ScaffoldDecision, ScaffoldPlan, RenderedScaffold } from "./scaffold.ts";
 
+export { diffGenerations } from "./revision.ts";
+export type { RevisionChange, RevisionDiff, RevisionEntry } from "./revision.ts";
+
 export {
   analyzeImport,
   applyResolutions,

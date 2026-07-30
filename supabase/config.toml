@@ -165,7 +165,11 @@ site_url = "http://127.0.0.1:3000"
 additional_redirect_urls = [
   "https://127.0.0.1:3000",
   "http://127.0.0.1:3000/auth/callback",
-  "http://localhost:3000/auth/callback"
+  "http://localhost:3000/auth/callback",
+  # The confirmation link lands here (spec 113). Supabase rejects an `emailRedirectTo` it has not been
+  # told about, so both spellings need listing for the same reason the callback does.
+  "http://127.0.0.1:3000/auth/confirm",
+  "http://localhost:3000/auth/confirm"
 ]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
@@ -239,20 +243,30 @@ otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
-# Use a production-ready SMTP server
+# Resend as the sending provider (spec 113), so the verification email comes from Airrow rather than
+# from Supabase's built-in sender — whose domain we do not own and whose rate limit is a couple of
+# mails an hour. Plain SMTP, so no integration code: the API key is the password.
+#
+# Left commented on purpose. This file governs the **local** stack only — the hosted project takes
+# these values through its dashboard SMTP fields (INFRASTRUCTURE_SETUP.md §6). Enabling it here would
+# override `[local_smtp]` above and point local mail at Resend, so a developer with no
+# RESEND_API_KEY gets failed sends instead of the local inbox, and a developer with one mails real
+# people from their laptop. Uncomment deliberately, and only to test real delivery.
 # [auth.email.smtp]
 # enabled = true
-# host = "smtp.sendgrid.net"
+# host = "smtp.resend.com"
 # port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# user = "resend"
+# pass = "env(RESEND_API_KEY)"
+# admin_email = "noreply@airrow.app"
+# sender_name = "Airrow"
 
-# Uncomment to customize email template
-# [auth.email.template.invite]
-# subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+# The confirmation email, versioned in the repo. `scripts/sync-supabase-auth.mjs` pushes the
+# same file to the hosted project, so the dashboard copy is derived rather than maintained — the
+# lesson spec 77 paid for.
+[auth.email.template.confirmation]
+subject = "Confirm your email address"
+content_path = "./supabase/templates/confirmation.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]

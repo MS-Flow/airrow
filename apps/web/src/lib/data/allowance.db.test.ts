@@ -68,16 +68,33 @@ describe.skipIf(!dbUp)("generation allowance ledger (local Supabase)", () => {
     );
   }
 
-  async function startGeneration(): Promise<void> {
-    await db.query(
-      "insert into public.generation_jobs (project_id, model_version_id, status) values ($1,$2,'completed')",
+  async function startGeneration(): Promise<string> {
+    const res = await db.query<{ id: string }>(
+      "insert into public.generation_jobs (project_id, model_version_id, status) values ($1,$2,'completed') returning id",
       [PROJECT, MODEL]
     );
+    return res.rows[0]!.id;
   }
 
   async function usage(): Promise<number> {
     const res = await db.query<{ n: string }>(
       "select count(*)::text as n from public.generation_usage where organization_id = $1",
+      [ORG]
+    );
+    return Number(res.rows[0]!.n);
+  }
+
+  /**
+   * What the allowance actually counts: ledger rows whose job Airrow paid for. Mirrors the exclusion
+   * in `chargedUsage` so the two cannot drift without this failing.
+   */
+  async function charged(): Promise<number> {
+    const res = await db.query<{ n: string }>(
+      `select count(*)::text as n
+         from public.generation_usage u
+         left join public.generation_jobs j on j.id = u.generation_job_id
+        where u.organization_id = $1
+          and (j.id is null or (j.status <> 'failed' and j.reused_authoring = false))`,
       [ORG]
     );
     return Number(res.rows[0]!.n);
@@ -130,5 +147,45 @@ describe.skipIf(!dbUp)("generation allowance ledger (local Supabase)", () => {
     await db.query("delete from public.organizations where id = $1", [ORG]);
 
     expect(await usage()).toBe(0);
+  });
+
+  /* ── What the founder is charged for (spec 74) ─────────────────────────────
+   *
+   * The ledger records every job. The allowance counts the subset Airrow paid a Claude call for,
+   * and there are now two ways to be outside it. Both are asserted against real rows because both
+   * are joins, and the unit tests mock exactly the function these prove.
+   */
+  it("charges for a completed generation", async () => {
+    await startGeneration();
+
+    expect(await charged()).toBe(1);
+  });
+
+  it("does not charge for a generation that fell over on our side", async () => {
+    const jobId = await startGeneration();
+    await db.query("update public.generation_jobs set status = 'failed' where id = $1", [jobId]);
+
+    expect(await usage()).toBe(1);
+    expect(await charged()).toBe(0);
+  });
+
+  it("does not charge for a regeneration that reused a previous run's prose", async () => {
+    // "Nothing changed" makes no Claude call, so it must cost nothing. Before spec 74 the job row
+    // was still inserted and the founder was still charged for a call nobody made.
+    const jobId = await startGeneration();
+    await db.query("update public.generation_jobs set reused_authoring = true where id = $1", [jobId]);
+
+    expect(await usage()).toBe(1);
+    expect(await charged()).toBe(0);
+  });
+
+  it("charges by default, so a job has to be shown to be free rather than assumed to be", async () => {
+    const jobId = await startGeneration();
+
+    const res = await db.query<{ reused_authoring: boolean }>(
+      "select reused_authoring from public.generation_jobs where id = $1",
+      [jobId]
+    );
+    expect(res.rows[0]?.reused_authoring).toBe(false);
   });
 });

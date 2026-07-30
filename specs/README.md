@@ -54,5 +54,9 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | `/cleanup`: the right first-run command for the project's origin | [91-cleanup-command.md](91-cleanup-command.md) | ✅ Done |
 | Azure DevOps gets its own workflow, not GitHub's with different labels | [67-azure-devops-parity.md](67-azure-devops-parity.md) | 🔄 In progress |
 | Sign in with GitHub, and import a public repo without a ZIP | [67-github-login-import.md](67-github-login-import.md) | ✅ Done |
+| Pro: a plan and entitlement model, and a free tier of one foundation | [74-pro-entitlements.md](74-pro-entitlements.md) | ✅ Done |
+| Stripe Checkout and the billing portal for Pro | [99-stripe-checkout.md](99-stripe-checkout.md) | ✅ Done |
+| The upgrade moment, and revising a foundation (issues #100 + #101) | [100-pro-upgrade-revisions.md](100-pro-upgrade-revisions.md) | ✅ Done |
 | `/createspec` syncs `develop` into the feature branch first | [104-createspec-sync-develop.md](104-createspec-sync-develop.md) | ✅ Done |
-| Migrations apply themselves, or the PR is blocked | [77-auto-apply-migrations.md](77-auto-apply-migrations.md) | 🔄 In progress |
+| Migrations apply themselves, or the PR is blocked | [77-auto-apply-migrations.md](77-auto-apply-migrations.md) | ✅ Done |
+| The verification email comes from Airrow | [113-branded-auth-email.md](113-branded-auth-email.md) | 🔄 In progress |

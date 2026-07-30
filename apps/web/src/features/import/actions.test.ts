@@ -1,29 +1,24 @@
-// The two ways an import used to fail as an opaque 500 instead of a readable state.
+// Import is a Pro capability (spec 74), and the two things worth proving are where the gate sits
+// and that both entry points pass through it.
 //
-// Both were real: a deployment without IMPORT_DIGEST_PEPPERS, and a migration that was committed but
-// never applied to the deployed database (issue #77). Either one threw out of the server action, and
-// Next.js turned that into "a server-side exception has occurred" with only a digest — the founder
-// lost the form they had filled in and learned nothing about why.
+// Where: after the analysis, before the first durable write. A free founder must get the real result
+// for their code — that is the whole reason the wall stands here rather than in front of the upload
+// — and must get no project, no import source and no prefilled answers.
 //
-// GitHub, Supabase and the session are mocked: none of them exists outside a request, and none of
-// them is what this is about (§V — no network, deterministic). The digest module is deliberately
-// *not* mocked, because its throw is the behaviour under test.
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+// Both: a ZIP and a GitHub repository are separate actions that converge on `completeImport`. A gate
+// added to one and forgotten on the other is exactly the bug this file exists to catch, so every
+// assertion runs against both.
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// `vi.mock` factories are hoisted above the module body, so the doubles they close over have to be
-// created in a hoisted block too — otherwise they are still uninitialised when the factory runs.
-const { requireSession, githubToken, createProject, createImportSource, saveInterviewAnswers } =
-  vi.hoisted(() => ({
-    requireSession: vi.fn(async () => ({ org: { id: "org-1" }, user: { id: "u-1" } })),
-    githubToken: vi.fn(async (): Promise<string | null> => "gh-token"),
-    createProject: vi.fn(async () => ({ id: "project-1" })),
-    // Variadic on purpose: one assertion reads the digest version out of the recorded arguments, and
-    // a zero-arity double gives `mock.calls` an empty tuple type with nothing to read.
-    createImportSource: vi.fn(async (..._args: unknown[]) => ({ id: "import-1" })),
-    saveInterviewAnswers: vi.fn(async () => undefined)
-  }));
+const requireSession = vi.hoisted(() => vi.fn());
+const githubToken = vi.hoisted(() => vi.fn(async (): Promise<string | null> => "gh-token"));
+const createProject = vi.hoisted(() => vi.fn());
+const createImportSource = vi.hoisted(() => vi.fn());
+const saveInterviewAnswers = vi.hoisted(() => vi.fn());
+const readArchive = vi.hoisted(() => vi.fn());
+const readRepository = vi.hoisted(() => vi.fn());
+const analyzeImport = vi.hoisted(() => vi.fn());
 
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ requireSession, githubToken }));
 vi.mock("@/lib/github", () => ({ githubReader: () => ({}) }));
 vi.mock("@/lib/data/store", () => ({
@@ -36,115 +31,155 @@ vi.mock("@/lib/data/store", () => ({
   latestJob: vi.fn(),
   saveConflictResolution: vi.fn()
 }));
-vi.mock("./repo", () => ({
-  readRepository: vi.fn(async () => ({
-    ok: true,
-    files: [{ path: "package.json", content: '{"name":"loop","dependencies":{"next":"15.0.0"}}' }],
-    ignored: 0
-  }))
+vi.mock("@airrow/engine", () => ({
+  analyzeImport,
+  digestImported: () => [],
+  slugify: (s: string) => s.toLowerCase()
 }));
+vi.mock("./archive", () => ({ readArchive }));
+vi.mock("./repo", () => ({ readRepository }));
+// The digest keyring reads a required secret from the environment and is not what this file is
+// about; the free path never reaches it, and the Pro path only has to get past it.
+vi.mock("./digest", () => ({ currentDigestVersion: () => 1, digestFor: () => () => "digest" }));
 
-import { importRepoAction } from "./actions";
+import { importProjectAction, importRepoAction, type ImportFormState } from "./actions";
 
-const ENV_KEY = "IMPORT_DIGEST_PEPPERS";
-const original = process.env[ENV_KEY];
+const EVIDENCE = [{ field: "framework" as const, value: "Next.js", source: "package.json" }];
 
-/** The form the repository picker submits, already validated shapes. */
-function form(): FormData {
-  const data = new FormData();
-  data.set("name", "Loop CRM");
-  data.set("description", "A lightweight CRM for small agencies.");
-  data.set("source", "repo");
-  data.set("owner", "acme");
-  data.set("repo", "loop");
-  return data;
+/** The analysis a founder would see: real evidence, derived locally, costing Airrow nothing. */
+const ANALYSIS = {
+  answers: {},
+  stackDetected: true,
+  evidence: EVIDENCE,
+  notes: ["A workspace was detected but is not modelled yet."],
+  filesAnalyzed: 42,
+  filesIgnored: 7
+};
+
+function signedInOn(plan: "free" | "pro"): void {
+  requireSession.mockResolvedValue({
+    user: { id: "u1", email: "f@example.com", name: "F", createdAt: "2026-01-01T00:00:00.000Z" },
+    org: { id: "o1", name: "Workspace", kind: "personal", createdBy: "u1", plan }
+  });
 }
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  createProject.mockResolvedValue({ id: "project-1" });
-  process.env[ENV_KEY] = "1:pepper-one";
-});
+function zipForm(): FormData {
+  const form = new FormData();
+  form.set("name", "Loop CRM");
+  form.set("description", "A lightweight CRM for small agencies.");
+  form.set("source", "zip");
+  form.set("archive", new File([new Uint8Array([1, 2, 3])], "loop.zip", { type: "application/zip" }));
+  return form;
+}
 
-afterEach(() => {
-  if (original === undefined) delete process.env[ENV_KEY];
-  else process.env[ENV_KEY] = original;
-  vi.restoreAllMocks();
-});
+function repoForm(): FormData {
+  const form = new FormData();
+  form.set("name", "Loop CRM");
+  form.set("description", "A lightweight CRM for small agencies.");
+  form.set("source", "repo");
+  form.set("owner", "acme");
+  form.set("repo", "loop");
+  return form;
+}
 
-describe("importing when the deployment is misconfigured", () => {
-  it("says so instead of throwing, and writes nothing", async () => {
-    delete process.env[ENV_KEY];
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+/** The two entry points, run identically — that is the point. */
+const entries: [string, () => Promise<ImportFormState>][] = [
+  ["a ZIP upload", () => importProjectAction({}, zipForm())],
+  ["a GitHub repository", () => importRepoAction({}, repoForm())]
+];
 
-    const state = await importRepoAction({}, form());
-
-    expect(state.error).toMatch(/not available on this deployment/i);
-    expect(state.projectId).toBeUndefined();
-    // The guard has to come *before* the project row, or a failed import leaves one behind.
-    expect(createProject).not.toHaveBeenCalled();
+describe("import behind Pro", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    githubToken.mockResolvedValue("gh-token");
+    analyzeImport.mockReturnValue(ANALYSIS);
+    readArchive.mockResolvedValue({ ok: true, files: [], ignored: [] });
+    readRepository.mockResolvedValue({ ok: true, files: [], ignored: [] });
+    createProject.mockResolvedValue({ id: "p1", name: "Loop CRM" });
   });
 
-  it("does not tell the founder to retry a ZIP that would fail the same way", async () => {
-    delete process.env[ENV_KEY];
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+  describe.each(entries)("from %s", (_label, run) => {
+    it("gives a free organization the analysis it just ran", async () => {
+      signedInOn("free");
 
-    const state = await importRepoAction({}, form());
+      const state = await run();
 
-    expect(state.error).toMatch(/a ZIP would fail the same way/i);
+      expect(state.requiresPro).toBe(true);
+      expect(state.preview).toMatchObject({
+        evidence: EVIDENCE,
+        notes: ANALYSIS.notes,
+        filesAnalyzed: 42,
+        filesIgnored: 7
+      });
+    });
+
+    it("persists nothing at all for a free organization", async () => {
+      signedInOn("free");
+
+      const state = await run();
+
+      expect(createProject).not.toHaveBeenCalled();
+      expect(createImportSource).not.toHaveBeenCalled();
+      expect(saveInterviewAnswers).not.toHaveBeenCalled();
+      expect(state.projectId).toBeUndefined();
+    });
+
+    it("withholds the prefilled interview, which is the part Pro buys", async () => {
+      signedInOn("free");
+
+      const state = await run();
+
+      expect(state.preview).not.toHaveProperty("answers");
+    });
+
+    it("still runs the analysis, rather than refusing before reading the files", async () => {
+      // The wall stands after the aha moment on purpose. If this ever starts short-circuiting
+      // earlier, a founder with an existing repo is being asked to buy blind.
+      signedInOn("free");
+
+      await run();
+
+      expect(analyzeImport).toHaveBeenCalled();
+    });
+
+    it("completes the import for a Pro organization", async () => {
+      signedInOn("pro");
+
+      const state = await run();
+
+      expect(state.projectId).toBe("p1");
+      expect(state.requiresPro).toBeUndefined();
+      expect(createProject).toHaveBeenCalledWith(
+        "o1",
+        "Loop CRM",
+        "A lightweight CRM for small agencies.",
+        expect.any(Function)
+      );
+      expect(saveInterviewAnswers).toHaveBeenCalled();
+    });
   });
 
-  it("logs the reason, since the founder's message deliberately does not carry it", async () => {
-    delete process.env[ENV_KEY];
-    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  it("blames the unreadable file, not the plan, when the archive cannot be read", async () => {
+    // A plan refusal for a file we could never have imported would be a lie, and would send the
+    // founder to a checkout to fix a broken ZIP.
+    signedInOn("free");
+    readArchive.mockResolvedValue({ ok: false, error: "That archive could not be opened." });
 
-    await importRepoAction({}, form());
+    const state = await importProjectAction({}, zipForm());
 
-    expect(logged).toHaveBeenCalled();
-    expect(String(logged.mock.calls[0]?.[0])).toMatch(/digest pepper/i);
-  });
-});
-
-describe("importing when the write fails", () => {
-  it("reports a failed save rather than a server exception", async () => {
-    // What a migration that never reached the deployed database actually looks like from here.
-    createProject.mockRejectedValue(
-      new Error("Supabase: column import_sources.digest_version does not exist")
-    );
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
-
-    const state = await importRepoAction({}, form());
-
-    expect(state.error).toMatch(/saving it failed/i);
-    expect(state.projectId).toBeUndefined();
+    expect(state.error).toMatch(/could not be opened/);
+    expect(state.requiresPro).toBeUndefined();
+    expect(analyzeImport).not.toHaveBeenCalled();
   });
 
-  it("never puts the database's own error in front of the founder", async () => {
-    createProject.mockRejectedValue(new Error("Supabase: relation does not exist"));
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+  it("asks GitHub for the repository before deciding on the plan", async () => {
+    // Same shape as the ZIP case: an expired GitHub sign-in is its own problem and is said plainly.
+    signedInOn("free");
+    githubToken.mockResolvedValue(null);
 
-    const state = await importRepoAction({}, form());
+    const state = await importRepoAction({}, repoForm());
 
-    expect(state.error).not.toMatch(/supabase|relation|column/i);
-  });
-});
-
-describe("importing when everything is configured", () => {
-  it("still returns the project id — the guards are not in the way", async () => {
-    const state = await importRepoAction({}, form());
-
-    expect(state.error).toBeUndefined();
-    expect(state.projectId).toBe("project-1");
-    expect(createImportSource).toHaveBeenCalledOnce();
-    expect(saveInterviewAnswers).toHaveBeenCalledOnce();
-  });
-
-  it("hashes with the configured pepper version, not the legacy raw SHA-256", async () => {
-    process.env[ENV_KEY] = "1:pepper-one,2:pepper-two";
-
-    await importRepoAction({}, form());
-
-    const digestVersion = createImportSource.mock.calls[0]?.[5];
-    expect(digestVersion).toBe(2);
+    expect(state.error).toMatch(/GitHub sign-in has expired/);
+    expect(state.requiresPro).toBeUndefined();
   });
 });

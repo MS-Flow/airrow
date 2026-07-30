@@ -4,9 +4,10 @@ import Link from "next/link";
 import { PageContainer } from "@/components/shell/page-container";
 import { Card, CardBody } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Notice } from "@/components/ui/states";
+import { Notice, UpgradeNotice } from "@/components/ui/states";
 import { ImportForm } from "@/features/import/ImportForm";
 import { RepoPicker } from "@/features/import/RepoPicker";
+import { requireSession } from "@/lib/auth";
 
 export const metadata = { title: "Import an existing project" };
 
@@ -22,6 +23,7 @@ export default async function ImportProject({
   searchParams: Promise<{ repoPage?: string }>;
 }) {
   const { repoPage } = await searchParams;
+  const { org } = await requireSession();
 
   return (
     <PageContainer className="max-w-xl animate-slide-up py-16">
@@ -38,6 +40,15 @@ export default async function ImportProject({
         rest. Nothing is written over: anything Airrow generates that already exists in your project
         is shown as a conflict for you to decide.
       </p>
+
+      {/* Said before the upload, not after it (spec 74). A founder who finds out at the end that
+          the result needs a plan they don't have has been wasted, however good the result is. */}
+      {org.plan === "pro" ? null : (
+        <UpgradeNotice className="mt-6" title="Import is part of Pro">
+          You can run the analysis now and see everything Airrow works out about your project —
+          that&rsquo;s free, and nothing is stored. Turning it into a project needs Pro.
+        </UpgradeNotice>
+      )}
 
       <Notice className="mt-6" title="Leave secrets and personal data out of the archive">
         Airrow reads every file to work out what your project already has, and it does{" "}
