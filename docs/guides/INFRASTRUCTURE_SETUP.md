@@ -46,7 +46,7 @@ Committing a migration is the whole job — CI applies it. Two workflows, one co
 | Every PR | `ci.yml`, step _Check migrations against the linked database_ | Read-only. Fails when `supabase/migrations` holds something the database does not, so it blocks the merge. |
 | Push to `develop` / `main` | `supabase-migrate.yml` | `supabase db push`, then asserts nothing is left unapplied. Idempotent — a push with no schema change is a green no-op. |
 
-`develop` is where a migration is genuinely needed first: `dev.airrow.app` runs `develop` code
+`develop` is where a migration is genuinely needed first: the dev environment runs `develop` code
 against the **same** Supabase project as production (see the env-var table in §2). The `main` run is
 the safety net that guarantees production even if the `develop` run was missed.
 
@@ -108,10 +108,17 @@ the same push, but it only touches the database schema; it cannot gate the deplo
   code only reaches `main` through the strict PR chain (issue → feature → `develop` → `main`).
 - **Preview Deployments:** enabled by default — every PR / branch push gets its own throwaway URL.
   Confirm under **Settings → Git** that preview deployments are on.
-- **Branch Domain for `develop`:** **Project Settings → Domains → Add** → `dev.airrow.app` → under
-  "Git Branch" pick `develop`. This aliases the hostname to whatever `develop` last deployed, so the
-  URL never changes between deploys. `apps/web/vercel.json` adds `X-Robots-Tag: noindex` on this host
-  so it never gets indexed.
+- **The dev environment is `https://airrow-dev.vercel.app` today.** A stable hostname on Vercel's own
+  domain, serving what `develop` last deployed.
+- **Branch Domain for `develop` — planned, not attached.** **Project Settings → Domains → Add** →
+  `dev.airrow.app` → under "Git Branch" pick `develop`, which would alias a hostname on our own domain
+  to the same deploys. `dev.airrow.app` answers `404` as of 2026-07-30, so nothing points at it yet;
+  every reference to it in this guide describes the intended state, not the current one.
+- **Nothing but production is indexable.** `apps/web/vercel.json` sends `X-Robots-Tag: noindex` for
+  `dev.airrow.app` **and** every `*.vercel.app` host, which covers the dev environment above and every
+  preview deploy. The rule is host-matched rather than listed one by one precisely because it was
+  written against `dev.airrow.app` alone and therefore did nothing for a year: the host it named did
+  not exist while the host serving dev was never matched (spec 113).
 
 ---
 
@@ -138,8 +145,11 @@ the same push, but it only touches the database schema; it cannot gate the deplo
 | Branch                       | URL                                                | Stability                            |
 | ---------------------------- | -------------------------------------------------- | ------------------------------------ |
 | `main`                       | `https://airrow.app` (+ `www.airrow.app` redirect) | Production — never changes           |
-| `develop`                    | `https://dev.airrow.app`                           | Stable alias — same URL every deploy |
+| `develop`                    | `https://airrow-dev.vercel.app`                    | Stable — same URL every deploy       |
 | `feature/**`, `<nr>-<short>` | Vercel-generated preview URL                       | Throwaway — new URL per deploy       |
+
+`dev.airrow.app` is the intended home for the `develop` row and is not attached yet — see §3. Only the
+`main` row is indexable; everything else carries `X-Robots-Tag: noindex`.
 
 ---
 
@@ -148,8 +158,10 @@ the same push, but it only touches the database schema; it cannot gate the deplo
 - `pnpm build` passes locally.
 - The Vercel production deploy is green and `https://airrow.app` loads; `https://www.airrow.app`
   redirects to it (`curl -I https://www.airrow.app`).
-- Push to `develop` and confirm `https://dev.airrow.app` updates and the hostname stays the same as
-  the previous deploy; `curl -I https://dev.airrow.app` shows `X-Robots-Tag: noindex`.
+- Push to `develop` and confirm `https://airrow-dev.vercel.app` updates and the hostname stays the same
+  as the previous deploy; `curl -I https://airrow-dev.vercel.app` shows `X-Robots-Tag: noindex`.
+  The same check on `https://airrow.app` must show **no** such header — production is the one host that
+  is meant to be indexed.
 - Push a `feature/**` branch and confirm it only gets a throwaway preview URL — never the dev or
   production hostname.
 - The deployed app can reach Supabase (no auth/network errors in the Function logs once app code
@@ -157,6 +169,63 @@ the same push, but it only touches the database schema; it cannot gate the deplo
   the migration is applied).
 - Local RLS proof: `pnpm dlx supabase start` then `pnpm --filter web test organizations.rls` — the
   access + denial test passes against the local DB.
+
+---
+
+## 6. Auth email (Resend)
+
+Without this, Supabase sends the verification email from its own domain with its own wording — and its
+built-in mailer is rate-limited to a couple of messages an hour, so mail starts disappearing under any
+real traffic. Spec 113 replaces it with Resend over plain SMTP.
+
+1. **Create the sending domain.** At <https://resend.com> → **Domains → Add**, add `airrow.app`.
+   Resend shows DKIM (and optionally DMARC) records to publish.
+2. **Publish the DNS records** where `airrow.app` is served — Vercel → **Project Settings → Domains**,
+   or the DNS provider if it moves. Wait for Resend to report the domain **Verified**; mail sent before
+   that is likely to be filed as spam.
+3. **Create an API key** (Resend → **API keys**) with send permission only.
+4. **Point Supabase at it** — dashboard → _Project Settings → Authentication → SMTP Settings_:
+
+   | Field | Value |
+   | --- | --- |
+   | Host | `smtp.resend.com` |
+   | Port | `587` |
+   | Username | `resend` |
+   | Password | the Resend API key |
+   | Sender email | `noreply@airrow.app` |
+   | Sender name | `Airrow` |
+
+   This dashboard form is the only place these values are active. The same block sits **commented out**
+   in [`supabase/config.toml`](../../supabase/config.toml) for reference: that file governs the local
+   stack, where enabling it would override the local inbox and start mailing real addresses from a
+   developer's machine.
+5. **Allow the confirmation redirect.** Under _Authentication → URL Configuration → Redirect URLs_ add:
+   - `https://airrow.app/auth/confirm` — production
+   - `https://airrow-dev.vercel.app/auth/confirm` — the dev environment as it is today
+   - `https://*.vercel.app/auth/confirm` — preview deploys, whose hostnames change every time
+
+   Supabase rejects an `emailRedirectTo` it was not told about, and the app passes one per environment
+   (the host is allow-listed on our side too — `apps/web/src/lib/site-url.ts`). If the
+   `dev.airrow.app` branch domain from §3 is ever attached, add its `/auth/confirm` as well.
+6. **Push the template:**
+   ```bash
+   SUPABASE_ACCESS_TOKEN=… SUPABASE_PROJECT_ID=… node scripts/sync-auth-email-templates.mjs
+   ```
+
+**The template lives in the repo, not in the dashboard.**
+[`supabase/templates/confirmation.html`](../../supabase/templates/confirmation.html) is the source of
+truth; the script above pushes it to the hosted project. Editing the dashboard copy directly is
+pointless — the next sync overwrites it. `--dry-run` prints what would be sent without sending it.
+
+**Why a script and not a "paste this into the dashboard" step:** one fact in two places, kept in step
+by someone remembering, is what [spec 77](../../specs/77-auto-apply-migrations.md) was written to
+remove after it had already shipped a broken production database. A stale email template is cheaper
+than a stale schema, but it fails the same way — the version reviewers approve stops being the version
+founders receive.
+
+**Local development sends nothing outward.** `[auth.email.smtp]` stays commented out, so the local stack
+keeps using `[local_smtp]` — the mail catcher on port 54324 — and no real address is ever mailed from a
+developer machine. Enabling it is a deliberate act, and the point at which that stops being true.
 
 ---
 
@@ -173,4 +242,4 @@ the same push, but it only touches the database schema; it cannot gate the deplo
   creates the account but no session — the UI sends you to "Confirm your email" instead of the
   dashboard. `supabase/config.toml` (`enable_confirmations = false`) only governs a **local** stack.
   Turn it off for the dev project under _Authentication → Sign In / Providers → Email_ if you want
-  signup to log you straight in.
+  signup to log you straight in. Who that email comes from, and what it says, is §6 below.
