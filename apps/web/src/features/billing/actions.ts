@@ -17,6 +17,33 @@ export interface BillingRedirect {
 
 const UNAVAILABLE = "Pro isn't available yet — payment isn't configured on this deployment.";
 
+const STRIPE_FAILED =
+  "Stripe couldn't open that page just now. Nothing has been charged — try again in a moment.";
+
+/**
+ * A Stripe call, reported rather than thrown.
+ *
+ * These actions exist to *answer*: `BillingActions` renders `state.error` and sends the browser only
+ * when a URL comes back, which is the whole reason they do not redirect themselves. A rejected
+ * promise from the Stripe SDK broke that contract and reached the founder as a Next runtime error
+ * page, on the button they pressed to give us money.
+ *
+ * What Stripe actually said goes to the server log, not to the founder. `No such price: ':price_…'`
+ * is precisely what a developer needs and precisely what a customer cannot act on.
+ */
+async function fromStripe(
+  what: "checkout" | "billing portal",
+  create: () => Promise<{ url: string | null }>
+): Promise<BillingRedirect> {
+  try {
+    const { url } = await create();
+    return url ? { url } : { error: `Stripe did not return a ${what} URL.` };
+  } catch (error) {
+    console.error(`Stripe ${what} failed:`, error instanceof Error ? error.message : error);
+    return { error: STRIPE_FAILED };
+  }
+}
+
 /**
  * Where Stripe sends the founder back to.
  *
@@ -75,21 +102,22 @@ export async function startCheckoutAction(formData: FormData): Promise<BillingRe
   const price = prices.find((p) => p.interval === requested) ?? prices[0];
   if (!price) return { error: UNAVAILABLE };
 
-  const customer = await customerFor(org.id, user.email, org.name);
-  const base = await origin();
+  // Customer creation is inside the same guard: it is a Stripe call too, and it fails the same way.
+  return fromStripe("checkout", async () => {
+    const customer = await customerFor(org.id, user.email, org.name);
+    const base = await origin();
 
-  const session = await stripe().checkout.sessions.create({
-    mode: "subscription",
-    customer,
-    line_items: [{ price: price.id, quantity: 1 }],
-    success_url: `${base}/app/settings?upgraded=1`,
-    cancel_url: `${base}/app/settings`,
-    // Repeated on the subscription because `checkout.session.completed` and the subscription events
-    // arrive separately, and the later ones carry only what the subscription itself holds.
-    subscription_data: { metadata: { organization_id: org.id } }
+    return stripe().checkout.sessions.create({
+      mode: "subscription",
+      customer,
+      line_items: [{ price: price.id, quantity: 1 }],
+      success_url: `${base}/app/settings?upgraded=1`,
+      cancel_url: `${base}/app/settings`,
+      // Repeated on the subscription because `checkout.session.completed` and the subscription events
+      // arrive separately, and the later ones carry only what the subscription itself holds.
+      subscription_data: { metadata: { organization_id: org.id } }
+    });
   });
-
-  return session.url ? { url: session.url } : { error: "Stripe did not return a checkout URL." };
 }
 
 /**
@@ -105,9 +133,10 @@ export async function openBillingPortalAction(): Promise<BillingRedirect> {
   const subscription = await getSubscription(org.id);
   if (!subscription) return { error: "There's no billing account for this workspace yet." };
 
-  const session = await stripe().billingPortal.sessions.create({
-    customer: subscription.customerId,
-    return_url: `${await origin()}/app/settings`
-  });
-  return { url: session.url };
+  return fromStripe("billing portal", async () =>
+    stripe().billingPortal.sessions.create({
+      customer: subscription.customerId,
+      return_url: `${await origin()}/app/settings`
+    })
+  );
 }

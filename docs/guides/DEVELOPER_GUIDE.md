@@ -54,12 +54,18 @@ STRIPE_PRICE_YEARLY=price_…        # optional; leave unset to offer monthly on
 STRIPE_WEBHOOK_SECRET=whsec_…      # from step 3 — also required; see below
 ```
 
-All three non-optional names must match **exactly**, in `.env.local` and in Vercel. Miss one and
-`stripeConfigured()` is false, so Settings and `/app/upgrade` show a disabled Upgrade button with the
-reason on the page, and the server log names the variable that is absent — `STRIPE_PRICE_MONTLY`
-(no `H`) in a deployment looked exactly like Pro having never been built. The webhook secret counts
-towards "configured" on purpose: charging a card while unable to verify the event that grants the plan
-would take a founder's money and give them nothing.
+All three non-optional names must match **exactly**, and so must the values: each is checked for the
+prefix Stripe gives it (`sk_`/`rk_`, `price_`, `whsec_`) and trimmed. A variable that is absent, or set
+to something that does not start with its prefix, makes `stripeConfigured()` false — Settings and
+`/app/upgrade` then show a disabled Upgrade button with the reason on the page, and the server log says
+which variable and which of the two mistakes it is. Both happened for real: `STRIPE_PRICE_MONTLY`
+(no `H`) looked exactly like Pro having never been built, and a price id pasted as `:price_…` reached
+Checkout and came back as `No such price` — a runtime error on the button a founder had just pressed to
+pay. A Stripe call that fails anyway is now reported inline ("nothing has been charged") with the
+detail in the server log, never thrown at the browser.
+
+The webhook secret counts towards "configured" on purpose: charging a card while unable to verify the
+event that grants the plan would take a founder's money and give them nothing.
 
 **3. The webhook, which is the part that actually grants Pro.** A Checkout redirect proves the browser
 reached a URL, not that money moved, so `organizations.plan` is written *only* here.

@@ -383,6 +383,23 @@ itself:
   can charge a card and cannot verify the event that follows takes a founder's money and grants them
   nothing. Refusing to sell is the only safe failure.
 
+**4. "Buy Pro" then threw `No such price: ':price_1Tyq…'`.** The variable name was fixed and the
+*value* carried a stray colon from the paste. Two separate faults, and the second one got further:
+Checkout was called, Stripe refused, the action's promise rejected, and the founder met a Next runtime
+error page on the button they had pressed to pay us.
+
+- `lib/stripe.ts` now trims every value and checks it against the prefix Stripe guarantees
+  (`sk_`/`rk_`, `price_`, `whsec_`). A malformed value is treated as not configured — so the screen
+  falls back to the honest disabled state instead of a crash — and `missingStripeConfig()` reports it
+  differently from an absent one, because those are different mistakes. Nothing is silently repaired:
+  stripping the colon would be guessing at which price to charge, and guessing wrong is worse than
+  refusing.
+- `fromStripe` in `features/billing/actions.ts` wraps both Stripe calls, including customer creation.
+  These actions exist to *answer* — `BillingActions` renders `state.error` and only navigates on a URL,
+  which is the entire reason they do not redirect themselves — and a rejected promise broke that
+  contract. What Stripe said goes to the server log; the founder gets a sentence they can act on and
+  the assurance that nothing was charged.
+
 **Verification (2026-07-30)**
 
 ```
@@ -390,7 +407,7 @@ pnpm -r typecheck   Done — clean across schemas, engine, web
 pnpm -r lint        Done — no new issues
 pnpm -r test        schemas   35 passed
                     engine   219 passed
-                    web      390 passed (55 files)
+                    web      394 passed (55 files)
 pnpm test:scripts     13 passed
 pnpm build          Done
 ```
@@ -400,8 +417,10 @@ jobs, and that any other error stays loud; `features/landing/pro-cta.test.ts` (4
 destinations; `app/smoke.test.tsx` (+2) — the signed-in landing page routes the Pro action by
 entitlement, which is the level the bug actually lived at; `features/landing/copy.test.ts` (+1) — the
 future-tense promise; `features/billing/BillingUnavailable.test.tsx` (2) — the reason is on the page,
-including that nothing already generated is affected; `lib/stripe.test.ts` (+3) — the webhook secret
-is required, and a misspelled variable is reported by name.
+including that nothing already generated is affected; `lib/stripe.test.ts` (+5) — the webhook secret
+is required, a misspelled variable is reported by name, and a price id with a stray colon is rejected
+before Stripe sees it; `features/billing/actions.test.ts` (+2) — a rejected Stripe call is reported
+inline with the detail in the log, for the checkout session and for the customer behind it.
 
 ---
 

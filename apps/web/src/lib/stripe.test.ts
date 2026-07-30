@@ -73,6 +73,26 @@ describe("configuration", () => {
     expect(missingStripeConfig()).toEqual([]);
   });
 
+  it("rejects a price id that is set but malformed, before Stripe ever sees it", () => {
+    // The real one, a second time: `:price_1Tyq…` reached Checkout with a stray colon from a paste
+    // and came back as `No such price` — a server exception on the button a founder pressed to pay.
+    configured();
+    process.env.STRIPE_PRICE_MONTHLY = ":price_1Tyq";
+
+    expect(stripeConfigured()).toBe(false);
+    expect(stripePrices()).toEqual([]);
+    expect(missingStripeConfig()).toEqual([
+      'STRIPE_PRICE_MONTHLY (set, but does not start with "price_")'
+    ]);
+  });
+
+  it("trims a value, because a pasted newline is invisible in a dashboard field", () => {
+    configured();
+    process.env.STRIPE_PRICE_MONTHLY = "  price_monthly\n";
+
+    expect(stripePrices()).toEqual([{ id: "price_monthly", interval: "month" }]);
+  });
+
   it("names what is missing, because a typo in a variable name looks like nothing at all", () => {
     // The real one: `STRIPE_PRICE_MONTLY` was set in the deployment. Every screen behaved as if Pro
     // had never been built, and no log said otherwise.
