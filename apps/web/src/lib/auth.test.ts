@@ -26,27 +26,54 @@ beforeEach(() => {
   oauthMock.mockReset();
 });
 
+const CONFIRM_URL = "https://dev.airrow.app/auth/confirm";
+
 describe("signUp", () => {
   it("reports a session when the project signs the user straight in", async () => {
     signUpMock.mockResolvedValue({ data: { session: { access_token: "t" } }, error: null });
-    await expect(signUp("Ada", "ada@example.com", "hunter22")).resolves.toEqual({
+    await expect(signUp("Ada", "ada@example.com", "hunter22", CONFIRM_URL)).resolves.toEqual({
       status: "signed-in"
     });
   });
 
   it("reports confirmation-required when no session comes back", async () => {
     signUpMock.mockResolvedValue({ data: { session: null, user: { id: "u1" } }, error: null });
-    await expect(signUp("Ada", "ada@example.com", "hunter22")).resolves.toEqual({
+    await expect(signUp("Ada", "ada@example.com", "hunter22", CONFIRM_URL)).resolves.toEqual({
       status: "confirmation-required"
     });
   });
 
   it("surfaces the provider error message", async () => {
     signUpMock.mockResolvedValue({ data: { session: null }, error: { message: "User exists" } });
-    await expect(signUp("Ada", "ada@example.com", "hunter22")).resolves.toEqual({
+    await expect(signUp("Ada", "ada@example.com", "hunter22", CONFIRM_URL)).resolves.toEqual({
       status: "error",
       message: "User exists"
     });
+  });
+
+  // The confirmation link's host comes from this argument, not from the project's Site URL — one
+  // Supabase project serves both dev and production, so dropping it mails everyone the same link
+  // (spec 113).
+  it("sends the confirmation link back to the environment the founder signed up on", async () => {
+    signUpMock.mockResolvedValue({ data: { session: null }, error: null });
+
+    await signUp("Ada", "ada@example.com", "hunter22", CONFIRM_URL);
+
+    expect(signUpMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({ emailRedirectTo: CONFIRM_URL })
+      })
+    );
+  });
+
+  it("still carries the display name through as user metadata", async () => {
+    signUpMock.mockResolvedValue({ data: { session: null }, error: null });
+
+    await signUp("Ada", "ada@example.com", "hunter22", CONFIRM_URL);
+
+    expect(signUpMock).toHaveBeenCalledWith(
+      expect.objectContaining({ options: expect.objectContaining({ data: { name: "Ada" } }) })
+    );
   });
 });
 

@@ -6,7 +6,7 @@
 
 |                |                                                      |
 | -------------- | ---------------------------------------------------- |
-| **Status**     | 🔄 In progress                                        |
+| **Status**     | ✅ Done                                               |
 | **Issue**      | #77 — "Migrationer ska appliceras automatiskt — kod och databas i takt utan manuellt steg" |
 | **Branch**     | `77-auto-apply-migrations` (from `feature/ci-cd`)     |
 | **Feature**    | ci-cd                                                 |
@@ -99,13 +99,18 @@ Production and Preview point at the same Supabase project today, and splitting t
 
 _What "done" means. Every line is something a reviewer can check._
 
-- [ ] A migration merged to `develop` is applied to the cloud database automatically, on that push —
+- [x] A migration merged to `develop` is applied to the cloud database automatically, on that push —
       so `dev.airrow.app`, which runs `develop` code against the same project, is never a migration
-      behind the code. _(Wired; awaits the first real run — see Implementation notes.)_
-- [ ] The same apply runs on push to `main` and is a green no-op when `develop` already applied it —
-      production is guaranteed even if the `develop` run was missed. _(Wired; awaits first run.)_
-- [ ] Applying is idempotent — re-running the workflow, or running it when the migration is already
-      applied, changes nothing and the job is green. _(Wired; awaits first run.)_
+      behind the code. Ran on the merge (Actions 30530630330): trigger fired, `link` succeeded,
+      `db push --include-all` ran, and the assertion confirmed the schema in step. One honest gap: the
+      run had nothing left to apply, so the *applying* branch is proven by the identical command run by
+      hand against the same project, not by the workflow itself.
+- [x] The same apply runs on push to `main` and is a green no-op when `develop` already applied it —
+      production is guaranteed even if the `develop` run was missed. Ran on `main` (Actions 30531185169)
+      after PR #111: `Finished supabase link.` → `Remote database is up to date.` → green assertion.
+- [x] Applying is idempotent — re-running the workflow, or running it when the migration is already
+      applied, changes nothing and the job is green. Observed exactly: `Remote database is up to date.`
+      followed by a green assertion, on a database that was already current.
 - [x] A failed apply shows up as a red job with a readable error. Never a silent deploy against an old
       schema. Every failure path names its cause: unapplied migrations are listed by version, a CLI
       that cannot reach the project reports the exit code and the likely reasons, unreadable output is
@@ -140,7 +145,7 @@ _How each criterion above is proven._
   step, not merely that the CLI exited zero. No throwaway project is needed; the assertion is against
   the real linked database.
 - **New tests** — [scripts/supabase-migration-drift.test.mjs](../scripts/supabase-migration-drift.test.mjs),
-  26 cases: in-sync, one unapplied migration, several unapplied, the database ahead of the branch, a
+  38 cases: in-sync, one unapplied migration, several unapplied, the database ahead of the branch, a
   header with no rows, output that is not a table, empty output, the format-change guard, the repo's own
   migration filenames, the credential guard (all missing / one missing / empty-string value / points at
   the runbook), and fork detection (fork PR, same-repo PR, push event, missing payload). Runs via
@@ -166,7 +171,7 @@ _How each criterion above is proven._
    files, so a CLI output-format change surfaces as a loud error rather than a silent "in sync".
    The script also owns the credential contract — which variables are required, and the fork-PR case —
    so both workflows are one `run:` line and the awkward parts are unit-testable.
-2. [scripts/supabase-migration-drift.test.mjs](../scripts/supabase-migration-drift.test.mjs) — 26 cases,
+2. [scripts/supabase-migration-drift.test.mjs](../scripts/supabase-migration-drift.test.mjs) — 38 cases,
    including the 2026-07-27 listing replayed as a fixture.
 3. [.github/workflows/supabase-migrate.yml](../.github/workflows/supabase-migrate.yml) — push to
    `develop`/`main` → link → `db push` → assert no drift. Serialized via `concurrency` with
@@ -219,11 +224,35 @@ otherwise, and `20260726120000_import.sql` was missing too. Both applied 2026-07
 `db push --include-all` once the policy guards were in place — so imports against cloud work again, and
 `migration list --linked` now reports 9 migrations with 0 out of step. That was the last hand-run push.
 
-**The apply workflow is still not observed end-to-end.** Its pieces have each been run by hand against the
-real project — `link`, `db push --include-all` (both refused and successful), the drift assertion — but the
-workflow itself has not run, because it triggers on push to `develop`/`main` and this branch is neither.
-Its first run is the merge. `--yes` is already on the push step, so the confirmation prompt seen locally
-cannot hang it.
+**First run on `develop`, 2026-07-30 — green.** Merged via the full chain (`77-auto-apply-migrations` →
+`feature/ci-cd` #109 → `develop` #110), and both workflows passed on `cb06af5`:
+
+- **`Supabase migrations`** (Actions 30530630330), all five steps green:
+  `Finished supabase link.` → `Connecting to remote database...` → `Remote database is up to date.` →
+  `OK: schemat är i takt med koden (9 migration(er), 0 tillkommer i den här ändringen).`
+- **`CI`** (Actions 30530630263) green, drift step included, same verdict line.
+- Secrets rendered as `***` in both logs — the step-level scoping holds in practice.
+- Issue #77 closed itself on merge, so `close-issue-on-merge.yml` still works with the new workflows in
+  place.
+
+**Then `main`, same day — also green.** PR #111 carried it on, and `Supabase migrations` ran again
+(Actions 30531185169): `Finished supabase link.` → `Remote database is up to date.` → the same green
+assertion. That is the safety-net run behaving exactly as designed, and it closes the last criterion.
+
+**What those runs do and do not prove.** They prove the trigger on both branches, the link, the command,
+the assertion, the idempotent no-op, and that a green job means the schema is genuinely in step. They do
+**not** prove the workflow *applying* a pending migration, because the catch-up had already left nothing to
+apply. That branch rests on the identical `db push --include-all` run by hand against the same project,
+where it applied two migrations. The first merge carrying a real migration closes it — worth a look at that
+run when it happens.
+
+**One residual, stated rather than smoothed over.** Replaying the guarded migrations from zero was never
+executed: Docker was down both times it was tried, so `supabase db reset` was unavailable. What *was*
+verified statically: all 17 `create policy` statements are guarded, and every guard sits after its table
+is created — three of them reference `public.organizations` / `public.organization_members` from
+`20260724132100_init.sql`, which runs earlier by timestamp, so `drop policy if exists` never hits a
+missing relation. Combined with the successful real `db push` (the harder case, where the policies existed),
+the risk is small — but a `db reset` on the next local stack would settle it.
 
 **Verification run** (2026-07-30, local).
 
@@ -242,10 +271,9 @@ cannot hang it.
   | fork-PR event payload | `::warning::Hoppar över migrationskontrollen…` exit **0** |
   | same-repo + credentials, no CLI | `kommandot \`supabase\` finns inte på PATH…` exit 1 |
 - Repository secrets confirmed present via `gh secret list`: all three.
-- **Not verifiable here:** replaying the migrations from zero against a local stack — Docker was not
-  running, so `supabase db reset` could not be used to prove the policy guards replay cleanly. The guards
-  are `drop policy if exists`, which is a no-op on an empty database, and the real `db push` against cloud
-  applied them successfully. Still worth a `db reset` the next time a local stack is up.
+- **Policy guards checked statically** (Docker unavailable, see the residual above): 17 `create policy`,
+  17 guards, none unguarded at any indentation or casing, and every guard ordered after its table's
+  creation.
 - **First CI run caught a non-deterministic test of mine** (§V): `readGitHubEvent(undefined)` falls through
   to the `process.env.GITHUB_EVENT_PATH` default, so it passed locally where the variable is unset and
   parsed the real push payload in Actions. Now stubbed with `vi.stubEnv`, and the suite is checked green
@@ -260,7 +288,7 @@ _The plan, for whoever implements it. Every change grounded in current code; exp
 1. **`scripts/supabase-migration-drift.mjs`** (new) — owns the whole contract: which credentials are
    required, the fork-PR case, `supabase link`, then parse `supabase migration list --linked` and report
    migrations present locally but not remotely. Exits non-zero with a readable list when they drift.
-2. **`scripts/supabase-migration-drift.test.mjs`** (new) — 26 cases, run by `pnpm test:scripts`.
+2. **`scripts/supabase-migration-drift.test.mjs`** (new) — 38 cases, run by `pnpm test:scripts`.
 3. **`.github/workflows/supabase-migrate.yml`** (new) — `on: push: branches: [develop, main]`;
    `setup-cli` → `link` + `db push` → assert no drift. Credentials at job level: every step is migration
    work.
@@ -273,7 +301,7 @@ _The plan, for whoever implements it. Every change grounded in current code; exp
    ([:65](../docs/guides/INFRASTRUCTURE_SETUP.md#L65)) becomes wrong on merge and must be corrected in the
    same change (constitution §IV).
 
-5. **`supabase/migrations/*.sql`** — a `drop policy if exists` before each of the 17 `create policy`
+6. **`supabase/migrations/*.sql`** — a `drop policy if exists` before each of the 17 `create policy`
    statements. Forced by the apply, not planned; see _Data model_.
 
 **No change needed:** the branch-policy / issue-housekeeping workflows, and

@@ -58,4 +58,5 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Stripe Checkout and the billing portal for Pro | [99-stripe-checkout.md](99-stripe-checkout.md) | ✅ Done |
 | The upgrade moment, and revising a foundation (issues #100 + #101) | [100-pro-upgrade-revisions.md](100-pro-upgrade-revisions.md) | ✅ Done |
 | `/createspec` syncs `develop` into the feature branch first | [104-createspec-sync-develop.md](104-createspec-sync-develop.md) | ✅ Done |
-| Migrations apply themselves, or the PR is blocked | [77-auto-apply-migrations.md](77-auto-apply-migrations.md) | 🔄 In progress |
+| Migrations apply themselves, or the PR is blocked | [77-auto-apply-migrations.md](77-auto-apply-migrations.md) | ✅ Done |
+| The verification email comes from Airrow | [113-branded-auth-email.md](113-branded-auth-email.md) | 🔄 In progress |

@@ -11,6 +11,7 @@ import { InlineError } from "@/components/ui/states";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { ProviderButtons } from "@/features/auth/ProviderButtons";
 import { signUp } from "@/lib/auth";
+import { requestOrigin } from "@/lib/site-url";
 
 async function signupAction(formData: FormData) {
   "use server";
@@ -21,7 +22,14 @@ async function signupAction(formData: FormData) {
   });
   if (!parsed.success) redirect("/signup?error=invalid");
 
-  const result = await signUp(parsed.data.name, parsed.data.email, parsed.data.password);
+  // The confirmation link has to come back to the environment this signup happened on — one Supabase
+  // project serves dev and production alike, so its Site URL cannot answer for both (spec 113).
+  const result = await signUp(
+    parsed.data.name,
+    parsed.data.email,
+    parsed.data.password,
+    `${await requestOrigin()}/auth/confirm`
+  );
   if (result.status === "error") redirect("/signup?error=exists");
   // No session means the project requires e-mail confirmation — say so instead of
   // sending them to /app, which would bounce them back to /login.
