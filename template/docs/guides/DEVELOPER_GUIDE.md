@@ -16,6 +16,15 @@
 ## Patterns & conventions
 {{KEY_CONVENTIONS}}
 
+## Getting to a deployed product
+
+What it should look like, and how someone moves through it, is
+[`../architecture/UI_ARCHITECTURE.md`](../architecture/UI_ARCHITECTURE.md). `{{FIRST_COMMAND}}`
+deliberately doesn't touch any of the accounts below — follow these in order; each one verifies the
+one before it.
+
+{{INFRASTRUCTURE_SETUP}}
+
 ## Workflow
 Spec-driven, via slash commands: `/createspec → /clarify → /implement → /analyze`, with `/push` and
 `/pr-check` around the PR. Governed by

@@ -57,6 +57,7 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Pro: a plan and entitlement model, and a free tier of one foundation | [74-pro-entitlements.md](74-pro-entitlements.md) | ✅ Done |
 | Stripe Checkout and the billing portal for Pro | [99-stripe-checkout.md](99-stripe-checkout.md) | ✅ Done |
 | The upgrade moment, and revising a foundation (issues #100 + #101) | [100-pro-upgrade-revisions.md](100-pro-upgrade-revisions.md) | ✅ Done |
+| A foundation that starts strong — fewer questions, a UI architecture to build from, a bigger `/start` | [123-foundation-starts-strong.md](123-foundation-starts-strong.md) | 🔄 In progress |
 | `/createspec` syncs `develop` into the feature branch first | [104-createspec-sync-develop.md](104-createspec-sync-develop.md) | ✅ Done |
 | Migrations apply themselves, or the PR is blocked | [77-auto-apply-migrations.md](77-auto-apply-migrations.md) | ✅ Done |
 | The verification email comes from Airrow | [113-branded-auth-email.md](113-branded-auth-email.md) | 🔄 In progress |

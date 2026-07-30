@@ -143,7 +143,8 @@ export type AuthoredSlots = Partial<Record<ProseSlot, string | null>>;
 export const AUTHORED_DOCUMENTS = [
   "docs/VISION.md",
   "docs/architecture/SYSTEM_OVERVIEW.md",
-  "docs/README.md"
+  "docs/README.md",
+  "docs/architecture/UI_ARCHITECTURE.md"
 ] as const;
 
 export type AuthoredDocumentPath = (typeof AUTHORED_DOCUMENTS)[number];
@@ -162,7 +163,11 @@ export function isAuthoredDocument(path: string): path is AuthoredDocumentPath {
 export const DOCUMENT_MAX_CHARS: Record<AuthoredDocumentPath, number> = {
   "docs/VISION.md": 3000,
   "docs/architecture/SYSTEM_OVERVIEW.md": 6000,
-  "docs/README.md": 2500
+  "docs/README.md": 2500,
+  // Sized as a build brief, not a page — this is the document `/start` reads to decide what to build,
+  // so an undersized ceiling costs more here than on any other document: see the note above
+  // DOCUMENT_MAX_CHARS on what an undersized ceiling actually does (silent fallback, every time).
+  "docs/architecture/UI_ARCHITECTURE.md": 5000
 };
 
 /**
