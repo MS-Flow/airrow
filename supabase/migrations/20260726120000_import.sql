@@ -52,11 +52,13 @@ alter table public.import_sources   enable row level security;
 alter table public.import_files     enable row level security;
 alter table public.import_conflicts enable row level security;
 
+drop policy if exists "org members access import_sources" on public.import_sources;
 create policy "org members access import_sources" on public.import_sources
   for all using (public.is_project_member(project_id))
   with check (public.is_project_member(project_id));
 
 -- The children join through their source to the project, mirroring the artifacts policy.
+drop policy if exists "org members access import_files" on public.import_files;
 create policy "org members access import_files" on public.import_files
   for all using (
     exists (
@@ -71,6 +73,7 @@ create policy "org members access import_files" on public.import_files
     )
   );
 
+drop policy if exists "org members access import_conflicts" on public.import_conflicts;
 create policy "org members access import_conflicts" on public.import_conflicts
   for all using (
     exists (

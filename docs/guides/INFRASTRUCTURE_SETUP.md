@@ -18,25 +18,62 @@ Day-to-day local database work lives in [`DEVELOPER_GUIDE.md`](./DEVELOPER_GUIDE
    - **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
    - **anon / public key** → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - **service_role key** → `SUPABASE_SERVICE_ROLE_KEY` _(server-only — never ship to the client)_
-3. Link the repo's local CLI config to the cloud project and push the migration:
+3. Link the repo's local CLI config to the cloud project and apply the schema **once**, to get the
+   brand-new project from empty to current:
    ```bash
    pnpm dlx supabase login                    # opens a browser to authorize the CLI
    pnpm dlx supabase link --project-ref <ref> # <ref> is in the dashboard URL / Settings → General
    pnpm dlx supabase db push                  # applies supabase/migrations to the cloud DB
    ```
 
+   - This is bootstrap only. From here on, migrations reach the database through CI — see
+     [_Migrations after the bootstrap_](#migrations-after-the-bootstrap) below. Do not treat
+     `db push` as a step you run after every merge; that is the manual habit that broke us.
    - If `supabase link` fails with `Your account does not have the necessary privileges`, the CLI
      is authenticated as an account that cannot see the project. Log out, log back in with the
      Supabase owner/admin account, or ask the project owner to grant access, then rerun the link.
-   - **`db push` again after every merge that adds a migration.** Vercel deploys code; nothing deploys
-     the schema. A deployment running ahead of its database fails on the column it cannot see —
+   - The failure this bootstrap prevents, for anyone who meets it on a project CI does not cover
+     yet: a deployment running ahead of its database fails on the column it cannot see.
      `column generation_jobs.reused_authoring does not exist` was a 500 on the interview screen for
-     exactly this reason, and no amount of redeploying fixes it. `supabase migration list` compares
-     local to cloud and is the fastest way to see the gap. The migrations are idempotent, so pushing
-     when there is nothing to push is safe.
+     exactly that reason, and no amount of redeploying fixes it. `supabase migration list` compares
+     local to cloud and is the fastest way to see the gap.
 4. Verify RLS in the dashboard: **Table Editor** shows `organizations` and `organization_members`;
    **Authentication → Policies** shows each has RLS **enabled** with the read policies from the
    migration. (This is the proof-of-concept schema; the full product schema is a separate issue.)
+
+### Migrations after the bootstrap
+
+Committing a migration is the whole job — CI applies it. Two workflows, one comparison
+([`scripts/supabase-migration-drift.mjs`](../../scripts/supabase-migration-drift.mjs)):
+
+| When | Workflow | What it does |
+| --- | --- | --- |
+| Every PR | `ci.yml`, step _Check migrations against the linked database_ | Read-only. Fails when `supabase/migrations` holds something the database does not, so it blocks the merge. |
+| Push to `develop` / `main` | `supabase-migrate.yml` | `supabase db push`, then asserts nothing is left unapplied. Idempotent — a push with no schema change is a green no-op. |
+
+`develop` is where a migration is genuinely needed first: `dev.airrow.app` runs `develop` code
+against the **same** Supabase project as production (see the env-var table in §2). The `main` run is
+the safety net that guarantees production even if the `develop` run was missed.
+
+**Three repository secrets make this work** — _Settings → Secrets and variables → Actions_. Without
+them every CI run fails on a readable error naming each missing one, by design: a green skip would
+look exactly like "in sync". They are read only by the steps that talk to Supabase, never by the
+install, test or build steps.
+
+| Secret | Value | Why |
+| --- | --- | --- |
+| `SUPABASE_ACCESS_TOKEN` | a CLI access token from <https://supabase.com/dashboard/account/tokens> | authenticates `supabase link` |
+| `SUPABASE_PROJECT_ID` | the project ref from step 1 | which project to link |
+| `SUPABASE_DB_PASSWORD` | the DB password from step 1 | `db push` and the drift check open a direct Postgres connection |
+
+**A pull request from a fork** never receives these secrets — GitHub withholds them, and this repo is
+public. The check detects that case and passes with a warning rather than failing the PR; the schema is
+checked on the push to `develop`/`main` instead. A **same-repo** run with a missing secret still fails.
+
+Two things this deliberately does **not** do: a failed migration cannot stop the Vercel deploy
+(Vercel triggers on push and does not listen to our workflows — the job just goes red and loud), and
+there is no rollback. A faulty migration is corrected by a new migration going forward. Full
+reasoning: [`specs/77-auto-apply-migrations.md`](../../specs/77-auto-apply-migrations.md).
 
 ---
 
@@ -68,8 +105,9 @@ Day-to-day local database work lives in [`DEVELOPER_GUIDE.md`](./DEVELOPER_GUIDE
 
 ## 3. Git integration (previews + production)
 
-Vercel's Git integration is the **only** deploy mechanism — there is no GitHub Actions workflow.
-Every push deploys automatically once the project is connected.
+Vercel's Git integration is the **only** deploy mechanism — no GitHub Actions workflow deploys the
+app. Every push deploys automatically once the project is connected. (`supabase-migrate.yml` runs on
+the same push, but it only touches the database schema; it cannot gate the deploy.)
 
 - **Production Branch:** set to `main` under **Project Settings → Git**. Per Airrow's branch model,
   code only reaches `main` through the strict PR chain (issue → feature → `develop` → `main`).
@@ -135,10 +173,11 @@ value below has a live twin that has to be created and pasted once.
 
 **Before the first real card:**
 
-1. **Schema.** `pnpm dlx supabase db push` against the production project, then confirm with
-   `supabase migration list` that nothing is pending. `organizations.plan` and the `subscriptions` /
-   `stripe_events` tables all arrive in migrations — a production database behind them cannot grant
-   Pro to anyone, and the failure looks like a payment that vanished.
+1. **Schema.** Confirm `supabase migration list` shows nothing pending — the merge to `main` should
+   already have applied it (see [_Migrations after the bootstrap_](#migrations-after-the-bootstrap)),
+   and this is the check that it did. `organizations.plan` and the `subscriptions` / `stripe_events`
+   tables all arrive in migrations, and a production database behind them cannot grant Pro to
+   anyone: the failure looks like a payment that vanished.
 2. **Product and price, in live mode.** Recreate the monthly product and copy the live `price_…`.
    Optional yearly likewise. No amount lives in this repository, so the figure is only ever right in
    one place.
@@ -180,7 +219,8 @@ diagnosis is the "Paid, and still on Free" runbook in
 ## Notes & constraints
 
 - **Free tier:** the Supabase project pauses after ~1 week of inactivity and has row/storage caps —
-  fine for now; revisit before launch.
+  fine for now; revisit before launch. A paused project turns the migration check red on every PR
+  (it cannot read the schema to compare against). Resume it in the dashboard and re-run the job.
 - **Secrets:** only ever live in Vercel env vars and your local `apps/web/.env.local` (gitignored).
   `apps/web/.env.example` documents the names with no values. The location matters: Next.js reads
   `.env*` only from the directory it runs in, so a file at the repo root is ignored and the app looks

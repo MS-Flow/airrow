@@ -125,9 +125,10 @@ the write failed. In order:
    event shows every delivery attempt and the response. A 400 is the signature, a 503 is
    `stripeConfigured()`, a 500 is the database.
 3. **Is the schema there?** `applySubscriptionState` writes `organizations.plan`, which arrives with
-   `20260729120000_pro_plan.sql`. Against a database that has not had `supabase db push`, the webhook
-   fails, releases its `stripe_events` claim, and Stripe retries into the same wall — a paid founder
-   stays on free indefinitely.
+   `20260729120000_pro_plan.sql`. Against a database that migration never reached, the webhook fails,
+   releases its `stripe_events` claim, and Stripe retries into the same wall — a paid founder stays
+   on free indefinitely. Locally that means `supabase db reset`; deployed, CI applies migrations on
+   the push to `develop`/`main` (spec 77), so check that workflow run rather than pushing by hand.
 4. **Then replay it.** Fix the cause, make sure the listener is running, and use **Resend** on that
    event in the dashboard (or `stripe events resend <evt_…>`). The claim was released, so the retry
    applies for real rather than returning "duplicate".
