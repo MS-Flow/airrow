@@ -108,6 +108,27 @@ stripe logs tail                               # every API call, as Stripe saw i
 - To grant yourself Pro without paying, do it the same way admin accounts are granted — SQL, not app
   code: `update organizations set plan = 'pro' where id = '…';`
 
+### Paid, and still on Free
+Settings now says "Payment received, waiting for Stripe" rather than "You're on Pro" until the plan
+column actually changes, because the redirect back from Checkout proves only that a browser returned.
+If it stays that way, the event never landed or never applied. In order:
+
+1. **Is anything listening?** Locally, `stripe listen --forward-to localhost:3000/api/stripe/webhook`
+   must be running *at the moment you pay* — without it Stripe has nowhere to deliver, and the app
+   never hears that money moved. Its signing secret is not the dashboard endpoint's: put the `whsec_…`
+   it prints into `.env.local` and restart `pnpm dev`, or every delivery is rejected as an invalid
+   signature and looks identical to nothing happening.
+2. **What did Stripe get back?** Dashboard → Developers → Events → the `checkout.session.completed`
+   event shows every delivery attempt and the response. A 400 is the signature, a 503 is
+   `stripeConfigured()`, a 500 is the database.
+3. **Is the schema there?** `applySubscriptionState` writes `organizations.plan`, which arrives with
+   `20260729120000_pro_plan.sql`. Against a database that has not had `supabase db push`, the webhook
+   fails, releases its `stripe_events` claim, and Stripe retries into the same wall — a paid founder
+   stays on free indefinitely.
+4. **Then replay it.** Fix the cause, make sure the listener is running, and use **Resend** on that
+   event in the dashboard (or `stripe events resend <evt_…>`). The claim was released, so the retry
+   applies for real rather than returning "duplicate".
+
 ## Code organization
 ```
 apps/web/src/

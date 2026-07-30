@@ -400,6 +400,32 @@ error page on the button they had pressed to pay us.
   contract. What Stripe said goes to the server log; the founder gets a sentence they can act on and
   the assurance that nothing was charged.
 
+**5. Paid, and Settings said both things at once.** The card went through and the plan stayed free, so
+the page read "You&rsquo;re on Pro" directly above "Free · 0 of 1 foundation left". Two sentences from
+one screen, one checked against the database and the other inferred from `?upgraded=1` — which is the
+Checkout redirect, the thing spec 99 exists to say proves nothing. The founder has no way to know which
+half to believe, and the half that was wrong was the reassuring one.
+
+The banner now reads `org.plan`: "Payment confirmed. You're on Pro." only when the plan says so,
+otherwise a `Notice` that says the payment arrived, that the plan switches when Stripe confirms it, and
+that nothing is lost if it does not. Three tests in `app/app/settings/page.test.tsx` hold it, including
+the one that would have caught this: with `upgraded=1` and a free plan, the page must not claim Pro.
+
+**Why the plan had not moved** is not a code fault, and both causes are worth recording because they
+look identical from the outside: nothing was listening (`stripe listen` was not running locally, and
+the Stripe CLI was not installed), and the database was still missing `20260729120000_pro_plan.sql`, so
+`applySubscriptionState` could not have written `organizations.plan` even if an event had arrived. The
+webhook handles that correctly — it releases its `stripe_events` claim so Stripe's retry is a real
+second attempt — but a retry into an unmigrated database is a founder who paid and stays on free
+indefinitely. `DEVELOPER_GUIDE.md` gained a "Paid, and still on Free" runbook in that order: listener,
+delivery response, schema, then resend the event.
+
+**Not done here: reconciling from Stripe.** The obvious next thought is a "refresh from Stripe" button
+that reads the subscription and applies it. It is deliberately not in this fix — §0 and spec 99 make
+the webhook the only non-migration writer of `organizations.plan`, and moving that boundary is a spec
+amendment, not a bug fix (§IV). The manual repair is the documented SQL, and it stays that way until a
+spec says otherwise.
+
 **Verification (2026-07-30)**
 
 ```
@@ -407,7 +433,7 @@ pnpm -r typecheck   Done — clean across schemas, engine, web
 pnpm -r lint        Done — no new issues
 pnpm -r test        schemas   35 passed
                     engine   219 passed
-                    web      394 passed (55 files)
+                    web      397 passed (55 files)
 pnpm test:scripts     13 passed
 pnpm build          Done
 ```
@@ -420,7 +446,9 @@ future-tense promise; `features/billing/BillingUnavailable.test.tsx` (2) — the
 including that nothing already generated is affected; `lib/stripe.test.ts` (+5) — the webhook secret
 is required, a misspelled variable is reported by name, and a price id with a stray colon is rejected
 before Stripe sees it; `features/billing/actions.test.ts` (+2) — a rejected Stripe call is reported
-inline with the detail in the log, for the checkout session and for the customer behind it.
+inline with the detail in the log, for the checkout session and for the customer behind it;
+`app/app/settings/page.test.tsx` (+3) — coming back from Checkout claims Pro only when the plan says
+so, and says nothing about a payment when nobody came back from one.
 
 ---
 

@@ -11,14 +11,17 @@ const identity = vi.hoisted((): { current: { login: string | null; connectedAt: 
   current: null
 }));
 
+const plan = vi.hoisted((): { current: "free" | "pro" } => ({ current: "free" }));
+
 vi.mock("@/lib/auth", () => ({
   requireSession: async () => ({
     user: { id: "u1", name: "Ada", email: "ada@example.com", createdAt: "2026-01-01" },
-    org: { id: "o1", name: "Ada's workspace", kind: "personal", plan: "free" }
+    org: { id: "o1", name: "Ada's workspace", kind: "personal", plan: plan.current }
   }),
   githubIdentity: async () => identity.current,
   updateName: vi.fn()
 }));
+vi.mock("@/lib/data/store", () => ({ getSubscription: async () => null }));
 vi.mock("@/lib/theme", () => ({ readTheme: async () => "dark" }));
 vi.mock("@/features/generation/allowance", () => ({
   FREE_GENERATION_LIMIT: 1,
@@ -30,7 +33,38 @@ vi.mock("@/features/auth/actions", () => ({ signInWithGitHubAction: vi.fn() }));
 
 import SettingsPage from "./page";
 
-const settings = () => SettingsPage({ searchParams: Promise.resolve({}) });
+const settings = (searchParams: { saved?: string; upgraded?: string } = {}) =>
+  SettingsPage({ searchParams: Promise.resolve(searchParams) });
+
+// A founder came back from Checkout, money had left their account, and Settings said "You're on Pro"
+// directly above "Free · 0 of 1 foundation left". Both sentences came from the same page and only one
+// of them was checked against the database — the other was inferred from a query string, which is the
+// exact thing spec 99 says proves nothing.
+describe("Settings — coming back from Checkout", () => {
+  it("does not claim Pro while the plan still says free", async () => {
+    plan.current = "free";
+    render(await settings({ upgraded: "1" }));
+
+    expect(screen.queryByText(/you're on pro/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/payment received, waiting for stripe/i)).toBeInTheDocument();
+    expect(screen.getByText(/nothing is lost/i)).toBeInTheDocument();
+  });
+
+  it("confirms it once the plan actually says so", async () => {
+    plan.current = "pro";
+    render(await settings({ upgraded: "1" }));
+
+    expect(screen.getByText(/payment confirmed/i)).toBeInTheDocument();
+  });
+
+  it("says nothing about a payment when nobody came back from Checkout", async () => {
+    plan.current = "free";
+    render(await settings());
+
+    expect(screen.queryByText(/payment received/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/payment confirmed/i)).not.toBeInTheDocument();
+  });
+});
 
 describe("Settings — GitHub account", () => {
   it("names the connected account instead of claiming nothing is connected", async () => {

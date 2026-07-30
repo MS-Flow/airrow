@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ComingSoon } from "@/components/ui/states";
+import { ComingSoon, Notice } from "@/components/ui/states";
 import { ThemeToggle } from "@/features/settings/ThemeToggle";
 import { signInWithGitHubAction } from "@/features/auth/actions";
 import {
@@ -98,11 +98,24 @@ export default async function SettingsPage({
           <CardTitle>Plan</CardTitle>
         </CardHeader>
         <CardBody>
+          {/* What the redirect is allowed to claim, and what it is not.
+              `?upgraded=1` means the browser came back from Checkout — nothing more. Saying "you're
+              on Pro" on the strength of that contradicts the one rule this whole path is built on
+              (only the webhook grants the plan), and it did exactly what you would expect: a founder
+              whose payment had gone through read "You're on Pro" directly above "Free · 0 of 1
+              foundation left" and had no idea which half to believe. So the plan is read, not
+              assumed. */}
           {upgraded ? (
-            <p className="mb-4 text-sm text-success">
-              You&rsquo;re on Pro. If this still says Free, give Stripe a few seconds and reload —
-              the plan changes when Stripe confirms the payment, not when your browser comes back.
-            </p>
+            org.plan === "pro" ? (
+              <p className="mb-4 text-sm text-success">Payment confirmed. You&rsquo;re on Pro.</p>
+            ) : (
+              <Notice title="Payment received, waiting for Stripe" className="mb-4" role="status">
+                Your card went through. Pro switches on when Stripe confirms it to us, which is
+                normally a few seconds away — reload this page. If it still says Free in a few
+                minutes, nothing is lost: the payment is recorded with Stripe and the plan can be
+                applied from it.
+              </Notice>
+            )
           ) : null}
 
           {allowance.unlimited ? (
