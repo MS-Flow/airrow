@@ -44,11 +44,13 @@ $$;
 alter table public.organizations        enable row level security;
 alter table public.organization_members enable row level security;
 
+drop policy if exists "members read their organizations" on public.organizations;
 create policy "members read their organizations"
   on public.organizations
   for select
   using (public.is_org_member(id));
 
+drop policy if exists "members read their memberships" on public.organization_members;
 create policy "members read their memberships"
   on public.organization_members
   for select

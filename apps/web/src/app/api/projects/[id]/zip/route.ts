@@ -1,8 +1,17 @@
 // ZIP delivery (F-403). Org-scoped, latest ready artifact, root = project slug.
 import JSZip from "jszip";
 import { NextResponse } from "next/server";
+import { applyResolutions } from "@airrow/engine";
 import { getSession } from "@/lib/auth";
-import { getProject, latestJob, loadArtifact, recordDelivery } from "@/lib/data/store";
+import {
+  getImportSource,
+  getProject,
+  latestJob,
+  listConflictResolutions,
+  listImportFiles,
+  loadArtifact,
+  recordDelivery
+} from "@/lib/data/store";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -16,8 +25,19 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const artifact = job && job.status === "completed" ? await loadArtifact(job.id) : null;
   if (!job || !artifact) return NextResponse.json({ error: "no_ready_artifact" }, { status: 409 });
 
+  // An imported project ships only what it is safe to write: new files, plus the conflicts the
+  // founder explicitly took from Airrow. Undecided conflicts keep their version (spec 63).
+  const source = await getImportSource(id);
+  const files = source
+    ? applyResolutions(
+        artifact.files,
+        await listImportFiles(source.id),
+        await listConflictResolutions(job.id)
+      )
+    : artifact.files;
+
   const zip = new JSZip();
-  for (const file of artifact.files) {
+  for (const file of files) {
     // Paths come from the manifest only (F-403 Security) — never from the client.
     zip.file(`${project.slug}/${file.path}`, file.content);
   }
