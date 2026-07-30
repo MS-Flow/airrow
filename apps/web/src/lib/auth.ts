@@ -155,20 +155,28 @@ export interface GitHubIdentity {
  * asks the first question; the import screen asks the second.
  */
 export const githubIdentity = cache(async (): Promise<GitHubIdentity | null> => {
-  const supabase = await supabaseServer();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  try {
+    const supabase = await supabaseServer();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
 
-  const identity = user?.identities?.find((i) => i.provider === "github");
-  if (!identity) return null;
+    const identity = user?.identities?.find((i) => i.provider === "github");
+    if (!identity) return null;
 
-  // `identity_data` is an untyped bag from the provider — narrowed, never trusted.
-  const login: unknown = identity.identity_data?.user_name;
-  return {
-    login: typeof login === "string" && login.trim() ? login : null,
-    connectedAt: identity.created_at ?? null
-  };
+    // `identity_data` is an untyped bag from the provider — narrowed, never trusted.
+    const login: unknown = identity.identity_data?.user_name;
+    return {
+      login: typeof login === "string" && login.trim() ? login : null,
+      connectedAt: identity.created_at ?? null
+    };
+  } catch (error) {
+    // Settings renders this beside a profile form and a plan; whether a GitHub account is attached
+    // is the least important thing on that page and must never be the reason it fails to load.
+    // "Not connected" is the safe reading — it offers the sign-in, which is the way out anyway.
+    console.error("[auth] reading the GitHub identity failed:", error);
+    return null;
+  }
 });
 
 /**

@@ -119,6 +119,19 @@ describe("renderScaffold", () => {
     expect(c).toContain("co-located");
   });
 
+  it("makes /createspec sync develop into the feature branch before cutting the issue branch", () => {
+    // Spec 104: an issue branch cut from a feature branch that is behind `develop` is born stale, and
+    // the drift only surfaces as conflicts in its PR. The sync belongs to the generated command, not
+    // to a habit the founder has to remember.
+    const cmd = byPath.get(".claude/commands/createspec.md") ?? "";
+    expect(cmd).toContain("git fetch origin develop");
+    expect(cmd).toContain("git merge origin/develop");
+    expect(cmd).toContain("git log feature/<name>..origin/develop --oneline");
+    // Direction is the constitution's, and a failed sync must never fall through to branch creation.
+    expect(cmd).toContain("never straight into an issue branch");
+    expect(cmd).toContain("blocking, not best-effort");
+  });
+
   it("returns a preview plan for founder approval before anything is written", () => {
     expect(plan.projectName).toBe("Loop CRM");
     expect(plan.fileCount).toBe(files.length);
