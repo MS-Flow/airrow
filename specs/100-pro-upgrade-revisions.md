@@ -154,6 +154,25 @@ _What "done" means. Every line is something a reviewer can check._
 - [x] Free gets the repairs spec 74 defines; Pro is unlimited. No new entitlement rule is introduced.
 - [x] Pro-locked surfaces are shown disabled with an explanation rather than hidden.
 
+### Paying for real (added 2026-07-30, after the first live-ish run)
+
+- [x] A completed payment turns into Pro **without** depending on webhook delivery: Checkout returns
+      through a route that reconciles with Stripe's API before any screen renders.
+- [x] A founder who is on free and believes they have paid can resolve it themselves, from Settings,
+      without a support ticket or a SQL statement — and without having to press anything: the billing
+      screens reconcile on load when what they hold has gone stale.
+- [x] Nothing grants Pro on the strength of the redirect. Every write still comes from something
+      Stripe said, through `applySubscriptionState`.
+- [x] The reconciliation applies a *cancellation* as readily as a purchase — it is a sync, not an
+      upgrade button in disguise.
+- [x] Settings never claims a plan the database does not hold.
+- [x] The plan card distinguishes renewing, cancelled, trialing, failed payment, paused and ended —
+      and names the date each of them turns on. A cancelled subscription never reads as renewing.
+- [x] A misconfigured or unreachable Stripe degrades to the honest disabled state and a named
+      variable in the log, never to a crash on the button a founder pressed to pay.
+- [x] Going live is a written checklist, not folklore: live keys, live price, live webhook endpoint,
+      portal, VAT decision, and one real payment proved end to end.
+
 - [x] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures).
 
 ### Verification
@@ -321,6 +340,243 @@ is there" into "a developer can run the paid path" — product and price, the fo
 than tolerated. And `revision.ts` first imported `GeneratedFile` from `@airrow/schemas`, which the app
 resolves and the engine does not — the engine reaches shared types by relative path
 (`../../schemas/src/types.ts`), which is the convention `import.ts` already follows.
+
+---
+
+### Fixed after the first deploy (2026-07-30)
+
+Two things this spec shipped were only visible on a deployment, and both were found by using it.
+
+**1. `column generation_jobs.reused_authoring does not exist` — a 500 on the interview screen.**
+Digest `1549084546` in the preview deployment's runtime log, on
+`GET /app/projects/[id]/interview`. The column arrives with `20260729120000_pro_plan.sql`, which had
+not been pushed to the cloud database: Vercel deploys code and nothing deploys the schema. So every
+allowance read — `countGenerations`, `projectUsage`, and therefore `AllowanceNotice` on both the
+project list and the interview — failed on a column the code knows about and the database does not.
+
+The durable fix is `pnpm dlx supabase db push`, and it is now written into
+`INFRASTRUCTURE_SETUP.md` where the first push already lives, with the symptom named so the next
+person recognises it. The code fix is narrower and deliberately so: `jobCharges` in `store.ts` falls
+back to `select id, status` when that one column is missing, which keeps the *read* surfaces up — a
+column that does not exist means no job can have reused a payload, so the ledger counts exactly what
+it counted before the column existed, and `isMissingPlanColumn` generalised into `isMissingColumn(error,
+column)` so a caller has to name the column it is prepared to do without. An unrelated error still
+throws, which is the point: this is not a blanket catch, and a stale schema is not made harmless.
+Generation still writes the flag and billing still needs tables from the same batch, so the migration
+is not optional — the shim only keeps the screens that merely *report* the allowance from taking the
+whole app down with them.
+
+**2. "Start with Pro" went to the new-project form.** The pricing section's Pro action reused
+`primaryHref`, so the one visitor who had actually met the free limit was handed the single screen
+that cannot lift it — and would have met the same wall again thirty questions later.
+`features/landing/pro-cta.ts` now decides from the founder's entitlement rather than from which card
+they pressed: nothing generated yet → `/app/projects/new` (nobody is asked to pay before the product
+has done anything for them), a foundation already spent → `/app/upgrade` directly, signed out → the
+guest interview, since Pro cannot be bought without an account either way. Already-Pro also lands on
+`/app/upgrade`, which recognises the case and offers the billing portal, so no branch is a dead end.
+
+It takes the whole `Entitlement` for the same reason `AllowanceNotice` does, so the link cannot drift
+from what the founder is told one section higher up the page.
+
+**And the copy was still lying, in the future tense.** `pricing.body` said "Pro lifts the limit when
+it lands". Spec 100 swept the page for "coming soon" and "not available" and this survived, so the
+test that was supposed to catch exactly this drift did not — it now checks for the promise as well as
+the disclaimer. The criterion above was ticked with the sentence still on the page, which is the
+argument for testing the copy rather than reading it.
+
+**3. "Upgrade to Pro" was not clickable.** The deployment had `STRIPE_PRICE_MONTLY` set — no `H` — so
+`stripeConfigured()` was false and `BillingUnavailable` rendered: a disabled button whose only
+explanation was a `title` attribute. Invisible on a phone, invisible to anyone who does not think to
+hover a control that looks broken, and nothing in the server log said anything at all. The deployment
+was indistinguishable from one where Pro had never been built.
+
+Fixing the variable name is the deployment's job. Three things here make sure the next typo announces
+itself:
+
+- `missingStripeConfig()` in `lib/stripe.ts` names the absent variables, and `stripeConfigured()`
+  warns once per server instance with that list. Names only — a value never reaches a log (§II).
+- `BillingUnavailable` puts the reason on the page, in a `Notice`, beside the still-disabled button.
+  The plan boundary stays visible (the criterion above), but it is no longer the only thing on screen.
+- `STRIPE_WEBHOOK_SECRET` joined the required set. Nothing about *taking* money needs it, which is
+  exactly the problem: the webhook is the only writer of `organizations.plan`, so a deployment that
+  can charge a card and cannot verify the event that follows takes a founder's money and grants them
+  nothing. Refusing to sell is the only safe failure.
+
+**4. "Buy Pro" then threw `No such price: ':price_1Tyq…'`.** The variable name was fixed and the
+*value* carried a stray colon from the paste. Two separate faults, and the second one got further:
+Checkout was called, Stripe refused, the action's promise rejected, and the founder met a Next runtime
+error page on the button they had pressed to pay us.
+
+- `lib/stripe.ts` now trims every value and checks it against the prefix Stripe guarantees
+  (`sk_`/`rk_`, `price_`, `whsec_`). A malformed value is treated as not configured — so the screen
+  falls back to the honest disabled state instead of a crash — and `missingStripeConfig()` reports it
+  differently from an absent one, because those are different mistakes. Nothing is silently repaired:
+  stripping the colon would be guessing at which price to charge, and guessing wrong is worse than
+  refusing.
+- `fromStripe` in `features/billing/actions.ts` wraps both Stripe calls, including customer creation.
+  These actions exist to *answer* — `BillingActions` renders `state.error` and only navigates on a URL,
+  which is the entire reason they do not redirect themselves — and a rejected promise broke that
+  contract. What Stripe said goes to the server log; the founder gets a sentence they can act on and
+  the assurance that nothing was charged.
+
+**5. Paid, and Settings said both things at once.** The card went through and the plan stayed free, so
+the page read "You&rsquo;re on Pro" directly above "Free · 0 of 1 foundation left". Two sentences from
+one screen, one checked against the database and the other inferred from `?upgraded=1` — which is the
+Checkout redirect, the thing spec 99 exists to say proves nothing. The founder has no way to know which
+half to believe, and the half that was wrong was the reassuring one.
+
+The banner now reads `org.plan`: "Payment confirmed. You're on Pro." only when the plan says so,
+otherwise a `Notice` that says the payment arrived, that the plan switches when Stripe confirms it, and
+that nothing is lost if it does not. Three tests in `app/app/settings/page.test.tsx` hold it, including
+the one that would have caught this: with `upgraded=1` and a free plan, the page must not claim Pro.
+
+**Why the plan had not moved** is not a code fault, and both causes are worth recording because they
+look identical from the outside: nothing was listening (`stripe listen` was not running locally, and
+the Stripe CLI was not installed), and the database was still missing `20260729120000_pro_plan.sql`, so
+`applySubscriptionState` could not have written `organizations.plan` even if an event had arrived. The
+webhook handles that correctly — it releases its `stripe_events` claim so Stripe's retry is a real
+second attempt — but a retry into an unmigrated database is a founder who paid and stays on free
+indefinitely. `DEVELOPER_GUIDE.md` gained a "Paid, and still on Free" runbook in that order: listener,
+delivery response, schema, then resend the event.
+
+**6. And then the rule itself had to change.** The fix above told the founder the truth and left them
+stuck in it. Three failures in a row — no listener, an unmigrated database, a mistyped variable — were
+each enough on their own to turn a completed payment into a founder on free, and every one of them
+lived in webhook *delivery*. A payment path whose only route to the entitlement is an inbound HTTP call
+we do not control has a single point of failure by construction, and "run this SQL" is not a product.
+
+**Amendment to spec 99 (recorded here, per the constitution's amendment rule).** Spec 99 said the
+webhook is the only non-migration writer of `organizations.plan`. It now reads: *the plan is written
+only from something Stripe told us*, which is the webhook **or** a direct, server-side read of Stripe's
+API — both through `applySubscriptionState`, and neither ever from the browser. The sentence spec 99
+was actually defending is untouched: a Checkout redirect proves nothing and grants nothing. Asking
+Stripe with our own secret key is not the redirect; it is the same evidence the webhook carries,
+pulled instead of pushed.
+
+What that bought, in order of how much it matters:
+
+- **`features/billing/sync.ts`** — `syncPlanFromStripe(orgId)`. Reads the organization's own recorded
+  customer, lists its subscriptions, picks the one that decides the plan and applies it. It writes only
+  when Stripe has something to say (`unknown` is deliberately distinct from `free`), applies a
+  cancellation exactly as readily as a purchase, and never throws: it runs on the screen where someone
+  is confirming a payment, and taking that screen down would turn a delay into an outage.
+- **`app/app/upgrade/return/route.ts`** — Checkout's `success_url`. The plan is reconciled *before*
+  anything renders, so the ordinary case is now correct with or without the webhook. Inside `/app`, so
+  the auth gate covers it and `requireSession` scopes it to the caller's own organization.
+- **"Already paid? Check again"** on Settings, shown only to an organization that has a customer record
+  and is still on free. The founder's own way out of the exact state this spec's author sat in, without
+  a support ticket.
+- **`features/billing/subscription-state.ts`** — the webhook's reading of a subscription, lifted out so
+  both writers share it. Two places deciding a plan slightly differently is the kind of drift that is
+  only discovered by the person it charges.
+
+**The webhook is still required and is still primary.** Renewals, failed payments and cancellations
+arrive when nobody is looking at a screen, and no sync runs then. What changed is that it is no longer
+the *only* way a payment can become a plan.
+
+**7. And the plan card still said "Renews automatically" to someone who had just cancelled.** Stripe
+keeps a cancelled subscription `active` until the last day of the paid period, so reading the status
+alone never had the answer — the flag beside it does, and the card was reading the wrong one first.
+The row was stale on top of that, for the same reason as everything else in this section: the
+`customer.subscription.updated` event had nowhere to land.
+
+- **`features/billing/plan-standing.ts`** — one derivation of where a paid workspace stands, from all
+  three fields Stripe gives us. `cancelAtPeriodEnd` is checked *before* the status, which is the whole
+  bug. Cancelled, Trial, Payment failed, Paused, Ended, Not started and Renews each say what happens
+  next and when, and a status Stripe has not invented yet promises nothing about money. Pure, so the
+  wording is tested without a database or a browser (10 tests).
+- **The billing portal returns through the reconciliation too** (`?from=portal`), so a cancellation is
+  visible the moment the founder comes back rather than whenever a webhook manages to arrive. That
+  return says "Updated from Stripe" rather than "Payment confirmed" — greeting someone who just
+  cancelled with a payment confirmation is the same class of mistake as §5.
+- **"Check again" is offered on Pro as well**, beside Manage billing. Being stale is not a state that
+  only free organizations get to be in.
+
+**8. It was still saying "Renews automatically", and this time the fault was ours in a second place.**
+Asking Stripe directly what that subscription looked like settled it: `status: active`,
+`cancel_at: 1788109968` (2026-08-30), `canceled_at` set to the moment the founder clicked — and
+`cancel_at_period_end: **false**`. Stripe had answered the question in the field we were not reading.
+Newer API versions express a scheduled cancellation as `cancel_at` and are moving away from the
+boolean; §7's fix read the boolean, which is why a cancellation still came out as a renewal.
+
+`toSubscriptionState` now treats **either** signal as ending, and takes the end date from `cancel_at`
+when there is one, because a scheduled cancellation date is more specific than the period it happens
+to coincide with. The eight tests in `subscription-state.test.ts` use the real numbers off that
+subscription.
+
+While there: `pause_collection` had the same shape of hole. Pausing leaves the status `active`, so a
+paused subscription would have gone on promising a charge on a date no card will be charged on. It is
+now read as Stripe's own `paused` status, and pausing collection ends the entitlement — being told to
+stop taking money and continuing to hand out Pro is not a state to model. No migration for it: the
+value stays inside Stripe's vocabulary in the column that already exists, and this deployment has a
+history of running behind its migrations that a new column would have walked straight into.
+
+**9. And the founder should not have to press anything.** "Check again" worked, which meant the page
+was correct only for someone who knew a button existed and suspected they needed it. That is a repair
+tool wearing the costume of a feature.
+
+`planWithStripe(org)` in `sync.ts` is what the billing screens read now. It returns the plan and the
+subscription behind it, reconciling first when what we hold has aged past `PLAN_FRESH_FOR_MS` (one
+minute). Settings and `/app/upgrade` both use it, so a cancellation made in the Stripe dashboard, or a
+payment whose webhook never arrived, is corrected by loading the page — no button, no waiting for an
+event that may never come. `subscriptions.updated_at` was already written on every apply; it is now
+carried on the record, which is what makes "is this worth asking about" answerable without a call.
+
+One Stripe call per minute per workspace, on the two screens that show billing, and none at all for an
+organization that has never been to Checkout. The button stays for the founder who wants to force it.
+Four tests in `sync.test.ts` hold the shape that matters: it asks when stale, does not ask when fresh,
+does not ask when there is no customer, and keeps the plan it had when Stripe says nothing.
+
+**The cancelled sentence lost its tail.** "After that this workspace is back on Free. Everything you
+have generated stays yours either way." is now just `Pro runs until 2026-08-30 and does not renew.`
+The badge has already named the state, and reassurance nobody asked for reads as a product bracing for
+a complaint.
+
+**The lesson worth keeping.** Three times in this section the product asserted something about money
+from one field, and three times Stripe had said something more specific in another. `?upgraded=1`
+instead of the plan; the status instead of the cancellation flag; the flag instead of `cancel_at`. The
+fix each time was the same shape — ask the system that knows, and derive rather than assume.
+
+**Going live is now written down.** `INFRASTRUCTURE_SETUP.md` §6 covers what test mode does not carry
+over — live product and price, live keys, a live webhook endpoint and its own signing secret, the
+customer portal Stripe requires you to switch on before `Manage billing` works — plus the two things
+code cannot decide: VAT (Checkout is created without `automatic_tax`, which is a deliberate decision to
+make rather than a default to inherit) and what `/terms` says about renewal and cancellation. It ends
+with one real payment proved end to end, and a refund.
+
+**Verification (2026-07-30)**
+
+```
+pnpm -r typecheck   Done — clean across schemas, engine, web
+pnpm -r lint        Done — no new issues
+pnpm -r test        schemas   35 passed
+                    engine   219 passed
+                    web      430 passed (58 files)
+pnpm test:scripts     13 passed
+pnpm build          Done
+```
+
+New tests: `lib/data/store.usage-compat.test.ts` (4) — the fallback, that it still excludes failed
+jobs, and that any other error stays loud; `features/landing/pro-cta.test.ts` (4) — the four
+destinations; `app/smoke.test.tsx` (+2) — the signed-in landing page routes the Pro action by
+entitlement, which is the level the bug actually lived at; `features/landing/copy.test.ts` (+1) — the
+future-tense promise; `features/billing/BillingUnavailable.test.tsx` (2) — the reason is on the page,
+including that nothing already generated is affected; `lib/stripe.test.ts` (+5) — the webhook secret
+is required, a misspelled variable is reported by name, and a price id with a stray colon is rejected
+before Stripe sees it; `features/billing/actions.test.ts` (+2) — a rejected Stripe call is reported
+inline with the detail in the log, for the checkout session and for the customer behind it;
+`app/app/settings/page.test.tsx` (+5) — coming back from Checkout claims Pro only when the plan says
+so, says nothing about a payment when nobody came back from one, and offers "check again" to exactly
+the organization that has been to Checkout and is still on free; `features/billing/sync.test.ts` (7) —
+the reconciliation grants from what Stripe reports, applies a cancellation the same way, prefers a paid
+subscription over an abandoned attempt, writes nothing when there is nothing to write, and reports
+rather than throws when Stripe is unreachable; `features/billing/actions.test.ts` (+1) — Checkout
+returns through the reconciling route rather than straight to Settings;
+`features/billing/plan-standing.test.ts` (10) — every state a paid workspace can be in, including the
+one that started it: a cancelled subscription must never read as renewing;
+`features/billing/subscription-state.test.ts` (8) — a scheduled cancellation is read off `cancel_at`
+as well as the older boolean, and a paused collection ends the entitlement rather than promising a
+charge.
 
 ---
 

@@ -83,6 +83,8 @@ passes it in.
   the project's origin. ZIP delivery must always work with no integration connected.
 - **Plans:** an organization carries a `plan` (`free` | `pro`). Free is one foundation plus two free
   regenerations within 24h; Pro is unlimited and adds importing an existing project. `checkAllowance`
-  is the only place that decides, always server-side from Postgres. The **Stripe webhook is the only
-  non-migration writer of `organizations.plan`** — a Checkout redirect proves nothing about payment.
-  Specs 74, 99, 100.
+  is the only place that decides, always server-side from Postgres. **`organizations.plan` is written
+  only from something Stripe told us**: the webhook (`api/stripe/webhook`) and the direct API read in
+  `features/billing/sync.ts`, both through `applySubscriptionState`. A Checkout redirect still proves
+  nothing and grants nothing — spec 100 amended spec 99's "webhook only" to name the second path,
+  because a founder whose webhook never arrives must not be stuck paying for free. Specs 74, 99, 100.

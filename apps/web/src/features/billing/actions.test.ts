@@ -98,6 +98,16 @@ describe("startCheckoutAction", () => {
     );
   });
 
+  it("returns through the route that reconciles with Stripe, not straight to Settings", async () => {
+    // Spec 100: the plan has to be right when the founder lands. Returning to Settings meant showing
+    // whatever the webhook had managed to write by then, which on a bad day was nothing at all.
+    await startCheckoutAction(form("month"));
+
+    expect(sessionsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ success_url: "https://airrow.test/app/upgrade/return" })
+    );
+  });
+
   it("never asks Checkout to grant anything itself", async () => {
     // The webhook is the only writer of the plan. Checkout only takes money.
     await startCheckoutAction(form("month"));
@@ -114,6 +124,31 @@ describe("startCheckoutAction", () => {
 
     expect(state.error).toMatch(/did not return a checkout URL/i);
     expect(state.url).toBeUndefined();
+  });
+
+  it("reports a Stripe failure instead of throwing it at the founder", async () => {
+    // What a misconfigured price id did: `No such price: ':price_…'` came back from Stripe, the action
+    // rejected, and the founder got a Next runtime error page on the button they pressed to pay.
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    sessionsCreate.mockRejectedValue(new Error("No such price: ':price_123'"));
+
+    const state = await startCheckoutAction(form("month"));
+
+    expect(state.url).toBeUndefined();
+    expect(state.error).toMatch(/nothing has been charged/i);
+    // The detail a developer needs is not lost, it just goes somewhere a customer never looks.
+    expect(logged).toHaveBeenCalledWith(expect.stringMatching(/checkout failed/i), "No such price: ':price_123'");
+    logged.mockRestore();
+  });
+
+  it("reports a failure while creating the customer the same way", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    customersCreate.mockRejectedValue(new Error("Invalid API Key provided"));
+
+    const state = await startCheckoutAction(form("month"));
+
+    expect(state.error).toMatch(/nothing has been charged/i);
+    logged.mockRestore();
   });
 });
 

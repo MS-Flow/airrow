@@ -116,9 +116,15 @@ regenerations within 24 hours of its first run; Pro is unlimited and adds import
 project. An unchanged regeneration makes no Claude call and is never charged.
 
 `checkAllowance` (`features/generation/allowance.ts`) is the single place that answers "may this
-organization generate?", and it reads the plan server-side from Postgres on every attempt. The
-**Stripe webhook is the only thing outside a migration that writes `organizations.plan`** — Checkout
-returning proves the browser reached a URL, not that money moved. Because the plan is an entitlement
+organization generate?", and it reads the plan server-side from Postgres on every attempt.
+**`organizations.plan` changes only on something Stripe told us**, through `applySubscriptionState`
+and nothing else: the **webhook**, which is the primary path and the only one that runs when nobody is
+at a screen (renewals, failed payments, cancellations), and **`features/billing/sync.ts`**, which asks
+Stripe's API directly when a founder returns from Checkout or presses "check again". Checkout
+returning proves the browser reached a URL, not that money moved — that has not changed, and the sync
+is not the redirect: it re-reads the subscription server-side with our own key. Spec 100 added it
+because every other route to the plan ran through webhook delivery, so one missing listener or one
+unmigrated database left a paying founder on free with no way out. Because the plan is an entitlement
 sitting on a row members may otherwise edit, it is protected by column-level privilege rather than
 RLS; see [`DATABASE_DESIGN.md`](DATABASE_DESIGN.md).
 

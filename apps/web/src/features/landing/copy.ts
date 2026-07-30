@@ -189,7 +189,9 @@ export const SECTIONS = {
   },
   pricing: {
     title: "Pricing",
-    body: `Start free: ${FOUNDATIONS.toLowerCase()} complete ${foundationNoun}, every document Airrow writes, no card. Pro lifts the limit when it lands.`,
+    /* "Pro lifts the limit when it lands" survived spec 100's sweep for "coming soon" while saying
+       the same untrue thing in the future tense. Pro is here; the copy says so. */
+    body: `Start free: ${FOUNDATIONS.toLowerCase()} complete ${foundationNoun}, every document Airrow writes, no card. Pro lifts the limit.`,
     free: {
       name: "Free",
       amount: "$0",

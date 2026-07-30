@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ComingSoon } from "@/components/ui/states";
+import { ComingSoon, Notice } from "@/components/ui/states";
 import { ThemeToggle } from "@/features/settings/ThemeToggle";
 import { signInWithGitHubAction } from "@/features/auth/actions";
 import {
@@ -22,10 +22,12 @@ import {
 import {
   BillingUnavailable,
   ManageBillingButton,
+  RefreshPlanButton,
   UpgradeButtons
 } from "@/features/billing/BillingActions";
+import { PLAN_BADGE_TONE, planStanding } from "@/features/billing/plan-standing";
+import { planWithStripe } from "@/features/billing/sync";
 import { githubIdentity, requireSession, updateName } from "@/lib/auth";
-import { getSubscription } from "@/lib/data/store";
 import { stripeConfigured, stripePrices } from "@/lib/stripe";
 import { readTheme } from "@/lib/theme";
 
@@ -42,13 +44,21 @@ export const metadata = { title: "Settings" };
 export default async function SettingsPage({
   searchParams
 }: {
-  searchParams: Promise<{ saved?: string; upgraded?: string }>;
+  searchParams: Promise<{ saved?: string; upgraded?: string; refreshed?: string }>;
 }) {
-  const { saved, upgraded } = await searchParams;
+  const { saved, upgraded, refreshed } = await searchParams;
   const { user, org } = await requireSession();
   const theme = await readTheme();
-  const allowance = await checkAllowance({ orgId: org.id, plan: org.plan, userId: user.id });
-  const subscription = org.plan === "pro" ? await getSubscription(org.id) : null;
+  // Reconciled on load rather than on demand. A cancellation made in Stripe, or a payment whose
+  // webhook never arrived, used to sit here until somebody pressed "check again" — and a founder
+  // should not have to know that button exists. `planWithStripe` only asks Stripe when what we hold
+  // has aged past a minute, so an ordinary visit costs nothing.
+  //
+  // Read whatever the plan, not only on Pro: a founder who paid and is still on free has a customer
+  // record, and that record is what makes the manual re-check worth offering them at all.
+  const { plan, subscription } = await planWithStripe(org);
+  const allowance = await checkAllowance({ orgId: org.id, plan, userId: user.id });
+  const standing = subscription ? planStanding(subscription) : null;
   const intervals = stripePrices().map((p) => p.interval);
   const github = await githubIdentity();
   const githubConfigured = Boolean(process.env.GITHUB_APP_ID && process.env.GITHUB_APP_PRIVATE_KEY);
@@ -98,11 +108,29 @@ export default async function SettingsPage({
           <CardTitle>Plan</CardTitle>
         </CardHeader>
         <CardBody>
-          {upgraded ? (
-            <p className="mb-4 text-sm text-success">
-              You&rsquo;re on Pro. If this still says Free, give Stripe a few seconds and reload —
-              the plan changes when Stripe confirms the payment, not when your browser comes back.
-            </p>
+          {/* What the redirect is allowed to claim, and what it is not.
+              `?upgraded=1` means the browser came back from Checkout — nothing more. Saying "you're
+              on Pro" on the strength of that contradicts the one rule this whole path is built on
+              (only the webhook grants the plan), and it did exactly what you would expect: a founder
+              whose payment had gone through read "You're on Pro" directly above "Free · 0 of 1
+              foundation left" and had no idea which half to believe. So the plan is read, not
+              assumed. */}
+          {upgraded || refreshed ? (
+            plan === "pro" ? (
+              // "Payment confirmed" is only true of a founder who just paid. Coming back from the
+              // billing portal they may have just done the opposite, so that path says the neutral
+              // thing and lets the standing below carry the meaning.
+              <p className="mb-4 text-sm text-success">
+                {upgraded ? "Payment confirmed. You're on Pro." : "Updated from Stripe."}
+              </p>
+            ) : (
+              <Notice title="Stripe has no paid subscription for this workspace" className="mb-4" role="status">
+                We asked Stripe directly and it reports nothing active here yet. A payment taken
+                seconds ago can still be settling — try again in a moment. If you have a receipt and
+                this keeps saying the same thing, nothing is lost: the payment is recorded with
+                Stripe, and it is a support ticket rather than money gone.
+              </Notice>
+            )
           ) : null}
 
           {allowance.unlimited ? (
@@ -113,17 +141,20 @@ export default async function SettingsPage({
                 </span>{" "}
                 · unlimited generations. {allowance.used} used so far.
               </p>
-              {subscription ? (
+              {subscription && standing && plan === "pro" ? (
                 <>
-                  <p className="mt-1.5 text-xs text-fg-faint">
-                    {subscription.cancelAtPeriodEnd
-                      ? "Cancelled — Pro runs until the end of the period you've paid for."
-                      : "Renews automatically."}
-                    {subscription.currentPeriodEnd
-                      ? ` Current period ends ${subscription.currentPeriodEnd.slice(0, 10)}.`
-                      : ""}
+                  {/* The state, then what happens next and when. Both derived from the subscription
+                      as last reconciled with Stripe — never from which button was pressed. */}
+                  <Badge tone={PLAN_BADGE_TONE[standing.tone]} className="mt-3">
+                    {standing.label}
+                  </Badge>
+                  <p className="mt-2 max-w-prose text-xs leading-relaxed text-fg-faint">
+                    {standing.detail}
                   </p>
-                  <ManageBillingButton />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ManageBillingButton />
+                    <RefreshPlanButton className="mt-4" />
+                  </div>
                 </>
               ) : null}
             </>
@@ -146,6 +177,10 @@ export default async function SettingsPage({
               ) : (
                 <BillingUnavailable />
               )}
+              {/* Only for someone who has actually been to Checkout: a customer record exists for
+                  this workspace and the plan still says free. Offered to everyone it would read as
+                  "the product is unsure whether you paid", which is its own kind of alarming. */}
+              {stripeConfigured() && subscription ? <RefreshPlanButton /> : null}
             </>
           )}
         </CardBody>

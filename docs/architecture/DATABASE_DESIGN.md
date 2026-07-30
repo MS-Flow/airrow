@@ -127,7 +127,7 @@ Single helper: `is_org_member(org_id uuid)` security-definer function checking `
 
 `organizations.plan` is an entitlement sitting on a row its own members may edit — `authenticated` holds `update` on `organizations`, and the "org members update organizations" policy admits any member. Row-level security cannot express *"this row, but not this column"*, so membership alone would have let a founder run `update organizations set plan = 'pro'` straight against PostgREST with their own JWT.
 
-So the plan is protected by **column-level privilege** instead: spec 74's migration revokes table-wide `insert, update` from `authenticated` and grants back every column except `plan`. The row policies are unchanged. Only a migration or the billing webhook's service-role path writes it.
+So the plan is protected by **column-level privilege** instead: spec 74's migration revokes table-wide `insert, update` from `authenticated` and grants back every column except `plan`. The row policies are unchanged. Only a migration or the service-role billing path writes it — the webhook, and the Stripe API read in `features/billing/sync.ts` that spec 100 added for the founder who paid before the webhook could tell us. Both go through `applySubscriptionState`; neither trusts anything the browser said.
 
 Read this as the general rule it implies: when a column decides what someone is *entitled to*, membership of the row is not sufficient authorization, and RLS is not the tool. Two denial tests in `schema.rls.test.ts` hold the line — one for a member's own organization, one for someone else's.
 

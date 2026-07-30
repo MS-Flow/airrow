@@ -15,6 +15,7 @@ import {
   ManageBillingButton,
   UpgradeButtons
 } from "@/features/billing/BillingActions";
+import { planWithStripe } from "@/features/billing/sync";
 import {
   FREE_GENERATION_LIMIT,
   FREE_REPAIR_LIMIT,
@@ -35,9 +36,12 @@ const PRO_GIVES = [
 
 export default async function UpgradePage() {
   const { user, org } = await requireSession();
-  const allowance = await checkAllowance({ orgId: org.id, plan: org.plan, userId: user.id });
+  // Reconciled first, for the same reason Settings is: offering Pro to somebody who already pays for
+  // it is the one thing this screen must never do, and a stale row is all it would take.
+  const { plan } = await planWithStripe(org);
+  const allowance = await checkAllowance({ orgId: org.id, plan, userId: user.id });
   const intervals = stripePrices().map((p) => p.interval);
-  const alreadyPro = org.plan === "pro";
+  const alreadyPro = plan === "pro";
 
   return (
     <PageContainer className="max-w-2xl py-16">
