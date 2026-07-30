@@ -82,6 +82,7 @@ alter table public.generation_usage enable row level security;
 
 -- Same shape as every other org-scoped table (§II): membership of the row's organization, denied
 -- otherwise. Inserts come from the trigger, which is security definer and runs above this.
+drop policy if exists "org members read generation_usage" on public.generation_usage;
 create policy "org members read generation_usage" on public.generation_usage
   for all using (public.is_org_member(organization_id))
   with check (public.is_org_member(organization_id));

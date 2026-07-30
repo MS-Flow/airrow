@@ -84,3 +84,32 @@ jobs:
           console.log(`::error::${newly.length} ny(a) advisory(er). Åtgärda, eller acceptera medvetet genom att lägga in dem i .security/audit-baseline.json med en motivering (se docs/guides/SECURITY.md).`);
           process.exit(1);
           NODE
+      # Dead last, and on purpose: this is the only step that talks to something outside the
+      # runner, so every deterministic gate above has already reported by the time a paused
+      # project or a network blip can turn the job red. A step rather than its own job because
+      # `verify` is a required status check — `scripts/setup-branch-protection.sh` lists the
+      # contexts by hand, so a new job would block nothing until an admin re-ran that script.
+      # Read-only: no `db push` here. Applying happens in `supabase-migrate.yml` after merge.
+      - uses: supabase/setup-cli@v1
+        with:
+          # Unpinned deliberately. A CLI that changes the output format of `migration list`
+          # cannot slip past quietly: the script fails when it parses a table into zero rows
+          # while the repo holds migrations.
+          version: latest
+      - name: Check migrations against the linked database
+        # The credentials are scoped to this one step rather than the job: every other step here
+        # runs third-party code (`pnpm install` lifecycle scripts, the build), and none of it has
+        # any business being able to read the production database password.
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: |
+          # A migration this PR adds is expected to be unapplied — the merge is what applies it.
+          # The script needs the base branch to tell those apart from drift that was already there,
+          # and `checkout` clones one commit deep, so fetch it. Without this the script warns and
+          # falls back to treating every unapplied migration as pre-existing.
+          if [ -n "$GITHUB_BASE_REF" ]; then
+            git fetch --no-tags --depth=50 origin "$GITHUB_BASE_REF"
+          fi
+          node scripts/supabase-migration-drift.mjs
