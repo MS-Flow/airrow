@@ -77,12 +77,30 @@ export const REQUIRED_CREDENTIALS = ["SUPABASE_ACCESS_TOKEN", "SUPABASE_PROJECT_
 /** Raised when the run has no credentials to push with. */
 export class MissingCredentialsError extends Error {}
 
-/** Throws naming every variable that is missing, so one run reports the whole gap. */
+/**
+ * Throws naming every variable that is missing, so one run reports the whole gap.
+ *
+ * Whitespace is rejected too, and that is not fussiness: a token with a space in it produces an
+ * `Authorization: Bearer a b` header, which the API answers with a 401 whose text is about header
+ * *format* and says nothing about where the space came from. Pasting a multi-line block where
+ * `Read-Host` swallows the following line puts a whole command into the variable — non-empty, so it
+ * passes every check that only asks whether something is set. Catching it here costs one round-trip
+ * and a great deal of confusion.
+ */
 export function requireCredentials(env) {
   const missing = REQUIRED_CREDENTIALS.filter((name) => !env[name]);
   if (missing.length > 0) {
     throw new MissingCredentialsError(
       `Saknar ${missing.join(", ")}. Se docs/guides/INFRASTRUCTURE_SETUP.md § 6.`
+    );
+  }
+
+  const malformed = REQUIRED_CREDENTIALS.filter((name) => /\s/.test(env[name]));
+  if (malformed.length > 0) {
+    throw new MissingCredentialsError(
+      `${malformed.join(", ")} innehåller blanksteg eller radbrytning och kan inte vara rätt värde. ` +
+        "Sätt variabeln på en egen rad — klistrar du in flera rader på en gång äter `Read-Host` nästa " +
+        "rad och lägger hela kommandot i variabeln."
     );
   }
 }
@@ -119,7 +137,10 @@ export function buildAuthConfig(
   if (env.RESEND_API_KEY) {
     body.external_email_enabled = true;
     body.smtp_host = smtp.host;
-    body.smtp_port = smtp.port;
+    // The API wants the port as a string and rejects a number outright
+    // ("smtp_port: Invalid input: expected string, received number"). Kept as a number in `SMTP`,
+    // because that is what a port is, and converted here where the wire format is decided.
+    body.smtp_port = String(smtp.port);
     body.smtp_user = smtp.user;
     body.smtp_pass = env.RESEND_API_KEY;
     body.smtp_admin_email = smtp.adminEmail;
@@ -148,7 +169,15 @@ async function main() {
 
   let body;
   try {
-    if (!dryRun) requireCredentials(process.env);
+    // A dry run reports the same gaps rather than skipping the check: the point of `--dry-run` is to
+    // find out what is wrong *before* the real call, and it used to pass cleanly and then leave the
+    // real run to fail on a missing credential it already knew about.
+    try {
+      requireCredentials(process.env);
+    } catch (error) {
+      if (!dryRun) throw error;
+      console.log(`::warning::${error.message} Den skarpa körningen kommer att avbrytas.`);
+    }
     body = buildAuthConfig(readTemplateFromDisk, process.env);
   } catch (error) {
     console.error(`::error::${error.message}`);
@@ -184,7 +213,15 @@ async function main() {
     // header and in `smtp_pass`, neither of which is echoed here.
     console.error(`::error::Kunde inte uppdatera auth-konfigurationen (HTTP ${response.status}).`);
     console.error(await response.text());
-    process.exit(1);
+    if (response.status === 401) {
+      console.error(
+        "401 med 'Format is Authorization: Bearer [token]' betyder oftast att SUPABASE_ACCESS_TOKEN innehåller blanksteg eller radbrytning — kontrollera att variabeln bara är själva tokenen."
+      );
+    }
+    // `process.exitCode` rather than `process.exit()`: killing the process here while fetch's socket
+    // is still closing trips a libuv assertion on Windows, which buries the error above in a crash.
+    process.exitCode = 1;
+    return;
   }
 
   const what = ["mallar", "redirect-URL:er", ...("smtp_pass" in body ? ["SMTP"] : [])];

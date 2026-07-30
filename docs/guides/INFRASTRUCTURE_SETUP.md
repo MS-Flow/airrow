@@ -187,18 +187,48 @@ real traffic. Spec 113 replaces it with Resend over plain SMTP.
 
 1. **Create the sending domain.** At <https://resend.com> → **Domains → Add**, add `airrow.app`.
    Resend shows DKIM (and optionally DMARC) records to publish.
-2. **Publish the DNS records** where `airrow.app` is served — Vercel → **Project Settings → Domains**,
-   or the DNS provider if it moves. Wait for Resend to report the domain **Verified**; mail sent before
-   that is likely to be filed as spam.
+2. **Publish the DNS records.** `airrow.app` uses Vercel's nameservers (`ns1`/`ns2.vercel-dns.com`), so
+   they go in the **domain's own DNS view** — Vercel dashboard → _Domains_ → `airrow.app` → DNS records.
+   Not the project's _Settings → Domains_ tab, which only attaches a domain to a project.
+
+   Resend gives the values; they are unique to the domain and cannot be written down here in advance.
+   What is worth knowing before you start:
+
+   - **Enter the name without the domain.** Resend displays `send.airrow.app` and
+     `resend._domainkey.airrow.app`; Vercel's Name field wants `send` and `resend._domainkey`. Pasting
+     the full name creates `send.airrow.app.airrow.app` and verification never passes. This is the
+     mistake to expect.
+   - **Paste TXT values without the surrounding quotes.** Vercel adds them.
+   - **The MX record needs a priority** (Resend shows it, usually `10`), and it sits on the sending
+     subdomain — not on the apex, so it cannot disturb inbound mail for `airrow.app`.
+   - There were no TXT or MX records on the domain as of 2026-07-30, so nothing here merges with an
+     existing SPF.
+
+   Check propagation yourself rather than only refreshing Resend:
+   `nslookup -type=TXT resend._domainkey.airrow.app`. Wait for Resend to report **Verified** before
+   sending — mail sent earlier is likely to be filed as spam.
 3. **Create an API key** (Resend → **API keys**) with send permission only.
-4. **Get a Supabase access token** from <https://supabase.com/dashboard/account/tokens>.
+4. **Get a Supabase access token** from <https://supabase.com/dashboard/account/tokens>, then put it and
+   the Resend key in a `.env` file at the repo root:
+   ```
+   SUPABASE_ACCESS_TOKEN=sbp_…
+   SUPABASE_PROJECT_ID=frqhxybuzcmecxqkimxj
+   RESEND_API_KEY=re_…
+   ```
+   `.env` is gitignored and Next.js never reads it — the app only reads `.env*` inside `apps/web/`, so
+   nothing here reaches a build or a bundle.
+
+   A file rather than shell variables on purpose. `VAR=value command` is bash syntax and fails in
+   PowerShell, and the PowerShell equivalent invites a worse trap: paste several `Read-Host` lines at
+   once and the prompt swallows the following line, leaving a whole command inside the variable. It is
+   non-empty, so every "is it set?" check passes, and the API answers with a 401 about header format
+   that names nothing. The script now rejects a credential containing whitespace for exactly that
+   reason — but not needing the shell at all is better than diagnosing it well.
 5. **Push the whole auth configuration** — SMTP, the email template, the redirect allow-list and the
    site URL, in one call:
    ```bash
-   SUPABASE_ACCESS_TOKEN=… SUPABASE_PROJECT_ID=… RESEND_API_KEY=… \
-     node scripts/sync-supabase-auth.mjs --dry-run   # inspect first; the key is redacted
-   SUPABASE_ACCESS_TOKEN=… SUPABASE_PROJECT_ID=… RESEND_API_KEY=… \
-     node scripts/sync-supabase-auth.mjs
+   node --env-file=.env scripts/sync-supabase-auth.mjs --dry-run   # inspect; the key is redacted
+   node --env-file=.env scripts/sync-supabase-auth.mjs
    ```
    Run it again whenever the template or the host list changes. Without `RESEND_API_KEY` it updates
    everything **except** SMTP and says so — blanking working sending credentials would be worse than

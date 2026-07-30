@@ -60,12 +60,20 @@ describe("buildAuthConfig", () => {
     expect(body).toMatchObject({
       external_email_enabled: true,
       smtp_host: SMTP.host,
-      smtp_port: SMTP.port,
       smtp_user: SMTP.user,
       smtp_pass: "re_123",
       smtp_admin_email: SMTP.adminEmail,
       smtp_sender_name: SMTP.senderName
     });
+  });
+
+  // The API rejects a number here — "expected string, received number" — so the conversion is part of
+  // the contract, not a formatting preference.
+  it("sends the port as a string, which is what the API accepts", () => {
+    const body = buildAuthConfig(reader(VALID_HTML), { RESEND_API_KEY: "re_123" });
+
+    expect(body.smtp_port).toBe("587");
+    expect(typeof body.smtp_port).toBe("string");
   });
 
   // Blanking working production SMTP is worse than not touching it, so a run without the key has to
@@ -126,13 +134,75 @@ describe("requireCredentials", () => {
   it("points at the runbook so the reader knows where to fix it", () => {
     expect(() => requireCredentials({})).toThrow(/INFRASTRUCTURE_SETUP\.md/);
   });
+
+  // A value with whitespace is set, so every "is it there?" check passes — and the API answers with a
+  // 401 about header format that says nothing about the cause. This is the shape a pasted multi-line
+  // block leaves behind when Read-Host swallows the next line.
+  it("rejects a token that swallowed a whole command", () => {
+    expect(() =>
+      requireCredentials({
+        ...ALL_CREDENTIALS,
+        SUPABASE_ACCESS_TOKEN: '$env:RESEND_API_KEY = Read-Host "Resend API key"'
+      })
+    ).toThrow(/blanksteg/);
+  });
+
+  it("rejects a trailing newline, which a paste leaves behind invisibly", () => {
+    expect(() => requireCredentials({ ...ALL_CREDENTIALS, SUPABASE_PROJECT_ID: "abc\n" })).toThrow(
+      MissingCredentialsError
+    );
+  });
+
+  it("explains how the whitespace got there, not just that it is there", () => {
+    expect(() => requireCredentials({ ...ALL_CREDENTIALS, SUPABASE_ACCESS_TOKEN: "a b" })).toThrow(
+      /Read-Host/
+    );
+  });
+
+  it("accepts an ordinary token", () => {
+    expect(() =>
+      requireCredentials({ ...ALL_CREDENTIALS, SUPABASE_ACCESS_TOKEN: "sbp_0102abcdef" })
+    ).not.toThrow();
+  });
 });
 
 describe("the template committed in the repo", () => {
+  // Comments explain the markup and mention tags in prose; only what actually renders is checked.
+  const html = readFileSync("supabase/templates/confirmation.html", "utf8").replace(
+    /<!--[\s\S]*?-->/g,
+    ""
+  );
+
   it("passes its own validation", () => {
     expect(() =>
       buildAuthConfig((file) => readFileSync(`supabase/templates/${file}`, "utf8"), {})
     ).not.toThrow();
+  });
+
+  // An email cannot resolve a relative path, and a renamed asset would degrade to alt text forever
+  // without anything failing — so the file it points at has to exist, and be the small one.
+  it("references images by absolute URL only", () => {
+    for (const [, src] of html.matchAll(/<img[^>]*\ssrc="([^"]*)"/g)) {
+      expect(src).toMatch(/^https:\/\//);
+    }
+  });
+
+  it("points at brand assets that are actually in the repo", () => {
+    for (const [, src] of html.matchAll(/<img[^>]*\ssrc="https:\/\/airrow\.app(\/[^"]*)"/g)) {
+      expect(() => readFileSync(`apps/web/public${src}`)).not.toThrow();
+    }
+  });
+
+  it("keeps the logo small enough for an inbox", () => {
+    const bytes = readFileSync("apps/web/public/brand/airrow-lockup-email.png").length;
+
+    expect(bytes).toBeLessThan(50_000);
+  });
+
+  it("gives every image alt text, since clients block images by default", () => {
+    for (const [tag] of html.matchAll(/<img[^>]*>/g)) {
+      expect(tag).toMatch(/\salt="[^"]+"/);
+    }
   });
 });
 
