@@ -17,6 +17,7 @@ organizations
   slug text unique
   kind text check in ('personal','team')   -- teams activate in M7
   created_by uuid → profiles
+  plan text check in ('free','pro')        -- entitlement (spec 74); see "The plan column" below
 
 organization_members
   organization_id uuid → organizations
@@ -56,6 +57,8 @@ generation_jobs
   error jsonb null
   tokens_used int null
   started_at / finished_at timestamptz
+  inputs_hash / prompt_version / authoring_model / authored   -- memoisation + provenance (spec 65)
+  reused_authoring boolean                  -- answered from a previous run; not charged (spec 74)
 
 artifacts
   id uuid pk
@@ -91,11 +94,44 @@ repo_connections                            -- provider credentials per org (Git
   provider text check in ('github')         -- 'azure_devops' later
   installation_id text
   unique (organization_id, provider)
+
+generation_usage                            -- the allowance ledger (spec 65)
+  id uuid pk
+  organization_id uuid → organizations      -- never null; the fact this is really about
+  project_id uuid → projects on delete set null   -- outlives its project on purpose
+  generation_job_id uuid → generation_jobs on delete set null
+  -- Counted minus jobs that failed or reused a previous run's prose: the allowance charges for
+  -- Claude calls Airrow actually paid for, and nothing else.
+
+subscriptions                               -- Stripe billing state per org (spec 99)
+  id uuid pk
+  organization_id uuid → organizations unique     -- two live subscriptions is an incident, not a state
+  provider text check in ('stripe')
+  provider_customer_id text                 -- how the webhook, which has no session, finds the org
+  provider_subscription_id text null
+  status text                               -- Stripe's own vocabulary, kept verbatim
+  current_period_end timestamptz null
+  cancel_at_period_end boolean
+
+stripe_events                               -- delivered event ids, for idempotency (spec 99)
+  event_id text pk                          -- the pk *is* the mechanism: claiming is an insert
+  event_type text
+  received_at timestamptz
 ```
 
 ## RLS pattern
 
 Single helper: `is_org_member(org_id uuid)` security-definer function checking `organization_members`. Every policy reduces to membership of the row's (direct or joined) organization. Writes additionally check role where relevant. No table without a policy; policies tested in CI.
+
+### The plan column is the exception, and has to be
+
+`organizations.plan` is an entitlement sitting on a row its own members may edit — `authenticated` holds `update` on `organizations`, and the "org members update organizations" policy admits any member. Row-level security cannot express *"this row, but not this column"*, so membership alone would have let a founder run `update organizations set plan = 'pro'` straight against PostgREST with their own JWT.
+
+So the plan is protected by **column-level privilege** instead: spec 74's migration revokes table-wide `insert, update` from `authenticated` and grants back every column except `plan`. The row policies are unchanged. Only a migration or the service-role billing path writes it — the webhook, and the Stripe API read in `features/billing/sync.ts` that spec 100 added for the founder who paid before the webhook could tell us. Both go through `applySubscriptionState`; neither trusts anything the browser said.
+
+Read this as the general rule it implies: when a column decides what someone is *entitled to*, membership of the row is not sufficient authorization, and RLS is not the tool. Two denial tests in `schema.rls.test.ts` hold the line — one for a member's own organization, one for someone else's.
+
+`subscriptions` follows the same rule at table scope: members may `select` it and nothing more, because `status = 'active'` is an entitlement too. `stripe_events` goes further and has **RLS enabled with no policy at all** — the deny-everything shape `admin_emails` uses. It is the webhook's own bookkeeping, and there is no query a founder should be making against it.
 
 ## Design decisions
 

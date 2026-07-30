@@ -9,9 +9,13 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-// Only the fields the landing header reads. Hoisted so the mock below can flip the
-// session per test; `vi.mock` factories run before the module graph is imported.
-type FakeSession = { user: { name: string; email: string } } | null;
+// Only the fields the landing page reads: the header's account, and the organization the pricing
+// section's Pro action is decided from. Hoisted so the mock below can flip the session per test;
+// `vi.mock` factories run before the module graph is imported.
+type FakeSession = {
+  user: { id: string; name: string; email: string };
+  org: { id: string; plan: "free" | "pro" };
+} | null;
 
 const session = vi.hoisted((): { current: FakeSession } => ({ current: null }));
 
@@ -24,6 +28,22 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/lib/theme", () => ({
   readTheme: () => Promise.resolve("dark")
+}));
+
+// A database boundary, mocked for the same reason the session is: there is no request here, and the
+// landing page asks it one question — how much of the free allowance is gone.
+const allowanceUsed = vi.hoisted(() => ({ current: 1 }));
+
+vi.mock("@/features/generation/allowance", () => ({
+  checkAllowance: () =>
+    Promise.resolve({
+      allowed: false,
+      plan: "free",
+      denial: "free-spent",
+      used: allowanceUsed.current,
+      remaining: 0,
+      unlimited: false
+    })
 }));
 
 import Landing from "./page";
@@ -39,15 +59,50 @@ describe("public pages render without crashing", () => {
       "Your startup deserves a real engineering foundation."
     );
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
+    // Nobody is asked to pay before they have an account; the interview is where Pro starts too.
+    expect(screen.getByRole("link", { name: /start with pro/i })).toHaveAttribute("href", "/start");
   });
 
   it("renders the landing page for a signed-in visitor", async () => {
     // The signed-in branch mounts a different header (dashboard link + account menu),
     // so rendering only the signed-out case would leave half the page untested.
-    session.current = { user: { name: "Ada Lovelace", email: "ada@example.com" } };
+    session.current = {
+      user: { id: "user1", name: "Ada Lovelace", email: "ada@example.com" },
+      org: { id: "org1", plan: "free" }
+    };
     render(await Landing());
 
     expect(screen.getByRole("link", { name: /open dashboard/i })).toHaveAttribute("href", "/app");
+  });
+
+  it("offers the upgrade screen to a founder whose free foundation is spent", async () => {
+    // The bug this replaces: "Start with Pro" pointed at the new-project form, so the one visitor who
+    // had actually met the limit was sent to the screen that cannot lift it.
+    session.current = {
+      user: { id: "user1", name: "Ada Lovelace", email: "ada@example.com" },
+      org: { id: "org1", plan: "free" }
+    };
+    allowanceUsed.current = 1;
+    render(await Landing());
+
+    expect(screen.getByRole("link", { name: /start with pro/i })).toHaveAttribute(
+      "href",
+      "/app/upgrade"
+    );
+  });
+
+  it("sends a founder with nothing generated to their free foundation instead", async () => {
+    session.current = {
+      user: { id: "user1", name: "Ada Lovelace", email: "ada@example.com" },
+      org: { id: "org1", plan: "free" }
+    };
+    allowanceUsed.current = 0;
+    render(await Landing());
+
+    expect(screen.getByRole("link", { name: /start with pro/i })).toHaveAttribute(
+      "href",
+      "/app/projects/new"
+    );
   });
 
   it("renders the sign-in page", async () => {
