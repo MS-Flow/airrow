@@ -14,6 +14,26 @@ import {
 
 const ALL_CREDENTIALS = Object.fromEntries(REQUIRED_CREDENTIALS.map((name) => [name, "x"]));
 
+// Captured verbatim from Actions run 30527700456. The CLI backticks every cell, writes an absent
+// side as a backticked space, and titles the columns `Local`/`Remote` rather than in caps. The
+// first version of this parser was written against a plausible-looking fixture and matched none of
+// that, so this is the shape everything else is checked against.
+const REAL_CLI_OUTPUT = `Connecting to remote database...
+Local            | Remote           | Time (UTC)
+  ------------------|------------------|-----------------------
+   \`20260724132100\` | \`20260724132100\` | \`2026-07-24 13:21:00\`
+   \`20260725100000\` | \`20260725100000\` | \`2026-07-25 10:00:00\`
+   \`20260725110000\` | \`20260725110000\` | \`2026-07-25 11:00:00\`
+   \`20260726120000\` | \` \`              | \`2026-07-26 12:00:00\`
+   \`20260727090000\` | \`20260727090000\` | \`2026-07-27 09:00:00\`
+   \`20260727093000\` | \` \`              | \`2026-07-27 09:30:00\`
+   \`20260727140000\` | \`20260727140000\` | \`2026-07-27 14:00:00\`
+   \`20260727160000\` | \`20260727160000\` | \`2026-07-27 16:00:00\`
+   \`20260727180000\` | \`20260727180000\` | \`2026-07-27 18:00:00\`
+`;
+
+// An older CLI wrote bare digits and capitalised headers. Kept so the parser is not quietly
+// narrowed to exactly one release of a tool we deliberately do not pin.
 const IN_SYNC = `Connecting to remote database...
 
         LOCAL      |     REMOTE     |     TIME (UTC)
@@ -48,6 +68,14 @@ const errorsOf = (verdict) => verdict.messages.filter((m) => m.level === "error"
 const warningsOf = (verdict) => verdict.messages.filter((m) => m.level === "warning").map((m) => m.text);
 
 describe("parseMigrationList", () => {
+  it("reads the real CLI output — backticked cells, mixed-case header, backticked-space gaps", () => {
+    expect(parseMigrationList(REAL_CLI_OUTPUT)).toEqual({
+      localOnly: ["20260726120000", "20260727093000"],
+      remoteOnly: [],
+      rowCount: 9
+    });
+  });
+
   it("reports no drift when every local migration is applied remotely", () => {
     expect(parseMigrationList(IN_SYNC)).toEqual({ localOnly: [], remoteOnly: [], rowCount: 2 });
   });

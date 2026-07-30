@@ -72,10 +72,15 @@ export function requireCredentials(env) {
  * `supabase migration list --linked` prints a three-column table: the version present locally,
  * the version present remotely, and its timestamp. A row with only one side filled is drift.
  *
- *         LOCAL      |     REMOTE     |     TIME (UTC)
- *   -----------------|----------------|---------------------
- *    20260727093000  | 20260727093000 | 2026-07-27 09:30:00
- *    20260727140000  |                | 2026-07-27 14:00:00   <- committed, never applied
+ *   Local            | Remote           | Time (UTC)
+ *   -----------------|------------------|-----------------------
+ *    `20260727093000` | `20260727093000` | `2026-07-27 09:30:00`
+ *    `20260727140000` | ` `              | `2026-07-27 14:00:00`   <- committed, never applied
+ *
+ * The cells arrive wrapped in backticks and an "absent" side is a backticked space, not an empty
+ * cell — so cells are stripped and validated as digits rather than matched in place. Both are
+ * things the real CLI does that a plausible-looking fixture does not; the version and the casing
+ * of the header have already changed once, which is why nothing here assumes either.
  *
  * `rowCount` is returned so the caller can tell "nothing is out of step" apart from "we did not
  * understand a word of this output" — see `describeDrift`.
@@ -83,9 +88,10 @@ export function requireCredentials(env) {
 export function parseMigrationList(stdout) {
   const lines = stdout.split(/\r?\n/);
 
-  // The CLI prefixes progress lines and version notices, so find the table rather than assume
-  // it starts at line one. No header at all means the output is not a migration table.
-  if (!lines.some((line) => /\bLOCAL\b/.test(line) && /\bREMOTE\b/.test(line))) {
+  // The CLI prefixes progress lines and version notices, so find the table rather than assume it
+  // starts at line one. Case-insensitive: the header reads `Local | Remote`, not `LOCAL | REMOTE`.
+  // No header at all means the output is not a migration table.
+  if (!lines.some((line) => /\blocal\b/i.test(line) && /\bremote\b/i.test(line))) {
     throw new MigrationListError(
       `Kunde inte läsa tabellen från \`supabase migration list --linked\`. Utdata:\n${
         stdout.trim() || "(tomt)"
@@ -98,10 +104,12 @@ export function parseMigrationList(stdout) {
   let rowCount = 0;
 
   for (const line of lines) {
-    const match = line.match(/^\s*(\d*)\s*\|\s*(\d*)\s*\|/);
-    if (!match) continue;
+    const cells = line.split("|");
+    if (cells.length < 2) continue;
 
-    const [, local, remote] = match;
+    const [local, remote] = cells.map((cell) => cell.replaceAll("`", "").trim());
+    // Skips the header and the dashed rule as well as anything else that is not a version pair.
+    if (!/^\d*$/.test(local) || !/^\d*$/.test(remote)) continue;
     if (!local && !remote) continue; // a padding row with both sides blank carries no information
 
     rowCount++;
