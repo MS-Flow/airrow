@@ -193,10 +193,16 @@ describe("the template committed in the repo", () => {
     }
   });
 
-  it("keeps the logo small enough for an inbox", () => {
-    const bytes = readFileSync("apps/web/public/brand/airrow-lockup-email.png").length;
+  // Derived from the template rather than named here: the point is that whatever it references stays
+  // small, not that one particular file does. Naming it meant the check kept passing against an asset
+  // the template had stopped using.
+  it("keeps every referenced image small enough for an inbox", () => {
+    const sources = [...html.matchAll(/<img[^>]*\ssrc="https:\/\/airrow\.app(\/[^"]*)"/g)];
 
-    expect(bytes).toBeLessThan(50_000);
+    expect(sources.length).toBeGreaterThan(0);
+    for (const [, src] of sources) {
+      expect(readFileSync(`apps/web/public${src}`).length, src).toBeLessThan(50_000);
+    }
   });
 
   it("gives every image alt text, since clients block images by default", () => {
