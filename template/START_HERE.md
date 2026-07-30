@@ -47,12 +47,13 @@ Branch direction is strict and never skipped —
 
 ## 3. Read these five files, in this order
 
-| #   | File                                                                         | Why                                                  |
-| --- | ---------------------------------------------------------------------------- | ---------------------------------------------------- | --- |
-| 1   | [CLAUDE.md](CLAUDE.md)                                                       | What your AI assistant reads first, every session    |
-| 2   | [.claude/spec-kit/constitution.md](.claude/spec-kit/constitution.md)         | The rules. When anything disagrees with it, it wins  |
-| 3   | [docs/VISION.md](docs/VISION.md)                                             | What you're building and where it goes               |     |
-| 4   | [docs/architecture/UI_ARCHITECTURE.md](docs/architecture/UI_ARCHITECTURE.md) | What it looks like, and how someone moves through it |
+| #   | File                                                                         | Why                                                   |
+| --- | ----------------------------------------------------------------------------- | ------------------------------------------------------ |
+| 1   | [CLAUDE.md](CLAUDE.md)                                                       | What your AI assistant reads first, every session     |
+| 2   | [.claude/spec-kit/constitution.md](.claude/spec-kit/constitution.md)         | The rules. When anything disagrees with it, it wins   |
+| 3   | [docs/VISION.md](docs/VISION.md)                                             | What you're building and where it goes                |
+| 4   | [docs/architecture/SYSTEM_OVERVIEW.md](docs/architecture/SYSTEM_OVERVIEW.md) | How the system is shaped                              |
+| 5   | [docs/architecture/UI_ARCHITECTURE.md](docs/architecture/UI_ARCHITECTURE.md) | What it looks like, and how someone moves through it  |
 
 Read them yourself - Your assistant reads them and updates them too, which is why keeping them current
 matters more than keeping them long.
