@@ -76,8 +76,9 @@ passes it in.
   user's scope-less OAuth identity. Never user PATs, and no repo credential is persisted.
 - **Product:** Airrow generates engineering *foundations* — never application code from our servers.
   The one exception is the `/start` command shipped **inside** a generated repo: the founder runs it
-  on their own machine, and it takes their project to the bare minimum that runs — that minimum is a
-  ceiling, and everything past it goes through the spec loop (spec 66). An **imported** project gets
+  on their own machine, and it builds the product's core action (`mvpFocus`) for real, to the design in
+  `UI_ARCHITECTURE.md` — that is the ceiling, not a second feature, and everything past it goes
+  through the spec loop (spec 66, amended by spec 123). An **imported** project gets
   `/cleanup` in its place (spec 91): it reads the existing codebase and rewrites the foundation's
   documents to match, changes no code and deletes nothing. Exactly one of the two ships, decided by
   the project's origin. ZIP delivery must always work with no integration connected.

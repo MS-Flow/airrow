@@ -120,6 +120,7 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
     mvpFocus: (a.mvpFocus ?? "").trim(),
     coreEntities: (a.coreEntities ?? "").trim(),
     problem: (a.problem ?? "").trim(),
+    uiDirection: (a.uiDirection ?? "").trim(),
     nonGoals: (a.nonGoals ?? "").trim(),
     derived: {
       multiTenant,

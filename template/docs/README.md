@@ -11,12 +11,13 @@ workflow live in the single source of truth,
 | Doc | What |
 |-----|------|
 | [SYSTEM_OVERVIEW.md](architecture/SYSTEM_OVERVIEW.md) | Living high-level map: purpose, data flow, roles, entities |
+| [UI_ARCHITECTURE.md](architecture/UI_ARCHITECTURE.md) | What it looks like, the screens, navigation, states, design language |
 | [BRANCHING.md](architecture/BRANCHING.md) | Branch + PR workflow (issue → feature → develop → main) |
 
 ## `guides/`
 | Doc | What |
 |-----|------|
-| [DEVELOPER_GUIDE.md](guides/DEVELOPER_GUIDE.md) | Setup, patterns, testing, verification bar |
+| [DEVELOPER_GUIDE.md](guides/DEVELOPER_GUIDE.md) | Setup, verification bar, patterns, and the deployed-product walkthrough (database, hosting, git integration) |
 
 ## Related
 - [`../.claude/spec-kit/constitution.md`](../.claude/spec-kit/constitution.md) — **single source of truth.**

@@ -85,7 +85,7 @@ describe("claimGuestDraft", () => {
 
   it("rejects an incomplete answer set without writing", async () => {
     const d = deps();
-    const { team: _dropped, ...incomplete } = COMPLETE_ANSWERS;
+    const { productType: _dropped, ...incomplete } = COMPLETE_ANSWERS;
     const result = await claimGuestDraft(draft({ answers: incomplete }), d);
 
     expect(result.ok).toBe(false);

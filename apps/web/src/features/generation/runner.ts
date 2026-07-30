@@ -28,8 +28,16 @@ import { inputsHash, reviveAuthored } from "./memo";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Long enough to see a stage land, short enough that the screen never feels like a wait. */
-const BEAT = 260;
+/**
+ * Long enough to see a stage land, short enough that the screen never feels like a wait.
+ *
+ * Sized against the "author" stage's real duration, not in isolation: that stage is the one live
+ * network call in the job, and the other four are near-instant beside it — a founder watching the
+ * screen saw four flashes and then one long wait, which reads as stuck even when it isn't. Weighting
+ * the four fixed stages more heavily borrows from that gap so the whole run feels like one steady
+ * progression instead of a wait with decoration on either side.
+ */
+const BEAT = 700;
 
 const STAGES: JobStage[] = ["resolve", "author", "assemble", "validate", "manifest"];
 

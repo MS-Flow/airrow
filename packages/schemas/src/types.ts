@@ -72,6 +72,8 @@ export interface InterviewAnswers {
   hosting?: Hosting;
   repoProvider?: RepoProvider;
   team?: TeamShape;
+  /** How the product should look, feel, and move — free text, feeds `UI_ARCHITECTURE.md` and `/start`. */
+  uiDirection?: string;
 }
 
 /**
@@ -129,6 +131,8 @@ export interface ProjectModel {
   coreEntities: string;
   /** The problem and who has it. Empty when unanswered — never inferred. */
   problem: string;
+  /** How the product should look, feel, and move. Empty when unanswered — never inferred. */
+  uiDirection: string;
   /** What the product deliberately is not doing. Empty when unanswered. */
   nonGoals: string;
   derived: {
