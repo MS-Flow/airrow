@@ -13,6 +13,7 @@ const sub = (overrides: Partial<SubscriptionRecord> = {}): SubscriptionRecord =>
   status: "active",
   currentPeriodEnd: "2026-08-30T09:00:00.000Z",
   cancelAtPeriodEnd: false,
+  updatedAt: "2026-07-30T09:00:00.000Z",
   ...overrides
 });
 

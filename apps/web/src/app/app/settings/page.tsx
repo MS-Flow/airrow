@@ -26,8 +26,8 @@ import {
   UpgradeButtons
 } from "@/features/billing/BillingActions";
 import { PLAN_BADGE_TONE, planStanding } from "@/features/billing/plan-standing";
+import { planWithStripe } from "@/features/billing/sync";
 import { githubIdentity, requireSession, updateName } from "@/lib/auth";
-import { getSubscription } from "@/lib/data/store";
 import { stripeConfigured, stripePrices } from "@/lib/stripe";
 import { readTheme } from "@/lib/theme";
 
@@ -49,10 +49,15 @@ export default async function SettingsPage({
   const { saved, upgraded, refreshed } = await searchParams;
   const { user, org } = await requireSession();
   const theme = await readTheme();
-  const allowance = await checkAllowance({ orgId: org.id, plan: org.plan, userId: user.id });
+  // Reconciled on load rather than on demand. A cancellation made in Stripe, or a payment whose
+  // webhook never arrived, used to sit here until somebody pressed "check again" — and a founder
+  // should not have to know that button exists. `planWithStripe` only asks Stripe when what we hold
+  // has aged past a minute, so an ordinary visit costs nothing.
+  //
   // Read whatever the plan, not only on Pro: a founder who paid and is still on free has a customer
-  // record, and that record is what makes "check again" worth offering them.
-  const subscription = await getSubscription(org.id);
+  // record, and that record is what makes the manual re-check worth offering them at all.
+  const { plan, subscription } = await planWithStripe(org);
+  const allowance = await checkAllowance({ orgId: org.id, plan, userId: user.id });
   const standing = subscription ? planStanding(subscription) : null;
   const intervals = stripePrices().map((p) => p.interval);
   const github = await githubIdentity();
@@ -111,7 +116,7 @@ export default async function SettingsPage({
               foundation left" and had no idea which half to believe. So the plan is read, not
               assumed. */}
           {upgraded || refreshed ? (
-            org.plan === "pro" ? (
+            plan === "pro" ? (
               // "Payment confirmed" is only true of a founder who just paid. Coming back from the
               // billing portal they may have just done the opposite, so that path says the neutral
               // thing and lets the standing below carry the meaning.
@@ -136,7 +141,7 @@ export default async function SettingsPage({
                 </span>{" "}
                 · unlimited generations. {allowance.used} used so far.
               </p>
-              {subscription && standing && org.plan === "pro" ? (
+              {subscription && standing && plan === "pro" ? (
                 <>
                   {/* The state, then what happens next and when. Both derived from the subscription
                       as last reconciled with Stripe — never from which button was pressed. */}

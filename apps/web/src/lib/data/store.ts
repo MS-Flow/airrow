@@ -881,6 +881,8 @@ export interface SubscriptionRecord {
   status: string;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
+  /** When this row last agreed with Stripe. What tells a screen whether it is worth asking again. */
+  updatedAt: string;
 }
 
 interface SubscriptionRow {
@@ -890,6 +892,7 @@ interface SubscriptionRow {
   status: string;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
+  updated_at: string;
 }
 
 const toSubscription = (r: SubscriptionRow): SubscriptionRecord => ({
@@ -898,11 +901,12 @@ const toSubscription = (r: SubscriptionRow): SubscriptionRecord => ({
   subscriptionId: r.provider_subscription_id,
   status: r.status,
   currentPeriodEnd: r.current_period_end,
-  cancelAtPeriodEnd: r.cancel_at_period_end
+  cancelAtPeriodEnd: r.cancel_at_period_end,
+  updatedAt: r.updated_at
 });
 
 const SUBSCRIPTION_COLUMNS =
-  "organization_id, provider_customer_id, provider_subscription_id, status, current_period_end, cancel_at_period_end";
+  "organization_id, provider_customer_id, provider_subscription_id, status, current_period_end, cancel_at_period_end, updated_at";
 
 export async function getSubscription(orgId: string): Promise<SubscriptionRecord | null> {
   const row = maybe<SubscriptionRow>(

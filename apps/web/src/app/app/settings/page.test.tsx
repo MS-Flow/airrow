@@ -22,7 +22,11 @@ vi.mock("@/lib/auth", () => ({
   updateName: vi.fn()
 }));
 const customer = vi.hoisted((): { current: unknown } => ({ current: null }));
-vi.mock("@/lib/data/store", () => ({ getSubscription: async () => customer.current }));
+vi.mock("@/features/billing/sync", () => ({
+  // When to re-ask Stripe is `sync.test.ts`'s subject. Here the page is what is under test, so it is
+  // simply handed the plan and the subscription that reconciliation would have produced.
+  planWithStripe: async (org: { plan: string }) => ({ plan: org.plan, subscription: customer.current })
+}));
 vi.mock("@/lib/stripe", () => ({
   stripeConfigured: () => true,
   stripePrices: () => [{ id: "price_monthly", interval: "month" }]

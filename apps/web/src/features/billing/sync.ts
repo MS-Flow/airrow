@@ -14,7 +14,12 @@
 //
 // The webhook remains the primary path and is still required: renewals, failed payments and
 // cancellations arrive when nobody is looking at a screen.
-import { applySubscriptionState, getSubscription } from "@/lib/data/store";
+import {
+  applySubscriptionState,
+  getSubscription,
+  type OrgPlan,
+  type SubscriptionRecord
+} from "@/lib/data/store";
 import { stripe, stripeConfigured } from "@/lib/stripe";
 import { decisiveSubscription, toSubscriptionState } from "./subscription-state";
 
@@ -34,6 +39,44 @@ export type PlanSync = "pro" | "free" | "unknown";
  * only when there is something to write. Never throws — a failure here must not take down the screen
  * it was called from, since that screen is where the founder is trying to confirm a payment.
  */
+/**
+ * How long a reconciled row is trusted before a screen asks Stripe again.
+ *
+ * The webhook is what keeps this current in normal operation, and when it is working this window is
+ * never reached in any way a founder would notice. It exists for when it is *not* working, which is
+ * every failure this spec section is about — and one Stripe call per minute per workspace, on the one
+ * screen that shows billing, is a cheap price for a page that is never wrong.
+ */
+export const PLAN_FRESH_FOR_MS = 60_000;
+
+export interface FreshPlan {
+  /** The entitlement to render with — reconciled if it needed to be. */
+  plan: OrgPlan;
+  /** The subscription behind it, re-read when a sync changed anything. */
+  subscription: SubscriptionRecord | null;
+}
+
+/**
+ * The plan a billing screen should render, reconciled with Stripe when what we hold has gone stale.
+ *
+ * This is what makes the page correct on its own. A cancellation made in the Stripe dashboard, or a
+ * payment whose webhook never arrived, used to sit there until somebody pressed a button — and a
+ * founder should not have to know that the button exists, or that we depend on an event that may
+ * never come.
+ */
+export async function planWithStripe(org: { id: string; plan: OrgPlan }): Promise<FreshPlan> {
+  const known = await getSubscription(org.id);
+  // No customer means no payment was ever started: there is nothing Stripe could tell us.
+  if (!known) return { plan: org.plan, subscription: null };
+
+  const age = Date.now() - Date.parse(known.updatedAt);
+  if (Number.isFinite(age) && age < PLAN_FRESH_FOR_MS) return { plan: org.plan, subscription: known };
+
+  const synced = await syncPlanFromStripe(org.id);
+  if (synced === "unknown") return { plan: org.plan, subscription: known };
+  return { plan: synced, subscription: await getSubscription(org.id) };
+}
+
 export async function syncPlanFromStripe(orgId: string): Promise<PlanSync> {
   if (!stripeConfigured()) return "unknown";
 

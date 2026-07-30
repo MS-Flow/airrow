@@ -20,9 +20,17 @@ vi.mock("@/lib/stripe", async () => {
   };
 });
 
-import { syncPlanFromStripe } from "./sync";
+import { PLAN_FRESH_FOR_MS, planWithStripe, syncPlanFromStripe } from "./sync";
 
-const record = { organizationId: "org1", customerId: "cus_1", subscriptionId: null, status: "incomplete", currentPeriodEnd: null, cancelAtPeriodEnd: false };
+const record = {
+  organizationId: "org1",
+  customerId: "cus_1",
+  subscriptionId: null,
+  status: "incomplete",
+  currentPeriodEnd: null,
+  cancelAtPeriodEnd: false,
+  updatedAt: new Date(Date.now() - PLAN_FRESH_FOR_MS * 10).toISOString()
+};
 
 function subscription(overrides: Record<string, unknown> = {}) {
   return {
@@ -115,5 +123,51 @@ describe("syncPlanFromStripe", () => {
     expect(applySubscriptionState).not.toHaveBeenCalled();
     expect(logged).toHaveBeenCalled();
     logged.mockRestore();
+  });
+});
+
+// The screens reconcile themselves, so nobody has to know a "check again" button exists. What that
+// must not become is a Stripe call per page view.
+describe("planWithStripe", () => {
+  const org = { id: "org1", plan: "free" as const };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    configured.current = true;
+    subscriptionsList.mockResolvedValue({ data: [subscription()] });
+  });
+
+  it("asks Stripe when what we hold has gone stale, and renders what it says", async () => {
+    getSubscription
+      .mockResolvedValueOnce(record)
+      .mockResolvedValueOnce({ ...record, status: "active" });
+
+    await expect(planWithStripe(org)).resolves.toMatchObject({ plan: "pro" });
+    expect(subscriptionsList).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a recently reconciled row alone", async () => {
+    getSubscription.mockResolvedValue({ ...record, updatedAt: new Date().toISOString() });
+
+    await expect(planWithStripe(org)).resolves.toMatchObject({ plan: "free" });
+    expect(subscriptionsList).not.toHaveBeenCalled();
+  });
+
+  it("asks nothing at all for an organization that never started a payment", async () => {
+    getSubscription.mockResolvedValue(null);
+
+    await expect(planWithStripe(org)).resolves.toEqual({ plan: "free", subscription: null });
+    expect(subscriptionsList).not.toHaveBeenCalled();
+  });
+
+  it("keeps the plan we already had when Stripe has nothing to say", async () => {
+    // Not a downgrade: "Stripe knows nothing about this" and "Stripe says they are not paying" are
+    // different answers, and only the second one may change an entitlement.
+    getSubscription.mockResolvedValue(record);
+    subscriptionsList.mockResolvedValue({ data: [] });
+
+    await expect(planWithStripe({ id: "org1", plan: "pro" })).resolves.toMatchObject({
+      plan: "pro"
+    });
   });
 });

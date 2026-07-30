@@ -159,7 +159,8 @@ _What "done" means. Every line is something a reviewer can check._
 - [x] A completed payment turns into Pro **without** depending on webhook delivery: Checkout returns
       through a route that reconciles with Stripe's API before any screen renders.
 - [x] A founder who is on free and believes they have paid can resolve it themselves, from Settings,
-      without a support ticket or a SQL statement.
+      without a support ticket or a SQL statement — and without having to press anything: the billing
+      screens reconcile on load when what they hold has gone stale.
 - [x] Nothing grants Pro on the strength of the redirect. Every write still comes from something
       Stripe said, through `applySubscriptionState`.
 - [x] The reconciliation applies a *cancellation* as readily as a purchase — it is a sync, not an
@@ -510,6 +511,27 @@ stop taking money and continuing to hand out Pro is not a state to model. No mig
 value stays inside Stripe's vocabulary in the column that already exists, and this deployment has a
 history of running behind its migrations that a new column would have walked straight into.
 
+**9. And the founder should not have to press anything.** "Check again" worked, which meant the page
+was correct only for someone who knew a button existed and suspected they needed it. That is a repair
+tool wearing the costume of a feature.
+
+`planWithStripe(org)` in `sync.ts` is what the billing screens read now. It returns the plan and the
+subscription behind it, reconciling first when what we hold has aged past `PLAN_FRESH_FOR_MS` (one
+minute). Settings and `/app/upgrade` both use it, so a cancellation made in the Stripe dashboard, or a
+payment whose webhook never arrived, is corrected by loading the page — no button, no waiting for an
+event that may never come. `subscriptions.updated_at` was already written on every apply; it is now
+carried on the record, which is what makes "is this worth asking about" answerable without a call.
+
+One Stripe call per minute per workspace, on the two screens that show billing, and none at all for an
+organization that has never been to Checkout. The button stays for the founder who wants to force it.
+Four tests in `sync.test.ts` hold the shape that matters: it asks when stale, does not ask when fresh,
+does not ask when there is no customer, and keeps the plan it had when Stripe says nothing.
+
+**The cancelled sentence lost its tail.** "After that this workspace is back on Free. Everything you
+have generated stays yours either way." is now just `Pro runs until 2026-08-30 and does not renew.`
+The badge has already named the state, and reassurance nobody asked for reads as a product bracing for
+a complaint.
+
 **The lesson worth keeping.** Three times in this section the product asserted something about money
 from one field, and three times Stripe had said something more specific in another. `?upgraded=1`
 instead of the plan; the status instead of the cancellation flag; the flag instead of `cancel_at`. The
@@ -529,7 +551,7 @@ pnpm -r typecheck   Done — clean across schemas, engine, web
 pnpm -r lint        Done — no new issues
 pnpm -r test        schemas   35 passed
                     engine   219 passed
-                    web      426 passed (58 files)
+                    web      430 passed (58 files)
 pnpm test:scripts     13 passed
 pnpm build          Done
 ```

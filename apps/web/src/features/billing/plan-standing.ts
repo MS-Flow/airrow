@@ -47,9 +47,11 @@ export function planStanding(subscription: SubscriptionRecord): PlanStanding {
     return {
       label: "Cancelled",
       tone: "ending",
+      // One sentence. The badge has already said which state this is, and the reassurance the other
+      // branches carry is noise here: nobody reading a date they chose needs to be told twice.
       detail: ends
-        ? `Pro runs until ${ends} and does not renew. After that this workspace is back on Free. ${SAFE}`
-        : `Pro runs until the end of the period you have paid for and does not renew. ${SAFE}`
+        ? `Pro runs until ${ends} and does not renew.`
+        : "Pro runs until the end of the period you have paid for and does not renew."
     };
   }
 
