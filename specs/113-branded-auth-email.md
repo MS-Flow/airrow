@@ -189,10 +189,15 @@ attached. Both are allow-listed, so end-to-end verification can run on dev as it
 open to search engines, with a dev URL free to compete with `airrow.app` in results.
 
 Found while establishing which hostname the confirmation link should use, and fixed here on request. The
-`has` condition became a host regex (`dev.airrow.app` or any `*.vercel.app`) rather than a second list
-entry, because Vercel **AND**s multiple `has` items — two host entries would have required both at once
-and matched nothing. Stating it as "everything except production is noindex" is also the invariant that
-does not rot: the original rule named one hostname and silently did nothing when reality moved.
+fix is **two explicit host rules** — `airrow-dev.vercel.app` and `dev.airrow.app` — as separate entries in
+`headers`, which are independent rules. (Two `has` items inside *one* entry would have required both hosts
+at once and matched nothing, which is why this is not a single condition.)
+
+An earlier attempt used a host regex covering any `*.vercel.app`. It was replaced because Vercel's
+handling of a regex there is not something this change can verify, and an unverifiable routing rule is
+precisely the failure being fixed: the original named a host that did not exist and did nothing for as
+long as it stood. Explicit hosts are longer and predictable. Preview deploys need no rule at all —
+Vercel noindexes them itself.
 
 `vercel.json` takes no comments, so the reasoning lives here and in
 [INFRASTRUCTURE_SETUP.md](../docs/guides/INFRASTRUCTURE_SETUP.md) §3, whose branch→URL table claimed
@@ -200,9 +205,18 @@ does not rot: the original rule named one hostname and silently did nothing when
 host in the first place. That table, §5's verification step, and the migrations section's aside now all
 name the real hostname.
 
-**Not verified yet:** the header itself. It is Vercel routing, so it only proves out on a deploy — and
-this branch's own preview is a `*.vercel.app` host, which the new rule covers. `curl -I` on the preview
-URL after pushing is the check; `/analyze` should not close this spec until that has been run.
+**The intended verification turned out to be invalid, and this is still unproven.** The plan was to
+`curl -I` this branch's preview and look for the header. Measured on the deployed preview of `23df6f0`:
+the header is there — but so is it on previews of `c27c5cb` and `398837c1`, both built **before** any of
+this existed. Vercel adds `noindex` to previews on its own, so the preview says nothing about our rule.
+
+That control also confirms the underlying problem is real: `airrow-dev.vercel.app` carries **no** header,
+so it is not treated as a preview and Vercel will not cover it. Production (`airrow.app`) correctly has
+none either.
+
+The only valid proof is `curl -I https://airrow-dev.vercel.app/` **after this reaches `develop`**, since
+that is what the dev host deploys. Until then the rule is written but unverified — and given that its
+predecessor failed silently for exactly this reason, it should not be marked done on inspection alone.
 
 **Corrected during `/analyze`: `[auth.email.smtp]` must not be enabled in `config.toml`.** The first cut
 set `enabled = true` there and claimed the block was "inert" without a key. It is not. That file

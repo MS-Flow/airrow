@@ -114,11 +114,18 @@ the same push, but it only touches the database schema; it cannot gate the deplo
   `dev.airrow.app` → under "Git Branch" pick `develop`, which would alias a hostname on our own domain
   to the same deploys. `dev.airrow.app` answers `404` as of 2026-07-30, so nothing points at it yet;
   every reference to it in this guide describes the intended state, not the current one.
-- **Nothing but production is indexable.** `apps/web/vercel.json` sends `X-Robots-Tag: noindex` for
-  `dev.airrow.app` **and** every `*.vercel.app` host, which covers the dev environment above and every
-  preview deploy. The rule is host-matched rather than listed one by one precisely because it was
-  written against `dev.airrow.app` alone and therefore did nothing for a year: the host it named did
-  not exist while the host serving dev was never matched (spec 113).
+- **Nothing but production is indexable.** Two things do that, and they cover different hosts:
+  - **Vercel itself** sends `X-Robots-Tag: noindex` on preview deployments — verified, including on
+    previews built before we touched any of this.
+  - **`apps/web/vercel.json`** sends it for `airrow-dev.vercel.app` and `dev.airrow.app`. The dev
+    environment is *not* a preview as far as Vercel is concerned (it is the production deploy of its own
+    project), so it gets no header automatically — which is why it was indexable until spec 113.
+
+  Both hosts are listed explicitly rather than matched by pattern. That is deliberate: the rule this
+  replaced named `dev.airrow.app` alone and therefore did nothing at all — the host it named did not
+  exist, and the host actually serving dev was never matched. A rule that silently matches nothing is
+  the failure mode here, so predictability beats brevity. Note that separate entries in `headers` are
+  independent rules, while two `has` items inside one entry must **both** match.
 
 ---
 
