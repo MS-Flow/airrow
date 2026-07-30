@@ -198,12 +198,12 @@ export const SECTIONS = {
     },
     pro: {
       name: "Pro",
-      badge: "Coming soon",
-      /* No figure, because none is decided. Naming one would be a promise, and "TBD" at the size
-         of a price is just a shrug. The word says what the card is for. */
+      /* Still no figure here, and now for a different reason: the amount lives in Stripe so it can
+         change without a deploy (spec 99). Putting it in static marketing copy would recreate
+         exactly the duplication that decision avoided. The badge is gone because Pro is real. */
       amount: "Monthly",
       note: "Unlimited foundations, and importing a project you have already started.",
-      action: "Not available yet",
+      action: "Start with Pro",
     },
   },
   cta: {

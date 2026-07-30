@@ -32,7 +32,10 @@ export async function saveAnswersAction(projectId: string, raw: unknown): Promis
   return { ok: true };
 }
 
-export async function submitInterviewAction(projectId: string, raw: unknown): Promise<{ error?: string }> {
+export async function submitInterviewAction(
+  projectId: string,
+  raw: unknown
+): Promise<{ error?: string; upgrade?: boolean }> {
   const { org, user } = await requireSession();
   const project = await getProject(org.id, projectId);
   if (!project) return { error: "Project not found." };
@@ -69,7 +72,10 @@ export async function submitInterviewAction(projectId: string, raw: unknown): Pr
     userId: user.id,
     projectId
   });
-  if (!allowance.allowed) return { error: allowanceMessage(allowance.denial) };
+  // Flagged rather than merely worded, so the screen can offer a way on instead of showing a red
+  // box at the end of thirty questions (spec 100). The answers are already saved above — the
+  // founder loses nothing by leaving for the upgrade screen and coming back.
+  if (!allowance.allowed) return { error: allowanceMessage(allowance.denial), upgrade: true };
 
   await createJob(projectId, modelVersion.id);
   await setProjectStatus(projectId, "generating");

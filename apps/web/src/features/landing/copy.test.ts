@@ -31,4 +31,23 @@ describe("landing copy", () => {
     const offenders = LANDING_STRINGS.filter((s) => s.includes("—") || s.includes("--"));
     expect(offenders).toEqual([]);
   });
+
+  // Spec 100. Pro became purchasable in spec 99 while this page still badged it "Coming soon" — the
+  // one screen whose entire job is to be believed, saying something untrue about the product. The
+  // copy is what drifts; a test on the copy is what notices.
+  it("does not describe Pro as unavailable, because it is not", () => {
+    const offenders = LANDING_STRINGS.filter((s) =>
+      /coming soon|not available|isn't purchasable|unavailable/i.test(s)
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("names no price, because the amount lives in Stripe", () => {
+    // Spec 99 keeps every figure in the dashboard so it changes without a deploy. A number here
+    // would be a second source of truth, and the one customers read first.
+    const offenders = LANDING_STRINGS.filter(
+      (s) => /(^|\s)[$£€]\s?\d/.test(s) && !/\$0\b/.test(s)
+    );
+    expect(offenders).toEqual([]);
+  });
 });

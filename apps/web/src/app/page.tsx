@@ -219,30 +219,27 @@ export default async function Landing() {
               </CardBody>
             </Card>
 
-            <Card className="border-dashed">
+            {/* Solid, not dashed, and no "coming soon" badge: Pro is purchasable (spec 99), and a
+                pricing section that says otherwise is the one screen whose whole job is to be
+                believed. The card carries no figure — the amount lives in Stripe so it can change
+                without a deploy, and duplicating it here is what that decision avoided. */}
+            <Card>
               <CardBody className="p-8">
-                <div className="flex items-center gap-2.5">
-                  <p className="text-sm font-medium text-fg-muted">{SECTIONS.pricing.pro.name}</p>
-                  <span className="rounded-full border border-border px-2.5 py-0.5 text-xs font-medium text-fg-faint">
-                    {SECTIONS.pricing.pro.badge}
-                  </span>
-                </div>
-                <p className="mt-2 text-3xl font-semibold tracking-tight text-fg-faint">
+                <p className="text-sm font-medium text-fg-muted">{SECTIONS.pricing.pro.name}</p>
+                <p className="mt-2 text-3xl font-semibold tracking-tight text-fg">
                   {SECTIONS.pricing.pro.amount}
                 </p>
                 <p className="mt-2 text-base text-fg-muted">{SECTIONS.pricing.pro.note}</p>
                 <ul className="mt-7 grid gap-3">
                   {PRO_INCLUDED.map((item) => (
                     <li key={item} className="flex items-start gap-2.5 text-base text-fg-muted">
-                      <Check className="mt-0.5 size-4 shrink-0 text-fg-faint" />
+                      <Check className="mt-0.5 size-4 shrink-0 text-fg" />
                       {item}
                     </li>
                   ))}
                 </ul>
-                {/* Disabled rather than absent: the button is what makes it read as a real tier
-                    that is not ready, instead of a feature list with no way in. */}
-                <Button variant="secondary" className="mt-8 w-full" disabled>
-                  {SECTIONS.pricing.pro.action}
+                <Button variant="secondary" className="mt-8 w-full" asChild>
+                  <Link href={primaryHref}>{SECTIONS.pricing.pro.action}</Link>
                 </Button>
               </CardBody>
             </Card>
