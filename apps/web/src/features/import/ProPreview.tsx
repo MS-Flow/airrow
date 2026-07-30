@@ -10,6 +10,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { UpgradeNotice } from "@/components/ui/states";
 import { AnalysisEvidence, AnalysisNotes } from "./AnalysisEvidence";
 import type { ImportPreview } from "./actions";
 
@@ -31,12 +32,19 @@ export function ProPreview({ preview }: { preview: ImportPreview }) {
 
       <AnalysisNotes notes={preview.notes} />
 
-      <div className="rounded-lg border border-accent/30 bg-accent/5 px-5 py-4">
-        <h3 className="text-base font-semibold text-fg">Keep this as a project with Pro</h3>
-        <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">
-          Importing an existing project is part of Pro, along with unlimited foundations.
-        </p>
-        <p className="mt-3 text-sm text-fg-faint">
+      <UpgradeNotice
+        title="Keep this as a project with Pro"
+        action={
+          /* The upgrade screen owns this, because it is what knows whether payment is configured on
+             this deployment (spec 99/100). A second checkout button here would duplicate that
+             judgement and eventually disagree with it. */
+          <Button size="sm" asChild>
+            <Link href="/app/upgrade">See what Pro gives</Link>
+          </Button>
+        }
+      >
+        Importing an existing project is part of Pro, along with unlimited foundations.
+        <p className="mt-3 text-fg-faint">
           Nothing was saved — your files were read in this request and never stored.{" "}
           <Link
             href="/app/projects/new"
@@ -46,13 +54,7 @@ export function ProPreview({ preview }: { preview: ImportPreview }) {
           </Link>
           .
         </p>
-        {/* Settings owns the upgrade, because it is the screen that knows whether payment is
-            configured on this deployment (spec 99). Linking there beats a second checkout button
-            that has to duplicate that judgement. */}
-        <Button size="sm" className="mt-4" asChild>
-          <Link href="/app/settings">Upgrade to Pro</Link>
-        </Button>
-      </div>
+      </UpgradeNotice>
     </div>
   );
 }

@@ -6,7 +6,7 @@
 
 |                |                                                          |
 | -------------- | -------------------------------------------------------- |
-| **Status**     | ⏳ Not started                                            |
+| **Status**     | ✅ Done                                                   |
 | **Issue**      | #100 — "Uppgraderingsögonblicket: var foundern möter Pro, och vad hen ser" · #101 — "Pro: ändra ett svar och generera om — med diff mot förra versionen" |
 | **Branch**     | `100-pro-upgrade-revisions` (from `feature/pro`)         |
 | **Feature**    | Pro                                                       |
@@ -93,19 +93,36 @@ makes it useful rather than ceremonial.
 that spec 74 already built, Pro gets no limit, and neither of those is a new rule — this spec only
 gives the founder a way to *use* the repairs they already have.
 
-[NEEDS CLARIFICATION: how deep is the diff? A list of affected paths with added/changed/removed is
-cheap and probably enough to decide with. A per-file content diff is much more convincing and much
-more work, and the preview already renders file bodies — so it may be closer than it looks.]
+**The diff classifies paths; the reader shows content.** Both artifacts hold every file's full text,
+so added / changed / removed / unchanged is exact rather than approximate, and the preview already
+has a file reader the founder can open any of them in. A line-level diff renderer is a separate piece
+of UI work and buys less than it costs here — knowing *which* files a changed answer moves is the
+decision they are making.
 
-[NEEDS CLARIFICATION: #100 lists "history" among the Pro-locked surfaces to show disabled. There is
-no history feature and no spec for one. Show it as a disabled teaser here, or leave it out until
-something real exists? Showing a lock on a thing that has never been built is how a product starts
-feeling like a mockup.]
+**Nothing is shown locked that does not exist.** #100 lists "history" among the Pro-locked surfaces
+to display disabled. There is no history feature and no spec for one. A padlock on something that was
+never built is how a product starts feeling like a mockup, so it is left out until it is real.
 
-[NEEDS CLARIFICATION: does the landing pricing card now show an actual figure? Spec 99 deliberately
-keeps every amount in Stripe, and the landing page is static copy. Either it names a price that then
-lives in two places, or it says "from $X" / links to checkout without a number. Decide before writing
-the copy.]
+**The landing card still names no figure.** Spec 99 keeps every amount in Stripe so it can change
+without a deploy; putting one in static marketing copy would recreate exactly the duplication that
+decision avoided. The card stops saying "Coming soon" and its action becomes a real call to start.
+
+### Where the diff goes, and why not where the spec first said
+
+This spec was drafted assuming the diff must come *before* generation. Reading the code changed that:
+the product already reviews after generating and before **delivering** — spec 63's import review
+loads the completed artifact, diffs it against the founder's files, and takes conflict decisions
+before the download. §0 requires approval before anything is *written*, and nothing is written to the
+founder's machine until they download.
+
+Putting a content-accurate diff ahead of generation would also mean paying for the Claude call to
+compute it, which is the opposite of the point. So the revision diff lives on the preview screen,
+comparing the latest completed generation with the one before it — the same shape as the import
+review, in the place the founder already goes to look at their foundation.
+
+**Reopening the interview needed no work.** `app/app/projects/[id]/interview/page.tsx` already loads
+saved answers and passes `regenerating` when the project is `ready`, and `InterviewRuntime` already
+relabels itself for it. #101's first task was built before this spec existed.
 
 ---
 
@@ -115,42 +132,67 @@ _What "done" means. Every line is something a reviewer can check._
 
 ### The upgrade moment (#100)
 
-- [ ] The project list and the interview screen state where the founder stands before they start —
+- [x] The project list and the interview screen state where the founder stands before they start —
       not only once they are refused.
-- [ ] A founder with no allowance left can still create a project and complete the entire interview.
+- [x] A founder with no allowance left can still create a project and complete the entire interview.
       They are stopped at generate, and nowhere earlier.
-- [ ] That refusal is a real screen that says what Pro gives and that existing projects and downloads
+- [x] That refusal is a real screen that says what Pro gives and that existing projects and downloads
       are never affected — not an inline error string.
-- [ ] The landing page stops badging Pro "Coming soon" and stops saying "Not available yet".
-- [ ] Loading, error and empty are real components, not conditionals in JSX (§III).
-- [ ] No screen in the path — free interview → generate → refusal → upgrade → generate — is a dead
+- [x] The landing page stops badging Pro "Coming soon" and stops saying "Not available yet".
+- [x] Loading, error and empty are real components, not conditionals in JSX (§III).
+- [x] No screen in the path — free interview → generate → refusal → upgrade → generate — is a dead
       end.
 
 ### Revisions (#101)
 
-- [ ] A completed interview can be reopened with its answers prefilled.
-- [ ] Changing an answer and regenerating produces a preview of what moves — added, changed and
+- [x] A completed interview can be reopened with its answers prefilled.
+- [x] Changing an answer and regenerating produces a preview of what moves — added, changed and
       removed files — which the founder approves before anything is written (§0).
-- [ ] An unchanged regeneration makes no Claude call and spends no allowance, and says so rather than
+- [x] An unchanged regeneration makes no Claude call and spends no allowance, and says so rather than
       silently doing nothing (spec 74 built the behaviour; this makes it visible).
-- [ ] A founder's own files in an imported project are never touched by a revision.
-- [ ] Free gets the repairs spec 74 defines; Pro is unlimited. No new entitlement rule is introduced.
-- [ ] Pro-locked surfaces are shown disabled with an explanation rather than hidden.
+- [x] A founder's own files in an imported project are never touched by a revision.
+- [x] Free gets the repairs spec 74 defines; Pro is unlimited. No new entitlement rule is introduced.
+- [x] Pro-locked surfaces are shown disabled with an explanation rather than hidden.
 
-- [ ] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures).
+- [x] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures).
 
 ### Verification
 
 _How each criterion above is proven._
 
-- **New tests** — the refusal path: a founder with no allowance reaches the end of the interview and
-  is offered an upgrade, rather than being blocked at project creation.
-- **New tests** — landing copy: the pricing section contains no "coming soon" or "not available"
-  wording, so this cannot silently regress the way it just did.
-- **New tests** — revision diff: a changed answer moves only the files that depend on it; an
-  unchanged one moves nothing and calls nothing. Snapshot against golden fixtures, reviewed as a
-  product decision rather than regenerated (§V).
+- **New tests** — `packages/engine/src/revision.test.ts` (6): the diff classification, including the
+  case a naive implementation drops — a file the previous generation had and the new one does not.
+  Walking only the new tree misses it silently, and a founder who is not told a document disappeared
+  finds out months later, from its absence.
+- **New tests** — `apps/web/src/features/generation/AllowanceNotice.test.tsx` (4): nothing renders
+  for an unlimited plan, the remaining count renders while there is one, and a spent founder is told
+  the interview is still open — the behaviour issue #100 asks for by name.
+- **New tests** — `apps/web/src/features/landing/copy.test.ts` (2): the pricing section describes Pro
+  as neither "coming soon" nor unavailable, and names no figure. The first would have caught the live
+  inconsistency this spec fixes; the second holds spec 99's "the amount lives in Stripe".
+- Reopening a prefilled interview → already covered by the existing interview tests, because it was
+  already built (see _Design decision_).
 - Full suite result + typecheck/lint status.
+
+### Result (2026-07-29)
+
+```
+pnpm -r typecheck   Done — clean across schemas, engine, web
+pnpm -r lint        Done — no new issues
+pnpm -r test        schemas   35 passed
+                    engine   219 passed
+                    web      364 passed | 0 skipped (50 files)
+pnpm test:scripts     13 passed
+pnpm build          Done — /app/upgrade and /api/stripe/webhook both in the route manifest
+```
+
+Run against a live local Supabase, so the RLS and billing suites executed rather than skipping. An
+earlier run in this session reported 43 tests skipped across 8 files; that was Docker having stopped,
+not a code change, and `/analyze` brought the database back up and confirmed them green rather than
+taking the note's word for it.
+
+`pnpm build` is in the bar for this spec specifically: the whole point was a Pro path that *works*,
+and typecheck does not prove a route renders in a production build.
 
 ---
 
@@ -158,8 +200,37 @@ _How each criterion above is proven._
 
 _The plan, for whoever implements it. Every change grounded in current code; expanded by `/implement`._
 
-Left for `/implement`. Spec 99 is not yet on `feature/pro`, so the billing surfaces this builds
-beside are not on this branch — the anchors would be invented. Fill this in once 99 has merged.
+1. **`packages/engine/src/revision.ts`** (new) — `diffGenerations(previous, next)`, pure. Classifies
+   every path as added / changed / removed and counts the rest, ordered the way a founder reads it.
+   Exported from `index.ts`. It walks **both** trees, not just the new one, which is what makes a
+   removed document visible.
+2. **`apps/web/src/lib/data/store.ts`** — `previousCompletedJob(projectId, beforeJobId)`. Filters on
+   `created_at <` the current job rather than merely excluding its id: excluding by id alone would
+   hand back a *newer* completed job and call it the previous version.
+3. **`apps/web/src/features/preview/RevisionDiff.tsx`** (new) — the diff list. A removed path is
+   struck through and not a link, because the reader would 404 on it. Empty state is its own branch,
+   and says the regeneration cost nothing.
+4. **`apps/web/src/app/app/projects/[id]/page.tsx`** — loads the previous artifact and renders the
+   diff. This page, not the preview: see the deviation note below.
+5. **`apps/web/src/app/app/upgrade/page.tsx`** (new) — the upgrade screen. Reuses spec 99's
+   `UpgradeButtons` / `ManageBillingButton` / `BillingUnavailable` rather than growing a second
+   checkout surface, and handles the already-Pro case so the link is never a dead end.
+6. **`apps/web/src/features/generation/AllowanceNotice.tsx`** (new) — the standing line. Renders
+   `null` for an unlimited plan: a banner about a wall nobody is near teaches founders to ignore
+   banners.
+7. **`app/app/projects/page.tsx`, `app/app/projects/[id]/interview/page.tsx`** — render the notice.
+   The interview page passes `projectId`, so a founder inside their repair window is told they have
+   one rather than being warned they are out.
+8. **`features/interview/actions.ts`, `features/generation/actions.ts`** — return `upgrade: true`
+   alongside the message. Running out and failing are different events and must not look alike.
+9. **`features/interview/InterviewRuntime.tsx`** — renders that as an accent panel with a link to the
+   upgrade screen instead of `InlineError`. Answers are already saved by the time this shows, so
+   leaving the page loses nothing.
+10. **`features/landing/copy.ts`, `app/page.tsx`** — the Pro card loses its "Coming soon" badge, its
+    dashed border and its disabled button, and gains a real call to action.
+
+**No change needed:** reopening a prefilled interview, and the free-vs-Pro revision rule. Both were
+already built — see _Design decision_.
 
 ---
 
@@ -200,6 +271,56 @@ _Unusual inputs or states, and what should happen._
   written after approval.
 - Free founder inside the repair window → allowed; outside it, or past the count, refused with the
   reason spec 74's `allowanceMessage` already distinguishes.
+
+---
+
+## Implementation notes
+
+**Two of #101's tasks were already done.** Reopening a completed interview prefilled is built —
+`interview/page.tsx` passes saved answers and a `regenerating` flag, and `InterviewRuntime` relabels
+itself for it. So is the free-vs-Pro revision rule, which is spec 74's repair window. Reading the code
+before planning turned #101 from "a new capability" into "the diff that was missing from one", which
+is most of why this spec came in as small as it did.
+
+**The diff moved from the preview to the project page.** The spec's own _Design decision_ said the
+preview screen. The preview is a full-height file browser — a card inside it fights the layout — and
+the project page is where a founder lands after generating and already loads the artifact. It is still
+before the download, which is the only point where anything reaches their machine, so §0's approval
+requirement is met in either place. Recorded rather than quietly done, because the spec said otherwise
+and the spec is the source of truth (§IV).
+
+**`AllowanceNotice` takes the whole `Entitlement`, not a count.** It reads `unlimited` to decide
+whether to render at all and `remaining` for the number, which means adding a plan later cannot leave
+it silently saying the wrong thing to someone it has never heard of — the union does not let it.
+
+**`/analyze` found two things, and one of them was a habit.** The route map in `UI_ARCHITECTURE.md`
+did not list `/app/upgrade` — the third consecutive spec to add something and not document it, after
+74 and 99 both missed `DATABASE_DESIGN.md`. Spec 99's notes said the next `/analyze` should look for
+it; it did, and found it. The pattern was documenting what a change *modifies* and forgetting what it
+*adds*, so the fix went wider than this spec: `/app/upgrade` plus the two import routes that had been
+missing since spec 63, and a paragraph on where the paywall sits.
+
+The second was duplication. The same accent panel had been hand-rolled three times — the import
+screen, the import result, and the end of the interview — with identical classes and identical
+meaning, and the third was a raw `<div>` sitting next to `InlineError`, which is a component. Two of
+this spec's own criteria pointed at that and were ticked anyway. It is now `UpgradeNotice` in
+`components/ui/states.tsx`, beside the other state components, with its own reason for existing: a
+plan boundary is not an error and must not borrow the danger tone, and it is not a `Notice` either,
+because running out of free foundations is neither a caution nor a mistake. It is a price.
+
+**Docs that had drifted, fixed here rather than deferred.** `SYSTEM_OVERVIEW.md` and `CLAUDE.md` both
+described a local file-backed store in `.data/` that has not existed since spec 14 — `lib/data/` holds
+Supabase clients and nothing else. `SYSTEM_OVERVIEW.md` also had no mention of Stripe in its external
+services table despite spec 99 shipping it; it now carries the failure posture and a short section on
+how plans and billing fit together. `DEVELOPER_GUIDE.md` gained the Stripe setup that turns "the code
+is there" into "a developer can run the paid path" — product and price, the four env vars,
+`stripe listen`, the test card, and the SQL for granting yourself Pro without paying.
+
+**Two lint/verification notes.** The upgrade screen briefly imported `Button` without using it, which
+`pnpm -r lint` caught as a new warning; §VI says lint adds *no new* issues, so it was removed rather
+than tolerated. And `revision.ts` first imported `GeneratedFile` from `@airrow/schemas`, which the app
+resolves and the engine does not — the engine reaches shared types by relative path
+(`../../schemas/src/types.ts`), which is the convention `import.ts` already follows.
 
 ---
 

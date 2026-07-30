@@ -506,6 +506,38 @@ export async function latestJob(projectId: string): Promise<JobRecord | null> {
   return row ? toJob(row) : null;
 }
 
+/**
+ * The completed generation before this one, or null when this is the first (spec 100).
+ *
+ * What a revision is diffed against. Ordered on `created_at` for the same reason `latestJob` is: it
+ * is the only column that is both always set and never changed, so a job that failed and was retried
+ * cannot reorder history. Only `completed` jobs qualify — a failed or in-flight one has no artifact
+ * worth comparing to, and offering its half-written tree as "what you had before" would be a lie.
+ */
+export async function previousCompletedJob(
+  projectId: string,
+  beforeJobId: string
+): Promise<JobRecord | null> {
+  const current = maybe<{ created_at: string }>(
+    await db().from("generation_jobs").select("created_at").eq("id", beforeJobId).maybeSingle()
+  );
+  if (!current) return null;
+
+  // Strictly older, not merely "a different one": excluding by id alone would hand back a *newer*
+  // completed job if one existed, and call it the previous version.
+  const older = rows<JobRow>(
+    await db()
+      .from("generation_jobs")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("status", "completed")
+      .lt("created_at", current.created_at)
+      .order("created_at", { ascending: false })
+      .limit(1)
+  );
+  return older[0] ? toJob(older[0]) : null;
+}
+
 /** Column mapping for a partial job update; heartbeat is always bumped (matches prior behavior). */
 function jobPatchToRow(patch: Partial<JobRecord>): Record<string, unknown> {
   const row: Record<string, unknown> = { heartbeat_at: now() };

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { PageContainer } from "@/components/shell/page-container";
 import { Card, CardBody } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Notice } from "@/components/ui/states";
+import { Notice, UpgradeNotice } from "@/components/ui/states";
 import { ImportForm } from "@/features/import/ImportForm";
 import { RepoPicker } from "@/features/import/RepoPicker";
 import { requireSession } from "@/lib/auth";
@@ -44,14 +44,10 @@ export default async function ImportProject({
       {/* Said before the upload, not after it (spec 74). A founder who finds out at the end that
           the result needs a plan they don't have has been wasted, however good the result is. */}
       {org.plan === "pro" ? null : (
-        <div className="mt-6 rounded-lg border border-accent/30 bg-accent/5 px-5 py-4">
-          <h2 className="text-base font-semibold text-fg">Import is part of Pro</h2>
-          <p className="mt-1.5 text-sm leading-relaxed text-fg-muted">
-            You can run the analysis now and see everything Airrow works out about your project —
-            that&rsquo;s free, and nothing is stored. Turning it into a project needs Pro, which
-            isn&rsquo;t purchasable yet.
-          </p>
-        </div>
+        <UpgradeNotice className="mt-6" title="Import is part of Pro">
+          You can run the analysis now and see everything Airrow works out about your project —
+          that&rsquo;s free, and nothing is stored. Turning it into a project needs Pro.
+        </UpgradeNotice>
       )}
 
       <Notice className="mt-6" title="Leave secrets and personal data out of the archive">

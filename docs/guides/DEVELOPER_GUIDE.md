@@ -37,6 +37,53 @@ pnpm dlx supabase stop           # tear the local stack down
 - **RLS tests** (`*.rls.test.ts`) run against this local DB and are **skipped automatically** when it
   isn't reachable, so `pnpm -r test` stays green without Docker. Start Supabase to exercise them.
 
+## Stripe / Pro billing (spec 99)
+Airrow runs without any of this: with no Stripe keys the app starts normally, Settings shows Pro as
+unavailable, and nothing throws. You only need it to exercise the paid path.
+
+**1. Product and price, once.** In the [Stripe dashboard](https://dashboard.stripe.com) (test mode),
+create a product with a recurring monthly price. Copy the **price id** (`price_…`), not the amount —
+no figure exists anywhere in this repository, so changing the price is a dashboard edit and never a
+deploy.
+
+**2. Keys into `apps/web/.env.local`:**
+```bash
+STRIPE_SECRET_KEY=sk_test_…        # Developers → API keys. Server-only; never NEXT_PUBLIC_
+STRIPE_PRICE_MONTHLY=price_…       # required to enable the upgrade path at all
+STRIPE_PRICE_YEARLY=price_…        # optional; leave unset to offer monthly only
+STRIPE_WEBHOOK_SECRET=whsec_…      # from step 3
+```
+
+**3. The webhook, which is the part that actually grants Pro.** A Checkout redirect proves the browser
+reached a URL, not that money moved, so `organizations.plan` is written *only* here.
+```bash
+pnpm dlx stripe login
+pnpm dlx stripe listen --forward-to localhost:3000/api/stripe/webhook
+# prints "Ready! Your webhook signing secret is whsec_…" — that is STRIPE_WEBHOOK_SECRET
+```
+Leave `stripe listen` running while you test. Deployed, register the endpoint under Developers →
+Webhooks at `https://<your-domain>/api/stripe/webhook` and take the signing secret from there — a
+wrong value means every event is rejected, which is correct behaviour and looks like nothing happening.
+
+**4. Try it.** `pnpm dev`, sign in, generate a foundation to spend the free one, then hit generate
+again — you land on `/app/upgrade`. Pay with Stripe's test card `4242 4242 4242 4242`, any future
+expiry, any CVC. The plan flips when the webhook lands, not when the browser returns, so a reload may
+be a second behind.
+
+Useful while debugging:
+```bash
+pnpm dlx stripe trigger customer.subscription.deleted   # replay a cancellation
+```
+
+- **A failed payment does not downgrade.** Stripe retries a declined card for days and reports
+  `past_due`, which stays Pro. Only `customer.subscription.deleted` ends it.
+- **Cancelling runs to the end of the paid period** (`cancel_at_period_end`), so Settings says "Pro
+  runs until …" rather than cutting off mid-month.
+- Events are recorded in `stripe_events` so a redelivery is a no-op; if applying one fails the row is
+  released, so Stripe's retry is a real second attempt rather than a "duplicate" no-op.
+- To grant yourself Pro without paying, do it the same way admin accounts are granted — SQL, not app
+  code: `update organizations set plan = 'pro' where id = '…';`
+
 ## Code organization
 ```
 apps/web/src/

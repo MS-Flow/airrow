@@ -99,13 +99,21 @@ failure teaches founders to dismiss both. Below ~24px the mark drops the gradien
 /app                               Dashboard: continue, recent projects, recent generations
 /app/projects                      Project list
 /app/projects/new                  Create project (step 1 of 2)
-/app/projects/[id]                 Project workspace
-/app/projects/[id]/interview       Adaptive interview
+/app/projects/import               Import an existing project — ZIP or public repo (specs 63, 67)
+/app/projects/[id]                 Project workspace, and what the last revision changed (spec 100)
+/app/projects/[id]/interview       Adaptive interview — reopens prefilled to revise a foundation
 /app/projects/[id]/generating      Live generation
 /app/projects/[id]/preview         Repo browser (tree + reader + editor) — the one view of the output
+/app/projects/[id]/import          Import review: what was derived, and conflicts to decide (spec 63)
 /app/projects/[id]/continue        "Continue locally" handoff
-/app/settings                      Profile, theme, workspace, connections
+/app/settings                      Profile, plan & billing, theme, workspace, connections
+/app/upgrade                       What Pro gives, and the way to buy it (specs 99, 100)
 ```
+
+The paywall sits at **generate**, never earlier: a founder out of free foundations can still create a
+project and answer every question, and meets `/app/upgrade` at the button that would cost a Claude
+call. Screens that need Pro are shown disabled with an explanation rather than hidden — seeing what
+you are missing is what converts; not knowing it exists does not.
 
 Shell: collapsible sidebar + sticky top bar with breadcrumbs derived from the URL + ⌘K command
 palette + a reserved `ChatSlot` column for the future repository-aware assistant. The sidebar logo

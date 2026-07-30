@@ -24,9 +24,14 @@ pnpm workspaces monorepo (pnpm 9, Node ≥20):
 | `packages/schemas` | Shared Zod schemas & types (project model, interview) |
 
 Backend platform: **Supabase** (Postgres + RLS, Auth, Storage, Realtime). Hosting: **Vercel**. Repo
-delivery: **GitHub App**. Document authoring: **Claude API**. Airrow runs fully in **local mode** out
-of the box (dev auth, file-backed store in `.data/`, deterministic authoring, ZIP delivery); Supabase
-/ Claude / GitHub activate via `.env`.
+delivery: **GitHub App**. Document authoring: **Claude API**. Billing: **Stripe** (spec 99).
+
+**Supabase is required; every other integration is optional.** Without a Claude key, authoring is
+deterministic and the founder still gets a complete foundation and a ZIP. Without GitHub App
+credentials, ZIP delivery covers delivery. Without Stripe keys, the app runs and Pro shows as
+unavailable rather than throwing. (The file-backed store in `.data/` that this paragraph used to
+describe is gone — the DataStore has been Supabase-only since spec 14, and `lib/data/` holds nothing
+else.)
 
 ## Data flow (one direction)
 ```
@@ -34,8 +39,8 @@ app/** routes (RSC by default)
   → client components
     → Server Actions / Route Handlers
       → feature queries.ts / actions.ts
-        → apps/web/src/lib/data/store.ts  (DataStore: local files today, Supabase behind same API)
-          → Postgres (+RLS) · Storage · Claude API · GitHub App
+        → apps/web/src/lib/data/store.ts  (DataStore: the one path to Supabase)
+          → Postgres (+RLS) · Storage · Claude API · GitHub App · Stripe
 ```
 External calls happen **server-side only**. The engine is a pure
 `generate(templateFiles, projectModel) → RepoTree + Manifest`; any LLM output is Zod-validated against
@@ -99,10 +104,23 @@ else's account away. Every user gets a personal **organization** at signup; all 
 ## External services & failure posture
 | Service | Use | Failure posture |
 |---|---|---|
-| Claude API | Document authoring | Retry w/ backoff; job fails visibly, resumable per-document |
+| Claude API | Document authoring | Retry w/ backoff; job fails visibly, resumable per-document. No key: deterministic authoring, still a complete foundation |
 | GitHub App | Repo creation/push | ZIP always available as fallback |
+| Stripe | Pro subscriptions (spec 99) | No keys: Pro shows as unavailable, nothing throws. Webhook failures release the event so Stripe's retry can finish the job |
 | Supabase | Data/auth/storage/realtime | Platform dependency |
 | Vercel | Hosting, background jobs | Platform dependency |
+
+## Plans and billing (specs 74, 99, 100)
+An organization carries a `plan` (`free` | `pro`). Free is **one** foundation plus two free
+regenerations within 24 hours of its first run; Pro is unlimited and adds importing an existing
+project. An unchanged regeneration makes no Claude call and is never charged.
+
+`checkAllowance` (`features/generation/allowance.ts`) is the single place that answers "may this
+organization generate?", and it reads the plan server-side from Postgres on every attempt. The
+**Stripe webhook is the only thing outside a migration that writes `organizations.plan`** — Checkout
+returning proves the browser reached a URL, not that money moved. Because the plan is an entitlement
+sitting on a row members may otherwise edit, it is protected by column-level privilege rather than
+RLS; see [`DATABASE_DESIGN.md`](DATABASE_DESIGN.md).
 
 See [`SYSTEM_ARCHITECTURE.md`](SYSTEM_ARCHITECTURE.md) for the deeper diagram and the decisions behind
 this shape.

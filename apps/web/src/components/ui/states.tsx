@@ -138,6 +138,46 @@ export function LoadingState({ rows = 3, className }: { rows?: number; className
   );
 }
 
+/**
+ * A limit met, and the way past it (spec 100).
+ *
+ * Deliberately its own tone. It is not an error — nothing failed, and borrowing the danger colour
+ * would teach founders that hitting a plan boundary and losing work look the same. It is not a
+ * `Notice` either: that carries the warn tone for "read this before you act", and running out of
+ * free foundations is neither a caution nor a mistake. It is a price.
+ *
+ * Extracted because the same panel had been hand-rolled in three places — the import screen, the
+ * import result and the end of the interview — with identical classes and identical meaning.
+ */
+export function UpgradeNotice({
+  title,
+  children,
+  action,
+  role,
+  className
+}: {
+  title?: string;
+  children: React.ReactNode;
+  /** The way on. Optional, because one of these appears where the CTA is already on screen. */
+  action?: React.ReactNode;
+  /** Set when the panel appears in response to something the founder just did. */
+  role?: "status";
+  className?: string;
+}) {
+  return (
+    <div
+      role={role}
+      className={cn("rounded-lg border border-accent/30 bg-accent/5 px-5 py-4", className)}
+    >
+      {title ? <h3 className="text-base font-semibold text-fg">{title}</h3> : null}
+      <div className={cn("text-sm leading-relaxed text-fg-muted", title && "mt-1.5")}>
+        {children}
+      </div>
+      {action ? <div className="mt-4">{action}</div> : null}
+    </div>
+  );
+}
+
 /** A surface that exists in the UI but has no backend yet. Never looks enabled. */
 export function ComingSoon({
   title,
