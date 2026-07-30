@@ -56,14 +56,24 @@ STRIPE_WEBHOOK_SECRET=whsec_…      # from step 3
 
 **3. The webhook, which is the part that actually grants Pro.** A Checkout redirect proves the browser
 reached a URL, not that money moved, so `organizations.plan` is written *only* here.
+
+The Stripe **CLI** is a standalone binary, not the npm `stripe` package — `pnpm dlx stripe` installs
+the SDK and fails with `ERR_PNPM_DLX_NO_BIN`. Install it properly:
+```powershell
+winget install Stripe.StripeCli          # Windows
+# macOS: brew install stripe/stripe-cli/stripe
+```
+Then, in its own terminal:
 ```bash
-pnpm dlx stripe login
-pnpm dlx stripe listen --forward-to localhost:3000/api/stripe/webhook
+stripe login                              # opens the browser to pair the CLI with your account
+stripe listen --forward-to localhost:3000/api/stripe/webhook
 # prints "Ready! Your webhook signing secret is whsec_…" — that is STRIPE_WEBHOOK_SECRET
 ```
-Leave `stripe listen` running while you test. Deployed, register the endpoint under Developers →
-Webhooks at `https://<your-domain>/api/stripe/webhook` and take the signing secret from there — a
-wrong value means every event is rejected, which is correct behaviour and looks like nothing happening.
+Leave `stripe listen` running while you test; the secret it prints is stable per machine, so you
+paste it into `.env.local` once. Deployed, register the endpoint under Developers → Webhooks at
+`https://<your-domain>/api/stripe/webhook` and take the signing secret from there — the local and
+deployed secrets are different. A wrong value means every event is rejected, which is correct
+behaviour and looks exactly like nothing happening.
 
 **4. Try it.** `pnpm dev`, sign in, generate a foundation to spend the free one, then hit generate
 again — you land on `/app/upgrade`. Pay with Stripe's test card `4242 4242 4242 4242`, any future
@@ -72,7 +82,8 @@ be a second behind.
 
 Useful while debugging:
 ```bash
-pnpm dlx stripe trigger customer.subscription.deleted   # replay a cancellation
+stripe trigger customer.subscription.deleted   # replay a cancellation
+stripe logs tail                               # every API call, as Stripe saw it
 ```
 
 - **A failed payment does not downgrade.** Stripe retries a declined card for days and reports
