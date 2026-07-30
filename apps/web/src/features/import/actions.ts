@@ -8,6 +8,10 @@
 //
 // The analysis runs in this request and nothing but paths, sizes and digests is persisted, so the
 // founder's source never lands in Airrow's database (§II, customer IP).
+//
+// Import is a Pro capability (spec 74), and the plan is checked in `completeImport` — after the
+// analysis, before the first write. On the free plan the founder still sees what Airrow made of
+// their code; they just cannot keep it as a project.
 import { revalidatePath } from "next/cache";
 import { analyzeImport, digestImported, slugify } from "@airrow/engine";
 import {
@@ -16,6 +20,7 @@ import {
   interviewAnswersSchema,
   pruneHiddenAnswers,
   repoSelectionSchema,
+  type ImportEvidence,
   type ImportSourceKind,
   type InterviewAnswers
 } from "@airrow/schemas";
@@ -29,11 +34,27 @@ import {
   getProject,
   latestJob,
   saveConflictResolution,
-  saveInterviewAnswers
+  saveInterviewAnswers,
+  type OrgRecord
 } from "@/lib/data/store";
 import { readArchive, type ArchiveRead } from "./archive";
 import { currentDigestVersion, digestFor } from "./digest";
 import { readRepository } from "./repo";
+
+/**
+ * The analysis, minus the prefill (spec 74).
+ *
+ * This is what a free organization is shown: the evidence and the counts, which prove Airrow read
+ * the project. The prefilled interview — `analysis.answers` — is deliberately not here. That is the
+ * part Pro buys, and handing it back would give away the thing behind the wall.
+ */
+export interface ImportPreview {
+  originalName: string;
+  filesAnalyzed: number;
+  filesIgnored: number;
+  evidence: ImportEvidence[];
+  notes: string[];
+}
 
 export interface ImportFormState {
   error?: string;
@@ -43,6 +64,14 @@ export interface ImportFormState {
    * Airrow stores no content (spec 68).
    */
   projectId?: string;
+  /**
+   * Set when the analysis ran but the plan does not reach far enough to keep it (spec 74). Distinct
+   * from `error`: nothing failed, and what the founder is looking at is the real result for their
+   * code — which is the point of running it for free.
+   */
+  requiresPro?: boolean;
+  /** Present exactly when `requiresPro` is — the result they are being shown instead of a project. */
+  preview?: ImportPreview;
 }
 
 const DETAILS_REQUIRED = "A name (min 2 chars) and a description (min 10 chars) are required.";
@@ -73,7 +102,7 @@ interface ImportDetails {
  * persist paths and digests — never content.
  */
 async function completeImport(
-  orgId: string,
+  org: OrgRecord,
   details: ImportDetails,
   originalName: string,
   read: ArchiveRead
@@ -88,11 +117,32 @@ async function completeImport(
   if (!validated.success) return { error: "The project could not be analysed." };
   const prefill = pruneHiddenAnswers(validated.data as InterviewAnswers);
 
+  // The plan is checked here and not in either entry point: this is where the two sources already
+  // meet, so the gate cannot be added to one and forgotten on the other. It sits *after* the
+  // analysis on purpose — that runs locally, makes no Claude call and costs Airrow nothing, and it
+  // is the moment a founder with an existing repo sees that Airrow read their code. Asking them to
+  // pay before it would be asking them to buy blind. Everything below this line is a durable write.
+  if (org.plan !== "pro") {
+    return {
+      requiresPro: true,
+      preview: {
+        originalName,
+        filesAnalyzed: analysis.filesAnalyzed,
+        filesIgnored: analysis.filesIgnored,
+        evidence: analysis.evidence,
+        notes: analysis.notes
+      }
+    };
+  }
+
   // A deployment that cannot hash imports safely must refuse to import — but as a state the founder
   // can read, not as a thrown error. Unhandled, this reached the browser as "a server-side exception
   // has occurred" plus a digest, which tells the founder nothing and tells us nothing either without
   // the server log. The reason is logged; the message names the environment, because a founder
   // cannot fix this one and should not be left retrying a ZIP that will fail the same way.
+  //
+  // Below the plan gate, not above it: a free founder meets the paywall, and the deployment's own
+  // misconfiguration is not something to charge them for discovering.
   let digestVersion: number;
   try {
     digestVersion = currentDigestVersion();
@@ -105,7 +155,7 @@ async function completeImport(
   // the deployed database fails here as a PostgREST error about a column that does not exist, which
   // is a real thing that happened (issue #77). Same treatment — say that it failed, log why.
   try {
-    const project = await createProject(orgId, details.name, details.description, slugify);
+    const project = await createProject(org.id, details.name, details.description, slugify);
     await createImportSource(
       project.id,
       details.source,
@@ -141,7 +191,7 @@ export async function importProjectAction(
     return { error: "Choose a .zip of your project to import." };
   }
 
-  return completeImport(org.id, parsed.data, upload.name, await readArchive(await upload.arrayBuffer()));
+  return completeImport(org, parsed.data, upload.name, await readArchive(await upload.arrayBuffer()));
 }
 
 /**
@@ -179,7 +229,7 @@ export async function importRepoAction(
 
   const { owner, repo } = selection.data;
   const read = await readRepository(githubReader(), token, owner, repo);
-  return completeImport(org.id, parsed.data, `${owner}/${repo}`, read);
+  return completeImport(org, parsed.data, `${owner}/${repo}`, read);
 }
 
 /**

@@ -30,11 +30,18 @@ export interface UserRecord {
   createdAt: string;
 }
 
+/**
+ * What an organization is entitled to (spec 74). Free is the default every org starts on; Pro is
+ * written by migration or the billing webhook, never by the app on a member's behalf.
+ */
+export type OrgPlan = "free" | "pro";
+
 export interface OrgRecord {
   id: string;
   name: string;
   kind: "personal" | "team";
   createdBy: string;
+  plan: OrgPlan;
 }
 
 export interface MemberRecord {
@@ -105,13 +112,35 @@ interface OrgRow {
   name: string;
   kind: "personal" | "team";
   created_by: string | null;
+  plan?: string | null;
 }
 const toOrg = (r: OrgRow): OrgRecord => ({
   id: r.id,
   name: r.name,
   kind: r.kind,
-  createdBy: r.created_by ?? ""
+  createdBy: r.created_by ?? "",
+  // Anything that is not exactly 'pro' is free. The column is constrained and defaulted, so this
+  // only ever fires on a row written before the migration — and defaulting an unknown value *down*
+  // is the one safe direction for an entitlement.
+  plan: r.plan === "pro" ? "pro" : "free"
 });
+
+type SupabaseError = { message: string; code?: string };
+
+/**
+ * A column this code knows about and the database does not — a deployment running ahead of its
+ * migrations.
+ *
+ * Postgres reports `42703` (undefined_column); the qualified name is matched as well because
+ * PostgREST does not always forward the code. Callers name the column they are prepared to do
+ * without, so an unrelated typo in a select still throws instead of being quietly swallowed.
+ */
+function isMissingColumn(error: SupabaseError, column: string): boolean {
+  return (
+    error.code === "42703" ||
+    error.message.toLowerCase().includes(`${column.toLowerCase()} does not exist`)
+  );
+}
 
 interface ProjectRow {
   id: string;
@@ -208,10 +237,27 @@ export async function getOrgForUser(userId: string): Promise<OrgRecord | null> {
   );
   const orgId = memberships[0]?.organization_id;
   if (!orgId) return null;
-  const org = maybe<OrgRow>(
-    await db().from("organizations").select("id, name, kind, created_by").eq("id", orgId).maybeSingle()
-  );
-  return org ? toOrg(org) : null;
+  const query = await db()
+    .from("organizations")
+    .select("id, name, kind, created_by, plan")
+    .eq("id", orgId)
+    .maybeSingle();
+
+  if (query.error) {
+    if (!isMissingColumn(query.error, "organizations.plan")) {
+      throw new Error(`Supabase: ${query.error.message}`);
+    }
+
+    const fallback = await db()
+      .from("organizations")
+      .select("id, name, kind, created_by")
+      .eq("id", orgId)
+      .maybeSingle();
+    if (fallback.error) throw new Error(`Supabase: ${fallback.error.message}`);
+    return fallback.data ? toOrg(fallback.data) : null;
+  }
+
+  return query.data ? toOrg(query.data) : null;
 }
 
 /** Keep profiles.display_name in sync with the auth user's name. */
@@ -391,16 +437,69 @@ export async function createJob(projectId: string, modelVersionId: string): Prom
   return toJob(row);
 }
 
+interface UsageRow {
+  generation_job_id: string | null;
+  created_at: string;
+}
+
 /**
- * Generations an organization has used, for the early-access allowance (spec 65).
+ * Ledger rows an organization was actually charged for, scoped by whichever column the caller cares
+ * about — the org (its whole allowance) or one project (its repairs).
  *
- * Counts through `projects.organization_id` rather than trusting a caller-supplied id, so the
- * allowance is scoped the same way every other resource is (§II).
- *
- * `failed` jobs are excluded deliberately: a generation that fell over on our side — a timeout, a
- * bad response, an outage — must not cost the founder part of their allowance. Queued and running
- * jobs *do* count, so the limit cannot be sidestepped by starting several at once.
+ * Two kinds of job are excluded, for the same reason: Airrow never paid for them. A `failed` job
+ * fell over on our side, and a `reused_authoring` job answered from a previous run's payload without
+ * calling Claude at all (spec 74). A row whose job is gone counts — it completed, was delivered, and
+ * the project was then deleted.
  */
+async function chargedUsage(column: "organization_id" | "project_id", id: string): Promise<UsageRow[]> {
+  const usage = rows<UsageRow>(
+    await db().from("generation_usage").select("generation_job_id, created_at").eq(column, id)
+  );
+  if (usage.length === 0) return [];
+
+  const jobIds = usage.map((u) => u.generation_job_id).filter((v): v is string => v !== null);
+  if (jobIds.length === 0) return usage;
+
+  const jobs = await jobCharges(jobIds);
+  // Filtered here rather than in the query: two independent conditions expressed as a PostgREST
+  // `or` string is the kind of thing that stays syntactically valid while meaning something else.
+  const uncharged = new Set(
+    jobs.filter((j) => j.status === "failed" || j.reused_authoring === true).map((j) => j.id)
+  );
+  return usage.filter((u) => u.generation_job_id === null || !uncharged.has(u.generation_job_id));
+}
+
+interface JobChargeRow {
+  id: string;
+  status: JobStatus;
+  /** Optional for the same reason `OrgRow.plan` is: a database still behind its migrations. */
+  reused_authoring?: boolean;
+}
+
+/**
+ * Status and memoisation flag for the jobs a ledger read refers to.
+ *
+ * `reused_authoring` arrived with the Pro plan migration (`20260729120000_pro_plan.sql`). A
+ * deployment whose database is behind that migration used to have every allowance read fail on it,
+ * which took down the project list and the interview screen — the screens where a founder is merely
+ * being *told* where they stand. A column that does not exist means no job can have reused a payload,
+ * so the flag reads absent and the ledger counts exactly what it counted before the column existed.
+ *
+ * This keeps the read surfaces up; it does not make a stale schema harmless. Generation writes the
+ * flag (`saveAuthoringProvenance`) and billing needs tables from the same batch of migrations, so a
+ * deployment in this state still has to run `supabase db push`.
+ */
+async function jobCharges(jobIds: string[]): Promise<JobChargeRow[]> {
+  const query = await db().from("generation_jobs").select("id, status, reused_authoring").in("id", jobIds);
+  if (!query.error) return (query.data ?? []) as JobChargeRow[];
+  if (!isMissingColumn(query.error, "generation_jobs.reused_authoring")) {
+    throw new Error(`Supabase: ${query.error.message}`);
+  }
+  return rows<JobChargeRow>(
+    await db().from("generation_jobs").select("id, status").in("id", jobIds)
+  );
+}
+
 /**
  * Generations this organization has spent, from the durable ledger.
  *
@@ -408,24 +507,25 @@ export async function createJob(projectId: string, modelVersionId: string): Prom
  * project refunded the allowance, and the ceiling could be reset at will. `generation_usage` rows
  * are written by a trigger and survive their project, because a Claude call is paid for whether or
  * not what it produced still exists.
- *
- * Failed jobs are still not charged for: an outage on our side must never cost a founder part of
- * their allowance, so the ledger is joined back to the job to exclude them. A job whose row is gone
- * counts — it completed, was delivered, and was then deleted.
  */
 export async function countGenerations(orgId: string): Promise<number> {
-  const usage = rows<{ generation_job_id: string | null }>(
-    await db().from("generation_usage").select("generation_job_id").eq("organization_id", orgId)
-  );
-  if (usage.length === 0) return 0;
+  return (await chargedUsage("organization_id", orgId)).length;
+}
 
-  const jobIds = usage.map((u) => u.generation_job_id).filter((id): id is string => id !== null);
-  if (jobIds.length === 0) return usage.length;
+/** What one project has spent, which is what the free repair window is measured against (spec 74). */
+export interface ProjectUsage {
+  /** Charged generations on this project. The first is the foundation; the rest are repairs. */
+  count: number;
+  /** When the first charged generation ran, or null if there has never been one. */
+  firstAt: string | null;
+}
 
-  const failed = rows<{ id: string }>(
-    await db().from("generation_jobs").select("id").in("id", jobIds).eq("status", "failed")
-  );
-  return usage.length - failed.length;
+export async function projectUsage(projectId: string): Promise<ProjectUsage> {
+  const usage = await chargedUsage("project_id", projectId);
+  // Sorted rather than assuming insertion order: the window opens at the *first* generation, and
+  // reading that off an arbitrary row would silently move the deadline.
+  const first = usage.map((u) => u.created_at).sort()[0];
+  return { count: usage.length, firstAt: first ?? null };
 }
 
 /** True when this account bypasses the free allowance. Set by migration only — never from the app. */
@@ -465,6 +565,38 @@ export async function latestJob(projectId: string): Promise<JobRecord | null> {
   return row ? toJob(row) : null;
 }
 
+/**
+ * The completed generation before this one, or null when this is the first (spec 100).
+ *
+ * What a revision is diffed against. Ordered on `created_at` for the same reason `latestJob` is: it
+ * is the only column that is both always set and never changed, so a job that failed and was retried
+ * cannot reorder history. Only `completed` jobs qualify — a failed or in-flight one has no artifact
+ * worth comparing to, and offering its half-written tree as "what you had before" would be a lie.
+ */
+export async function previousCompletedJob(
+  projectId: string,
+  beforeJobId: string
+): Promise<JobRecord | null> {
+  const current = maybe<{ created_at: string }>(
+    await db().from("generation_jobs").select("created_at").eq("id", beforeJobId).maybeSingle()
+  );
+  if (!current) return null;
+
+  // Strictly older, not merely "a different one": excluding by id alone would hand back a *newer*
+  // completed job if one existed, and call it the previous version.
+  const older = rows<JobRow>(
+    await db()
+      .from("generation_jobs")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("status", "completed")
+      .lt("created_at", current.created_at)
+      .order("created_at", { ascending: false })
+      .limit(1)
+  );
+  return older[0] ? toJob(older[0]) : null;
+}
+
 /** Column mapping for a partial job update; heartbeat is always bumped (matches prior behavior). */
 function jobPatchToRow(patch: Partial<JobRecord>): Record<string, unknown> {
   const row: Record<string, unknown> = { heartbeat_at: now() };
@@ -494,6 +626,11 @@ export interface AuthoringProvenance {
   authoringModel: string;
   /** The validated `{ slots, documents }` payload, kept so an unchanged rerun can reuse it. */
   authored: unknown;
+  /**
+   * Whether this payload came from a previous job rather than from Claude. Recorded because the
+   * allowance charges for calls Airrow made, and a reused payload is not one (spec 74).
+   */
+  reused: boolean;
 }
 
 export async function saveAuthoringProvenance(
@@ -506,7 +643,8 @@ export async function saveAuthoringProvenance(
       inputs_hash: provenance.inputsHash,
       prompt_version: provenance.promptVersion,
       authoring_model: provenance.authoringModel,
-      authored: provenance.authored
+      authored: provenance.authored,
+      reused_authoring: provenance.reused
     })
     .eq("id", jobId);
   if (res.error) throw new Error(`Supabase: ${res.error.message}`);
@@ -726,5 +864,167 @@ export async function recordDelivery(
   const res = await db()
     .from("deliveries")
     .insert({ project_id: projectId, job_id: jobId, method, status: "completed" });
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
+}
+
+/* ── Billing (spec 99) ──────────────────────────────────────────────────── */
+
+/**
+ * Stripe's state for an organization. The entitlement itself is `organizations.plan` — this is the
+ * record of *why* it holds the value it does, and what the founder sees in settings.
+ */
+export interface SubscriptionRecord {
+  organizationId: string;
+  customerId: string;
+  subscriptionId: string | null;
+  /** Stripe's own vocabulary, kept verbatim: 'active', 'past_due', 'canceled', … */
+  status: string;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  /** When this row last agreed with Stripe. What tells a screen whether it is worth asking again. */
+  updatedAt: string;
+}
+
+interface SubscriptionRow {
+  organization_id: string;
+  provider_customer_id: string;
+  provider_subscription_id: string | null;
+  status: string;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  updated_at: string;
+}
+
+const toSubscription = (r: SubscriptionRow): SubscriptionRecord => ({
+  organizationId: r.organization_id,
+  customerId: r.provider_customer_id,
+  subscriptionId: r.provider_subscription_id,
+  status: r.status,
+  currentPeriodEnd: r.current_period_end,
+  cancelAtPeriodEnd: r.cancel_at_period_end,
+  updatedAt: r.updated_at
+});
+
+const SUBSCRIPTION_COLUMNS =
+  "organization_id, provider_customer_id, provider_subscription_id, status, current_period_end, cancel_at_period_end, updated_at";
+
+export async function getSubscription(orgId: string): Promise<SubscriptionRecord | null> {
+  const row = maybe<SubscriptionRow>(
+    await db()
+      .from("subscriptions")
+      .select(SUBSCRIPTION_COLUMNS)
+      .eq("organization_id", orgId)
+      .maybeSingle()
+  );
+  return row ? toSubscription(row) : null;
+}
+
+/**
+ * Record the Stripe customer created for an organization, before any payment exists.
+ *
+ * Written at checkout rather than at the webhook so a founder who abandons Checkout and comes back
+ * reuses their customer instead of accumulating one per attempt. `status: 'incomplete'` is Stripe's
+ * own word for exactly this state and entitles them to nothing.
+ */
+export async function linkStripeCustomer(orgId: string, customerId: string): Promise<void> {
+  const res = await db()
+    .from("subscriptions")
+    .upsert(
+      {
+        organization_id: orgId,
+        provider_customer_id: customerId,
+        status: "incomplete",
+        updated_at: now()
+      },
+      { onConflict: "organization_id", ignoreDuplicates: true }
+    );
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
+}
+
+/** The organization behind a Stripe customer id. How the webhook, which has no session, scopes. */
+export async function orgForStripeCustomer(customerId: string): Promise<string | null> {
+  const row = maybe<{ organization_id: string }>(
+    await db()
+      .from("subscriptions")
+      .select("organization_id")
+      .eq("provider_customer_id", customerId)
+      .maybeSingle()
+  );
+  return row?.organization_id ?? null;
+}
+
+export interface SubscriptionState {
+  customerId: string;
+  subscriptionId: string | null;
+  status: string;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  /** What this status entitles the organization to. Decided by the caller; written here. */
+  plan: OrgPlan;
+}
+
+/**
+ * Apply a subscription change: the billing row and the entitlement, together.
+ *
+ * These are deliberately one function and not two. They are the same fact viewed twice, and any
+ * caller that could write one without the other is a caller that can leave an organization paying
+ * for a plan it does not have — or holding a plan it stopped paying for.
+ *
+ * That is an argument about callers, not about atomicity: the Supabase client cannot wrap two
+ * statements in a transaction, so a failure between them still diverges. The billing row is written
+ * first on purpose. It is the lookup `orgForStripeCustomer` needs, so a half-applied event leaves
+ * enough behind for the redelivery to find the organization and finish the job — and the webhook
+ * releases its claim on failure so that redelivery actually gets to run.
+ *
+ * This is the **only** path that writes `organizations.plan` outside a migration, which is what the
+ * column-level revoke in `20260729120000_pro_plan.sql` is there to guarantee.
+ */
+export async function applySubscriptionState(
+  orgId: string,
+  state: SubscriptionState
+): Promise<void> {
+  const sub = await db().from("subscriptions").upsert(
+    {
+      organization_id: orgId,
+      provider_customer_id: state.customerId,
+      provider_subscription_id: state.subscriptionId,
+      status: state.status,
+      current_period_end: state.currentPeriodEnd,
+      cancel_at_period_end: state.cancelAtPeriodEnd,
+      updated_at: now()
+    },
+    { onConflict: "organization_id" }
+  );
+  if (sub.error) throw new Error(`Supabase: ${sub.error.message}`);
+
+  const org = await db().from("organizations").update({ plan: state.plan }).eq("id", orgId);
+  if (org.error) throw new Error(`Supabase: ${org.error.message}`);
+}
+
+/**
+ * Claim a Stripe event id, returning false if it has already been applied.
+ *
+ * Stripe delivers at least once and retries for days on a non-2xx, so "have we seen this?" has to be
+ * answered atomically or two concurrent redeliveries both pass the check. The primary key does that
+ * for us: the insert either succeeds or violates the key, with no lock of ours involved.
+ */
+export async function claimStripeEvent(eventId: string, eventType: string): Promise<boolean> {
+  const res = await db().from("stripe_events").insert({ event_id: eventId, event_type: eventType });
+  if (!res.error) return true;
+  // 23505 is unique_violation: seen before, which is a successful no-op rather than a failure.
+  if (res.error.code === "23505") return false;
+  throw new Error(`Supabase: ${res.error.message}`);
+}
+
+/**
+ * Give a claimed event back, because applying it failed.
+ *
+ * Without this the claim is a trap: Stripe retries a 500, the retry finds the id already recorded,
+ * answers "duplicate", and an upgrade a founder paid for is lost permanently and silently. The claim
+ * is there to stop two *concurrent* deliveries doing the same work — it must not also stop the
+ * redelivery that exists precisely because the work did not happen.
+ */
+export async function releaseStripeEvent(eventId: string): Promise<void> {
+  const res = await db().from("stripe_events").delete().eq("event_id", eventId);
   if (res.error) throw new Error(`Supabase: ${res.error.message}`);
 }

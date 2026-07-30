@@ -19,7 +19,7 @@ import {
   saveInterviewAnswers,
   setProjectStatus
 } from "@/lib/data/store";
-import { ALLOWANCE_REACHED_MESSAGE, checkAllowance } from "@/features/generation/allowance";
+import { allowanceMessage, checkAllowance } from "@/features/generation/allowance";
 import { projectOrigin } from "@/features/import/origin";
 
 export async function saveAnswersAction(projectId: string, raw: unknown): Promise<{ ok: boolean }> {
@@ -32,7 +32,10 @@ export async function saveAnswersAction(projectId: string, raw: unknown): Promis
   return { ok: true };
 }
 
-export async function submitInterviewAction(projectId: string, raw: unknown): Promise<{ error?: string }> {
+export async function submitInterviewAction(
+  projectId: string,
+  raw: unknown
+): Promise<{ error?: string; upgrade?: boolean }> {
   const { org, user } = await requireSession();
   const project = await getProject(org.id, projectId);
   if (!project) return { error: "Project not found." };
@@ -63,8 +66,16 @@ export async function submitInterviewAction(projectId: string, raw: unknown): Pr
   // Checked here rather than at the point of generation: a founder who is out of allowance should
   // hear it now, not after landing on a progress screen that will never move. The idempotent
   // re-entry above is deliberately allowed through — resuming a running job costs nothing new.
-  const allowance = await checkAllowance(org.id, user.id);
-  if (!allowance.allowed) return { error: ALLOWANCE_REACHED_MESSAGE };
+  const allowance = await checkAllowance({
+    orgId: org.id,
+    plan: org.plan,
+    userId: user.id,
+    projectId
+  });
+  // Flagged rather than merely worded, so the screen can offer a way on instead of showing a red
+  // box at the end of thirty questions (spec 100). The answers are already saved above — the
+  // founder loses nothing by leaving for the upgrade screen and coming back.
+  if (!allowance.allowed) return { error: allowanceMessage(allowance.denial), upgrade: true };
 
   await createJob(projectId, modelVersion.id);
   await setProjectStatus(projectId, "generating");

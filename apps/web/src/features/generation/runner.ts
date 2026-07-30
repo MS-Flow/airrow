@@ -65,7 +65,10 @@ export async function runGenerationJob(jobId: string, model: ProjectModel): Prom
         inputsHash: hash,
         promptVersion: PROMPT_VERSION,
         authoringModel: AUTHORING_MODEL,
-        authored
+        authored,
+        // The founder is charged for calls we made. This run made none, so the ledger must not
+        // count it — otherwise "nothing changed" costs a foundation for nobody's Claude call.
+        reused: reused !== null
       });
     }
 

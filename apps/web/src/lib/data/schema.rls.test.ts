@@ -160,4 +160,119 @@ describe.skipIf(!dbUp)("full schema RLS (local Supabase)", () => {
       expect(visibleToB).not.toContain(c.idA);
     });
   }
+
+  /* ── The plan (spec 74) ───────────────────────────────────────────────────
+   *
+   * The entitlement is a column, so its access control is `organizations`'s — which is why it is
+   * asserted here rather than assumed. Two properties matter and neither is obvious from reading
+   * the migration alone: a member can *read* their plan, and nobody can write one.
+   */
+  async function asUser<T>(userId: string, run: () => Promise<T>): Promise<T> {
+    await db.query("begin");
+    try {
+      await db.query("select set_config('request.jwt.claims', $1, true)", [
+        JSON.stringify({ sub: userId })
+      ]);
+      await db.query("select set_config('role', 'authenticated', true)");
+      return await run();
+    } finally {
+      await db.query("rollback");
+    }
+  }
+
+  it("organizations.plan: a member reads their own plan and never another org's", async () => {
+    await db.query("update public.organizations set plan = 'pro' where id = $1", [ORG_A]);
+
+    const seen = await asUser(USER_A, async () => {
+      const res = await db.query<{ id: string; plan: string }>("select id, plan from public.organizations");
+      return res.rows;
+    });
+
+    expect(seen).toEqual([{ id: ORG_A, plan: "pro" }]);
+  });
+
+  it("organizations.plan: a member cannot grant themselves Pro", async () => {
+    // The denial that matters most. `organizations` carries no insert/update grant for the API
+    // role at all, so this is refused before any policy is consulted — but "we never granted it"
+    // is a claim worth a test, because a future migration could grant it by accident.
+    await expect(
+      asUser(USER_B, () =>
+        db.query("update public.organizations set plan = 'pro' where id = $1", [ORG_B])
+      )
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it("organizations.plan: an outsider cannot write another org's plan", async () => {
+    await expect(
+      asUser(USER_A, () =>
+        db.query("update public.organizations set plan = 'pro' where id = $1", [ORG_B])
+      )
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  /* ── Billing (spec 99) ────────────────────────────────────────────────────
+   *
+   * `subscriptions` is org-scoped and readable by its members. `stripe_events` is not org-scoped at
+   * all and must be readable by nobody: it is the webhook's own bookkeeping, and a founder has no
+   * query to make against it.
+   */
+  /**
+   * Seed a subscription for an org. Upserts, because only the `asUser` reads roll back — a plain
+   * insert here survives the test and the next one collides on the one-per-org constraint.
+   */
+  async function seedSubscription(orgId: string, customer: string, status: string): Promise<void> {
+    await db.query(
+      `insert into public.subscriptions (organization_id, provider_customer_id, status)
+            values ($1, $2, $3)
+       on conflict (organization_id)
+       do update set provider_customer_id = excluded.provider_customer_id, status = excluded.status`,
+      [orgId, customer, status]
+    );
+  }
+
+  it("subscriptions: a member reads their own billing state and never another org's", async () => {
+    await seedSubscription(ORG_A, "cus_a", "active");
+    await seedSubscription(ORG_B, "cus_b", "active");
+
+    const seen = await asUser(USER_A, async () => {
+      const res = await db.query<{ provider_customer_id: string }>(
+        "select provider_customer_id from public.subscriptions"
+      );
+      return res.rows.map((r) => r.provider_customer_id);
+    });
+
+    expect(seen).toEqual(["cus_a"]);
+  });
+
+  it("subscriptions: a member cannot write their own billing state", async () => {
+    // Same reasoning as the plan column: what someone is entitled to is not theirs to edit. If this
+    // were writable, `status = 'active'` would be free Pro without the plan column being touched.
+    await seedSubscription(ORG_A, "cus_a", "canceled");
+
+    await expect(
+      asUser(USER_A, () =>
+        db.query("update public.subscriptions set status = 'active' where organization_id = $1", [
+          ORG_A
+        ])
+      )
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it("stripe_events: is readable by nobody, because it belongs to the webhook", async () => {
+    await db.query(
+      "insert into public.stripe_events (event_id, event_type) values ('evt_rls','customer.subscription.updated') on conflict (event_id) do nothing"
+    );
+
+    await expect(
+      asUser(USER_A, () => db.query("select event_id from public.stripe_events"))
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it("organizations.plan: defaults to free, so a new organization is never accidentally paid", async () => {
+    const res = await db.query<{ plan: string }>(
+      "select plan from public.organizations where id = $1",
+      [ORG_B]
+    );
+    expect(res.rows[0]?.plan).toBe("free");
+  });
 });

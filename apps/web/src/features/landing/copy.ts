@@ -2,7 +2,19 @@
  * Every visible string on the landing page, in one place. The marketing voice is then
  * reviewed (and tested) as a whole instead of being hunted for across JSX: no single
  * assistant is named, and no sentence leans on an em dash (spec 23).
+ *
+ * The free tier's numbers are read from `features/generation/limits.ts` rather than written out
+ * here, so the pricing section cannot promise a limit the product does not enforce (spec 74).
  */
+import {
+  FREE_GENERATION_LIMIT,
+  FREE_REPAIR_LIMIT,
+  REPAIR_WINDOW_HOURS
+} from "@/features/generation/limits";
+
+/** English for the free ceiling. One is the shipped value; the rest keeps the copy honest if it moves. */
+const FOUNDATIONS = FREE_GENERATION_LIMIT === 1 ? "One" : String(FREE_GENERATION_LIMIT);
+const foundationNoun = FREE_GENERATION_LIMIT === 1 ? "foundation" : "foundations";
 
 /** Icon key, resolved by the page so this file stays plain data (as `nav-items.ts` does). */
 export type DeliverableIcon =
@@ -144,7 +156,7 @@ export const WHY_SDD = [
    because it has none yet — naming a figure we have not decided would be a promise, and the free
    tier is what someone can actually have today. */
 export const INCLUDED = [
-  "Two generated foundations",
+  `${FOUNDATIONS} generated ${foundationNoun}, with ${FREE_REPAIR_LIMIT} free revisions`,
   "The full CTO interview",
   "Documents written for your product, not filled in from a template",
   "ZIP delivery of your repository",
@@ -152,12 +164,12 @@ export const INCLUDED = [
   "Yours to keep, with no lock-in",
 ];
 
-/** What Pro adds. Deliberately short: everything here is unbuilt, and a long list would read as one. */
+/** What Pro adds. Deliberately short: most of this is unbuilt, and a long list would read as one. */
 export const PRO_INCLUDED = [
   "Unlimited generated foundations",
+  "Import an existing project",
   "Push straight to a GitHub repository",
   "Regenerate as your product changes",
-  "Priority on new document types",
 ];
 
 export const SECTIONS = {
@@ -177,21 +189,23 @@ export const SECTIONS = {
   },
   pricing: {
     title: "Pricing",
-    body: "Start free: two complete foundations, every feature, no card. Pro lifts the limit when it lands.",
+    /* "Pro lifts the limit when it lands" survived spec 100's sweep for "coming soon" while saying
+       the same untrue thing in the future tense. Pro is here; the copy says so. */
+    body: `Start free: ${FOUNDATIONS.toLowerCase()} complete ${foundationNoun}, every document Airrow writes, no card. Pro lifts the limit.`,
     free: {
       name: "Free",
       amount: "$0",
-      note: "Two foundations, everything included.",
+      note: `${FOUNDATIONS} ${foundationNoun}, revisable for ${REPAIR_WINDOW_HOURS} hours.`,
       action: "Create your project",
     },
     pro: {
       name: "Pro",
-      badge: "Coming soon",
-      /* No figure, because none is decided. Naming one would be a promise, and "TBD" at the size
-         of a price is just a shrug. The word says what the card is for. */
+      /* Still no figure here, and now for a different reason: the amount lives in Stripe so it can
+         change without a deploy (spec 99). Putting it in static marketing copy would recreate
+         exactly the duplication that decision avoided. The badge is gone because Pro is real. */
       amount: "Monthly",
-      note: "Unlimited foundations, and the features that follow.",
-      action: "Not available yet",
+      note: "Unlimited foundations, and importing a project you have already started.",
+      action: "Start with Pro",
     },
   },
   cta: {
