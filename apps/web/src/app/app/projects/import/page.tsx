@@ -8,6 +8,7 @@ import { Notice, UpgradeNotice } from "@/components/ui/states";
 import { ImportForm } from "@/features/import/ImportForm";
 import { RepoPicker } from "@/features/import/RepoPicker";
 import { requireSession } from "@/lib/auth";
+import { referralSummary } from "@/lib/data/referrals";
 
 export const metadata = { title: "Import an existing project" };
 
@@ -24,6 +25,10 @@ export default async function ImportProject({
 }) {
   const { repoPage } = await searchParams;
   const { org } = await requireSession();
+  // Read-only on purpose: a queued week must not start because somebody opened this page. It starts
+  // when the import actually runs, which is what `claimPro` in the action does (spec 122).
+  const referral = org.plan === "pro" ? null : await referralSummary(org.id);
+  const pro = org.plan === "pro" || Boolean(referral?.activeUntil);
 
   return (
     <PageContainer className="max-w-xl animate-slide-up py-16">
@@ -43,7 +48,15 @@ export default async function ImportProject({
 
       {/* Said before the upload, not after it (spec 74). A founder who finds out at the end that
           the result needs a plan they don't have has been wasted, however good the result is. */}
-      {org.plan === "pro" ? null : (
+      {pro ? null : referral && referral.queued > 0 ? (
+        // A week they have already earned and not started. Saying "needs Pro" here would be true of
+        // the plan and false of them — importing starts the week and simply works (spec 122).
+        <Notice className="mt-6" title="Your free week of Pro starts here">
+          You have {referral.queued === 1 ? "a week" : `${referral.queued} weeks`} of Pro waiting from
+          an invitation. Importing this project starts the first one — nothing to pay, nothing to
+          confirm.
+        </Notice>
+      ) : (
         <UpgradeNotice className="mt-6" title="Import is part of Pro">
           You can run the analysis now and see everything Airrow works out about your project —
           that&rsquo;s free, and nothing is stored. Turning it into a project needs Pro.

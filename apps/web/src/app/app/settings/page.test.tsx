@@ -13,6 +13,9 @@ const identity = vi.hoisted((): { current: { login: string | null; connectedAt: 
 
 const plan = vi.hoisted((): { current: "free" | "pro" } => ({ current: "free" }));
 
+/** Set when the workspace is unlimited on a week it earned rather than on a subscription (spec 122). */
+const onEarnedWeek = vi.hoisted((): { current: boolean } => ({ current: false }));
+
 vi.mock("@/lib/auth", () => ({
   requireSession: async () => ({
     user: { id: "u1", name: "Ada", email: "ada@example.com", createdAt: "2026-01-01" },
@@ -37,12 +40,31 @@ vi.mock("@/features/generation/allowance", () => ({
   FREE_REPAIR_LIMIT: 2,
   REPAIR_WINDOW_HOURS: 24,
   // Follows the plan, the way the real one does: Pro is what makes the card render its billing half.
-  checkAllowance: async () =>
-    plan.current === "pro"
+  // An earned week is the third case — unlimited, on a free plan, with a reason of its own.
+  checkAllowance: async () => {
+    if (onEarnedWeek.current) {
+      return { allowed: true, plan: "free", grant: "referral", unlimited: true, used: 1, remaining: Infinity };
+    }
+    return plan.current === "pro"
       ? { allowed: true, plan: "pro", grant: "pro", unlimited: true, used: 3, remaining: Infinity }
-      : { allowed: true, plan: "free", grant: "free", unlimited: false, used: 0, remaining: 1 }
+      : { allowed: true, plan: "free", grant: "free", unlimited: false, used: 0, remaining: 1 };
+  }
 }));
 vi.mock("@/features/auth/actions", () => ({ signInWithGitHubAction: vi.fn() }));
+
+// The invite card reads the database and builds its link from the request's own host — neither exists
+// here. The constants come with the mock because the card renders them (spec 122).
+const referral = vi.hoisted(
+  (): { current: { activeUntil: string | null; queued: number; remaining: number } } => ({
+    current: { activeUntil: null, queued: 0, remaining: 3 }
+  })
+);
+vi.mock("@/lib/data/referrals", () => ({
+  REFERRAL_CAP: 3,
+  REFERRAL_GRANT_DAYS: 7,
+  referralSummary: async () => ({ code: "invite-code", invites: [], credited: 0, ...referral.current })
+}));
+vi.mock("@/lib/site-url", () => ({ requestOrigin: async () => "https://airrow.test" }));
 
 import SettingsPage from "./page";
 
@@ -113,6 +135,57 @@ describe("Settings — coming back from Checkout", () => {
     render(await settings());
 
     expect(screen.queryByRole("button", { name: /check again/i })).not.toBeInTheDocument();
+  });
+});
+
+/* ── The invite card, and the week it can produce (spec 122) ────────────────
+ *
+ * A week earned by inviting somebody makes the workspace unlimited, which is exactly the state the
+ * billing half of this card was written for — so the danger is that it renders as a subscription.
+ * There is no card behind it and nothing renews, and a founder told otherwise has been lied to about
+ * money.
+ */
+describe("Settings — invitations", () => {
+  it("offers the link and says how many places are left", async () => {
+    plan.current = "free";
+    onEarnedWeek.current = false;
+    referral.current = { activeUntil: null, queued: 0, remaining: 3 };
+    render(await settings());
+
+    expect(screen.getByText(/invite a friend/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 of 3 left/i)).toBeInTheDocument();
+    expect(screen.getByText("https://airrow.test/invite/invite-code")).toBeInTheDocument();
+  });
+
+  it("stops offering the link once every place is used", async () => {
+    plan.current = "free";
+    referral.current = { activeUntil: null, queued: 0, remaining: 0 };
+    render(await settings());
+
+    expect(screen.queryByText("https://airrow.test/invite/invite-code")).not.toBeInTheDocument();
+    expect(screen.getByText(/used all 3 places/i)).toBeInTheDocument();
+  });
+
+  it("never presents an earned week as a subscription", async () => {
+    plan.current = "free";
+    onEarnedWeek.current = true;
+    customer.current = null;
+    referral.current = { activeUntil: "2026-08-08T09:00:00.000Z", queued: 0, remaining: 2 };
+    render(await settings());
+
+    expect(screen.getByText(/not a subscription/i)).toBeInTheDocument();
+    expect(screen.getByText(/runs until 2026-08-08/i)).toBeInTheDocument();
+    expect(screen.queryByText(/renews automatically/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /manage billing/i })).not.toBeInTheDocument();
+  });
+
+  it("says a waiting week is not counting down yet", async () => {
+    plan.current = "free";
+    onEarnedWeek.current = false;
+    referral.current = { activeUntil: null, queued: 2, remaining: 1 };
+    render(await settings());
+
+    expect(screen.getByText(/2 weeks are waiting/i)).toBeInTheDocument();
   });
 });
 

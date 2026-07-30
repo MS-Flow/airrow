@@ -9,6 +9,7 @@
 // Deliberately outside the middleware matcher, like the GitHub callback: the founder has no session
 // yet when they arrive.
 import { NextResponse, type NextRequest } from "next/server";
+import { attachPendingReferral } from "@/features/referrals/attach";
 import { supabaseServer } from "@/lib/data/supabase-server";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -20,8 +21,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!code) return NextResponse.redirect(`${origin}/login?error=confirm`);
 
   const supabase = await supabaseServer();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
-  if (error) return NextResponse.redirect(`${origin}/login?error=confirm`);
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+  if (error || !data.user) return NextResponse.redirect(`${origin}/login?error=confirm`);
+
+  // Clicking the link *is* the verification, so this is the moment an invitation can be attached to
+  // the new workspace (spec 122). It cannot fail loudly: nothing about a referral is worth breaking a
+  // confirmed signup over.
+  await attachPendingReferral({ id: data.user.id, createdAt: data.user.created_at });
 
   // Confirmed and signed in — straight to the workspace, which is what the founder was doing when
   // the confirmation interrupted them.
