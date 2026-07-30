@@ -491,6 +491,30 @@ The row was stale on top of that, for the same reason as everything else in this
 - **"Check again" is offered on Pro as well**, beside Manage billing. Being stale is not a state that
   only free organizations get to be in.
 
+**8. It was still saying "Renews automatically", and this time the fault was ours in a second place.**
+Asking Stripe directly what that subscription looked like settled it: `status: active`,
+`cancel_at: 1788109968` (2026-08-30), `canceled_at` set to the moment the founder clicked — and
+`cancel_at_period_end: **false**`. Stripe had answered the question in the field we were not reading.
+Newer API versions express a scheduled cancellation as `cancel_at` and are moving away from the
+boolean; §7's fix read the boolean, which is why a cancellation still came out as a renewal.
+
+`toSubscriptionState` now treats **either** signal as ending, and takes the end date from `cancel_at`
+when there is one, because a scheduled cancellation date is more specific than the period it happens
+to coincide with. The eight tests in `subscription-state.test.ts` use the real numbers off that
+subscription.
+
+While there: `pause_collection` had the same shape of hole. Pausing leaves the status `active`, so a
+paused subscription would have gone on promising a charge on a date no card will be charged on. It is
+now read as Stripe's own `paused` status, and pausing collection ends the entitlement — being told to
+stop taking money and continuing to hand out Pro is not a state to model. No migration for it: the
+value stays inside Stripe's vocabulary in the column that already exists, and this deployment has a
+history of running behind its migrations that a new column would have walked straight into.
+
+**The lesson worth keeping.** Three times in this section the product asserted something about money
+from one field, and three times Stripe had said something more specific in another. `?upgraded=1`
+instead of the plan; the status instead of the cancellation flag; the flag instead of `cancel_at`. The
+fix each time was the same shape — ask the system that knows, and derive rather than assume.
+
 **Going live is now written down.** `INFRASTRUCTURE_SETUP.md` §6 covers what test mode does not carry
 over — live product and price, live keys, a live webhook endpoint and its own signing secret, the
 customer portal Stripe requires you to switch on before `Manage billing` works — plus the two things
@@ -505,7 +529,7 @@ pnpm -r typecheck   Done — clean across schemas, engine, web
 pnpm -r lint        Done — no new issues
 pnpm -r test        schemas   35 passed
                     engine   219 passed
-                    web      418 passed (57 files)
+                    web      426 passed (58 files)
 pnpm test:scripts     13 passed
 pnpm build          Done
 ```
@@ -527,7 +551,10 @@ subscription over an abandoned attempt, writes nothing when there is nothing to 
 rather than throws when Stripe is unreachable; `features/billing/actions.test.ts` (+1) — Checkout
 returns through the reconciling route rather than straight to Settings;
 `features/billing/plan-standing.test.ts` (10) — every state a paid workspace can be in, including the
-one that started it: a cancelled subscription must never read as renewing.
+one that started it: a cancelled subscription must never read as renewing;
+`features/billing/subscription-state.test.ts` (8) — a scheduled cancellation is read off `cancel_at`
+as well as the older boolean, and a paused collection ends the entitlement rather than promising a
+charge.
 
 ---
 

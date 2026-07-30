@@ -25,13 +25,30 @@ export function toSubscriptionState(subscription: Stripe.Subscription): Subscrip
   // present on newer API versions.
   const periodEnd = subscription.items.data[0]?.current_period_end;
 
+  // Two ways to say "this will not renew", and the product only knew about one of them.
+  //
+  // A founder cancelled through the portal and Airrow went on promising a charge on the very date the
+  // subscription would end. Stripe had said so plainly — `cancel_at` set to the period end,
+  // `canceled_at` set to the moment they clicked — while leaving `cancel_at_period_end` false, which
+  // is the field newer API versions are moving away from. Reading one flag and not the other is how a
+  // cancellation reads as a renewal.
+  const cancelling = subscription.cancel_at_period_end || subscription.cancel_at !== null;
+  // When it stops, or when it renews — whichever is ahead. Both are shown in the same sentence slot,
+  // and a scheduled cancellation date is the more specific of the two.
+  const until = subscription.cancel_at ?? periodEnd;
+
+  // Pausing collection is Stripe telling us to stop taking money, so the entitlement stops with it.
+  // Stripe reports the subscription as `active` throughout, which would otherwise read as renewing.
+  // `paused` is Stripe's own word, so the row stays in Stripe's vocabulary.
+  const status = subscription.pause_collection ? "paused" : subscription.status;
+
   return {
     customerId: customer,
     subscriptionId: subscription.id,
-    status: subscription.status,
-    currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
-    cancelAtPeriodEnd: subscription.cancel_at_period_end,
-    plan: planForStatus(subscription.status)
+    status,
+    currentPeriodEnd: until ? new Date(until * 1000).toISOString() : null,
+    cancelAtPeriodEnd: cancelling,
+    plan: planForStatus(status)
   };
 }
 
