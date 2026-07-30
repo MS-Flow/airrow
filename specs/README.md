@@ -55,3 +55,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Azure DevOps gets its own workflow, not GitHub's with different labels | [67-azure-devops-parity.md](67-azure-devops-parity.md) | 🔄 In progress |
 | Sign in with GitHub, and import a public repo without a ZIP | [67-github-login-import.md](67-github-login-import.md) | ✅ Done |
 | `/createspec` syncs `develop` into the feature branch first | [104-createspec-sync-develop.md](104-createspec-sync-develop.md) | ✅ Done |
+| Migrations apply themselves, or the PR is blocked | [77-auto-apply-migrations.md](77-auto-apply-migrations.md) | 🔄 In progress |

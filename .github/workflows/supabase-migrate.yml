@@ -1,0 +1,53 @@
+name: Supabase migrations
+
+# Applies `supabase/migrations` to the cloud database on the way in, so a merged migration is
+# never a thing someone has to remember to push (spec 77).
+on:
+  push:
+    branches: [develop, main]
+
+# Deliberately no `paths:` filter on `supabase/migrations/**`. Applying is idempotent, so a push
+# with no schema change costs one no-op job — and in exchange every push retries an apply that
+# failed earlier. With a filter, a red apply followed by a fix that touches no SQL would leave the
+# schema behind forever, which is the exact class of problem this workflow exists to remove.
+
+# One apply at a time against the one database: a second run would fight the first for the
+# migration lock. Queued rather than cancelled — a cancelled apply is a half-applied schema.
+concurrency:
+  group: supabase-migrate
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    # Every step in this job is about migrations, so the credentials belong to the job — unlike in
+    # `ci.yml`, nothing here runs third-party code that could read them. `develop` and `main` deploy
+    # against the same project today, so there is one set; a staging database would make it a matrix.
+    # Read as `"$VAR"` inside `run:`, never interpolated into a rendered command line.
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      # The drift script has no dependencies, so there is no install step — Node runs it straight
+      # from the checkout.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # Applies only what is missing, in timestamp order, and resumes from the first unapplied
+      # migration if an earlier run died halfway.
+      - name: Apply migrations
+        run: |
+          supabase link --project-ref "$SUPABASE_PROJECT_ID"
+          supabase db push
+
+      # The proof. `db push` exiting zero says the command ran; this says the database actually
+      # holds every migration the repo does — so a green job means code and schema are in step.
+      # The script links again itself, which is a no-op the second time.
+      - name: Verify the schema is in step with the code
+        run: node scripts/supabase-migration-drift.mjs

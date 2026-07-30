@@ -6,7 +6,7 @@
 
 |                |                                                      |
 | -------------- | ---------------------------------------------------- |
-| **Status**     | ⏳ Not started                                        |
+| **Status**     | 🔄 In progress                                        |
 | **Issue**      | #77 — "Migrationer ska appliceras automatiskt — kod och databas i takt utan manuellt steg" |
 | **Branch**     | `77-auto-apply-migrations` (from `feature/ci-cd`)     |
 | **Feature**    | ci-cd                                                 |
@@ -56,12 +56,29 @@ during `/implement`)._
 
 _The approach we picked, and what we deliberately leave alone._
 
-[NEEDS CLARIFICATION: the shape of the solution is exactly what the issue's open questions decide —
-resolve those in `/clarify` before writing this section.]
+Two GitHub Actions entry points over one shared comparison:
 
-**Not touched:** down-migrations and rollback (a bad migration is fixed by a new one going forward),
-data seeding, and a separate staging database — Production and Preview point at the same Supabase
-project today, and splitting them is its own issue.
+- **Apply on push to `develop` and `main`.** A new workflow links the CLI to the single cloud project
+  and runs `supabase db push`. `develop` is where the schema is genuinely needed first — `dev.airrow.app`
+  runs `develop` code against the *same* Supabase project ([INFRASTRUCTURE_SETUP.md:45-46](../docs/guides/INFRASTRUCTURE_SETUP.md)) —
+  and the `main` run is an idempotent no-op that still guarantees production if the `develop` run was
+  missed or someone merged past it.
+- **Check on every PR.** A step in [.github/workflows/ci.yml](../.github/workflows/ci.yml) runs the same
+  comparison read-only and fails when `supabase/migrations` holds something the linked database does
+  not. Living in `ci.yml` makes it a required status check — it blocks, and nobody has to remember to
+  run it.
+- **The comparison is one script, not two copies of a shell pipeline.** Both entry points shell out to a
+  helper under `scripts/` that parses `supabase migration list --linked` and reports unapplied
+  migrations, which also makes it unit-testable through `pnpm test:scripts` (spec 53) instead of only
+  provable by merging.
+- **No Vercel gate.** Vercel deploys on push and does not listen to our workflows, so the apply job
+  cannot stop it; it runs on the same push and turns red loudly instead.
+
+**Not touched:** the deploy trigger — taking it over (Deploy Hooks +
+`vercel.json: git.deploymentEnabled=false`) would gate the deploy for real, but hands us the trigger for
+*every* branch, previews included; that is its own issue. Also unchanged: down-migrations and rollback
+(a bad migration is fixed by a new one going forward), data seeding, and a separate staging database —
+Production and Preview point at the same Supabase project today, and splitting them is its own issue.
 
 ---
 
@@ -69,38 +86,128 @@ project today, and splitting them is its own issue.
 
 _What "done" means. Every line is something a reviewer can check._
 
-- [ ] A migration merged to `main` is applied to the cloud database automatically, before or together
-      with the Vercel deploy of the code that assumes it.
-      [NEEDS CLARIFICATION: `main` only, or also on `develop`? With one cloud database today `main` is
-      the obvious answer, but then `develop` runs one migration behind.]
+- [ ] A migration merged to `develop` is applied to the cloud database automatically, on that push —
+      so `dev.airrow.app`, which runs `develop` code against the same project, is never a migration
+      behind the code. _(Wired; awaits the first real run — see Implementation notes.)_
+- [ ] The same apply runs on push to `main` and is a green no-op when `develop` already applied it —
+      production is guaranteed even if the `develop` run was missed. _(Wired; awaits first run.)_
 - [ ] Applying is idempotent — re-running the workflow, or running it when the migration is already
-      applied, changes nothing and the job is green.
-- [ ] A failed apply shows up as a red job with a readable error. Never a silent deploy against an old
-      schema.
-- [ ] A PR whose `supabase/migrations` contains something the linked database does not have is flagged
-      **before** merge.
-      [NEEDS CLARIFICATION: where does the check live — a step in `ci.yml` or in `/pr-check`? A `ci.yml`
-      step is a required status check and blocks; `/pr-check` is advisory and only runs when someone
-      runs it.]
-- [ ] Secrets (`SUPABASE_ACCESS_TOKEN`, project ref, DB password) live in GitHub Secrets — never in the
-      repo, never printed in logs.
-- [ ] [docs/guides/INFRASTRUCTURE_SETUP.md](../docs/guides/INFRASTRUCTURE_SETUP.md) describes the new
+      applied, changes nothing and the job is green. _(Wired; awaits first run.)_
+- [x] A failed apply shows up as a red job with a readable error. Never a silent deploy against an old
+      schema. Every failure path names its cause: unapplied migrations are listed by version, a CLI
+      that cannot reach the project reports the exit code and the likely reasons, unreadable output is
+      refused outright, and missing secrets fail on the secret's own name. The parse and verdict paths
+      are covered by tests.
+- [ ] A PR whose `supabase/migrations` contains something the linked database does not have fails a step
+      in `ci.yml` — a required status check, so it blocks the merge rather than advising against it. A PR
+      with no new migration passes without noise. _(Wired; blocked on the three secrets existing.)_
+- [x] Secrets (`SUPABASE_ACCESS_TOKEN`, project ref, DB password) live in GitHub Secrets — never in the
+      repo, never printed in logs. All three are configured on the repo (`gh secret list`). Read as
+      `"$VAR"` inside `run:`, so no value is interpolated into a rendered command line, and in `ci.yml`
+      scoped to the drift step alone so nothing that runs third-party code can reach them. Neither
+      workflow uses `pull_request_target`.
+- [x] [docs/guides/INFRASTRUCTURE_SETUP.md](../docs/guides/INFRASTRUCTURE_SETUP.md) describes the new
       flow in the same change; the manual line does not survive as if it were still the truth
-      (constitution §IV).
-- [ ] The migration invariants hold unchanged: only via `supabase/migrations`, replays cleanly from
-      zero, the schema is never hand-edited in the dashboard.
-- [ ] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures).
+      (constitution §IV). §1's `db push` is now explicitly bootstrap-only, a new
+      _Migrations after the bootstrap_ subsection documents both workflows and the three secrets, and
+      §3's "there is no GitHub Actions workflow" is corrected.
+- [x] The migration invariants hold unchanged: only via `supabase/migrations`, replays cleanly from
+      zero, the schema is never hand-edited in the dashboard. Nothing under `supabase/` was touched;
+      the change only automates the delivery of what is already committed there.
+- [x] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures).
 
 ### Verification
 
 _How each criterion above is proven._
 
-- [NEEDS CLARIFICATION: how is "the migration reached cloud" proven in CI without a throwaway project
-  to run against? Options: `supabase migration list --linked` asserted in the job, a smoke query, or
-  accepting a manual check on the first real merge.]
-- **Regression anchor:** the 2026-07-27 failure is the case to replay — a merged migration that never
-  reached cloud must now either be applied or be loudly red.
+- **The job proves itself.** After `db push`, the workflow asserts `supabase migration list --linked`
+  reports no migration present locally but missing remotely — so a green job means the schema is in
+  step, not merely that the CLI exited zero. No throwaway project is needed; the assertion is against
+  the real linked database.
+- **New tests** — [scripts/supabase-migration-drift.test.mjs](../scripts/supabase-migration-drift.test.mjs),
+  25 cases: in-sync, one unapplied migration, several unapplied, the database ahead of the branch, a
+  header with no rows, output that is not a table, empty output, the format-change guard, the repo's own
+  migration filenames, the credential guard (all missing / one missing / empty-string value / points at
+  the runbook), and fork detection (fork PR, same-repo PR, push event, missing payload). Runs via
+  `pnpm test:scripts`. This is what makes the check testable without CI credentials.
+- **Regression anchor:** the 2026-07-27 failure is the case to replay — feed the parser a listing where
+  `20260727093000_import_digest_version.sql` is local-only and assert it is reported as unapplied. That
+  exact shape was green everywhere before this spec.
+- **PR check** — proven on this spec's own PR: `ci.yml` runs the new step and is green (this branch adds
+  no migration), plus the fixture-level proof above for the failing direction.
 - Full suite result + typecheck/lint status.
+
+---
+
+## Implementation notes
+
+**What shipped** — five files, no application code and no schema change:
+
+1. [scripts/supabase-migration-drift.mjs](../scripts/supabase-migration-drift.mjs) — parses
+   `supabase migration list --linked` and returns a verdict. Only the repo being **ahead** fails; a
+   version the database has that the repo does not is normal on any branch cut before that migration
+   landed, so it warns instead of failing — otherwise every slightly-behind PR would go red for no
+   reason. A guard fails the job when the table parses to zero rows while `supabase/migrations` holds
+   files, so a CLI output-format change surfaces as a loud error rather than a silent "in sync".
+   The script also owns the credential contract — which variables are required, and the fork-PR case —
+   so both workflows are one `run:` line and the awkward parts are unit-testable.
+2. [scripts/supabase-migration-drift.test.mjs](../scripts/supabase-migration-drift.test.mjs) — 25 cases,
+   including the 2026-07-27 listing replayed as a fixture.
+3. [.github/workflows/supabase-migrate.yml](../.github/workflows/supabase-migrate.yml) — push to
+   `develop`/`main` → link → `db push` → assert no drift. Serialized via `concurrency` with
+   `cancel-in-progress: false`: a cancelled apply is a half-applied schema.
+4. [.github/workflows/ci.yml](../.github/workflows/ci.yml) — read-only drift step, last in `verify`,
+   credentials scoped to that step.
+
+**Three decisions worth recording.**
+
+- **A step in `verify`, not its own job.** `verify` is already a required status check, and
+  [scripts/setup-branch-protection.sh](../scripts/setup-branch-protection.sh) enumerates the contexts by
+  hand — a separate job would block nothing until an admin re-ran that script, so the gate would only
+  look real. Placed dead last so the deterministic gates above have all reported before the one step
+  that talks to the network can turn the job red.
+- **No `paths:` filter on the apply workflow.** Applying is idempotent, so a push with no schema change
+  costs a no-op job — and in exchange every push retries an apply that failed earlier. With a filter, a
+  red apply followed by a fix touching no SQL would leave the schema behind indefinitely, which is the
+  exact failure class this spec exists to remove.
+- **Credentials scoped to the step, and the shared wrapper dropped.** The first cut put the three secrets
+  at job level in `ci.yml` and shared a composite action between the workflows. Both had to go together:
+  job-level env made the production DB password readable by `pnpm install` lifecycle scripts and the
+  build, and the composite action depended on that job-level env — a composite action does not reliably
+  inherit `env:` set on the `uses:` step that invokes it, so scoping the credentials down would have
+  broken it. Folding the credential guard and the link into the script fixed both at once and moved the
+  guard somewhere tests can reach it. See _Security_.
+
+**Corrected during review: the repo is public, not private.** The first draft of _Security_ justified
+exposing the credentials to every PR run with "the repo is private and takes no fork PRs". `gh api
+repos/MS-Flow/airrow --jq .visibility` says `public`, with forking allowed. That made two things real: the
+step-level scoping above, and the fork-PR path — GitHub withholds secrets from a fork's `pull_request`
+run, so the check now passes with a warning there instead of failing a contributor's PR for something
+structural.
+
+**Not yet observed end-to-end.** The apply path (`link` → `db push` → assert) has been reviewed but not
+executed — it cannot run locally without pointing at the real production database, which is precisely
+what this spec exists to stop happening by hand. Its first real run is the push that merges it. One thing
+to watch on that run: whether `supabase db push` prompts for confirmation under the CLI version the
+runner installs. It is non-interactive in Actions (no TTY), but if the job hangs or aborts there, the fix
+is an explicit non-interactive flag on that one step.
+
+**Verification run** (2026-07-30, local).
+
+- `pnpm test:scripts` 38 passed (2 files) · `pnpm -r typecheck` clean across all three packages ·
+  `pnpm -r lint` clean · `pnpm -r test` 258 passed / 28 skipped (40 files in `apps/web`, 8 in
+  `packages/engine`, 2 in `packages/schemas`) — **no failures**. The skips are pre-existing.
+- All three workflow files parse, and the step order was checked from the parsed YAML: `checkout` first in
+  both, drift check last in `verify`, credentials present on that step only.
+- The script's four failure paths were run, not just read:
+
+  | Run | Result |
+  | --- | --- |
+  | no credentials | `::error::Saknar SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_ID, SUPABASE_DB_PASSWORD…` exit 1 |
+  | one credential missing | names only that one, exit 1 |
+  | fork-PR event payload | `::warning::Hoppar över migrationskontrollen…` exit **0** |
+  | same-repo + credentials, no CLI | `kommandot \`supabase\` finns inte på PATH…` exit 1 |
+- Repository secrets confirmed present via `gh secret list`: all three.
 
 ---
 
@@ -108,9 +215,31 @@ _How each criterion above is proven._
 
 _The plan, for whoever implements it. Every change grounded in current code; expanded by `/implement`._
 
-[NEEDS CLARIFICATION: fill during `/implement`, once the open questions above are settled. Likely
-touches: a new workflow under `.github/workflows/`, a step in `ci.yml`, and
-`docs/guides/INFRASTRUCTURE_SETUP.md`.]
+1. **`scripts/supabase-migration-drift.mjs`** (new) — owns the whole contract: which credentials are
+   required, the fork-PR case, `supabase link`, then parse `supabase migration list --linked` and report
+   migrations present locally but not remotely. Exits non-zero with a readable list when they drift.
+2. **`scripts/supabase-migration-drift.test.mjs`** (new) — 25 cases, run by `pnpm test:scripts`.
+3. **`.github/workflows/supabase-migrate.yml`** (new) — `on: push: branches: [develop, main]`;
+   `setup-cli` → `link` + `db push` → assert no drift. Credentials at job level: every step is migration
+   work.
+4. **`.github/workflows/ci.yml`** — `setup-cli` plus a read-only drift step, **last** in `verify`
+   ([:91](../.github/workflows/ci.yml#L91)), with the credentials scoped to that step alone. No
+   `db push` here.
+5. **`docs/guides/INFRASTRUCTURE_SETUP.md`** — rewrite the `db push` line at
+   [:25](../docs/guides/INFRASTRUCTURE_SETUP.md#L25) so it reads as the one-time bootstrap it now is, and
+   document the three GitHub Secrets plus the new flow. §3's "there is no GitHub Actions workflow"
+   ([:65](../docs/guides/INFRASTRUCTURE_SETUP.md#L65)) becomes wrong on merge and must be corrected in the
+   same change (constitution §IV).
+
+**No change needed:** `supabase/migrations` itself, the branch-policy / issue-housekeeping workflows, and
+`scripts/setup-branch-protection.sh` — the drift check is a step inside the existing `verify` context, so
+no new required status check has to be registered.
+
+**Considered and dropped:** a composite action wrapping `setup-cli` + credential guard + `link`, shared by
+both workflows. It reads credentials from the job environment, which is exactly what the step-level
+scoping above removes — and a composite action does not reliably inherit `env:` set on the `uses:` step
+that calls it. Moving the same logic into the script instead removed the duplication *and* made the
+credential guard unit-testable, so the wrapper had nothing left to do.
 
 ---
 
@@ -123,11 +252,25 @@ The constitution's data invariants are the thing being enforced, not amended.
 
 ## Security
 
-This puts database credentials into CI: a `SUPABASE_ACCESS_TOKEN` (and project ref / DB password) able
-to alter the production schema. They belong in GitHub Secrets, must never be echoed, and the workflow
-must not run on `pull_request_target` or any trigger where a fork's code could reach them.
-[NEEDS CLARIFICATION: does the apply job need the DB password, or is the access token + project ref
-enough for `supabase db push`?]
+This puts credentials able to alter the production schema into CI. Three secrets are needed, not two:
+`SUPABASE_ACCESS_TOKEN` and the project ref authenticate `supabase link` against the Management API, but
+`supabase db push` opens a direct Postgres connection and therefore also needs `SUPABASE_DB_PASSWORD` —
+the drift check reads the same connection, so it carries them too. All three live in GitHub Secrets and
+are read as `"$VAR"` inside `run:`, never interpolated into a rendered command line where the value would
+land in the log. Neither workflow uses `pull_request_target`, which would run our secrets against a
+fork's code.
+
+**Scoped to the step, not the job.** In `ci.yml` the three variables are declared on the drift step
+alone. The rest of `verify` runs third-party code — `pnpm install` lifecycle scripts, the production
+build — and none of it has any business being able to read the production database password. In
+`supabase-migrate.yml` they sit at job level, because every step in that job is the migration.
+
+**The repo is public** (`gh api repos/MS-Flow/airrow --jq .visibility` → `public`, forking allowed), so
+fork PRs are a real case rather than a theoretical one. GitHub withholds secrets from a fork's
+`pull_request` run by design, which cuts both ways: an outside PR cannot exfiltrate anything, and it also
+cannot run the check. So the script detects a fork PR from the event payload and passes with a warning,
+rather than failing a contributor's PR for something structural. A **same-repo** run with a missing
+credential still fails hard — that is a misconfigured repo, not an impossible one.
 
 ---
 
@@ -141,9 +284,21 @@ _Unusual inputs or states, and what should happen._
   unapplied migration rather than replaying applied ones.
 - **A PR with no migration at all** → the check passes silently, no noise on the vast majority of PRs.
 - **Merge to `main` that contains no schema change** → nothing runs, or runs and does nothing.
-- [NEEDS CLARIFICATION: should a failed migration be able to **stop** the Vercel deploy? Vercel triggers
-  on push and does not listen to our workflows, so a real gate means taking over the deploy trigger
-  (Deploy Hooks + `vercel.json: git.deploymentEnabled=false`) — a meaningfully bigger change.]
+- **A migration applied on `develop`, then merged to `main`** → the `main` run finds nothing to do and is
+  green. This is the normal path, not an exception.
+- **The apply fails but Vercel deploys anyway** → accepted and deliberate: the job is red and the failure
+  is visible, but nothing blocks the deploy. Gating it would mean owning the deploy trigger for every
+  branch (Deploy Hooks + `vercel.json: git.deploymentEnabled=false`) — out of scope here.
+- **Secrets missing on a same-repo run, or the Supabase project paused** (free tier pauses after ~a week
+  of inactivity, [INFRASTRUCTURE_SETUP.md:128](../docs/guides/INFRASTRUCTURE_SETUP.md)) → red with a
+  readable error naming the cause — every missing variable at once, not just the first — never a green
+  skip that looks like "in sync".
+- **A pull request from a fork** → GitHub withholds secrets from it by design, so the check cannot run.
+  Passes with a `::warning::` saying so and naming when it will be checked instead (push to
+  `develop`/`main`). The one deliberate green skip, and only because it is structurally impossible rather
+  than misconfigured.
+- **The Supabase CLI missing from the runner** → names that specifically ("`supabase` finns inte på
+  PATH — saknas steget som installerar CLI:n?") rather than reporting an unknown exit code.
 
 ---
 
