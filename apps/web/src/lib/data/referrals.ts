@@ -9,7 +9,7 @@
 // (specs 99, 100); a grant is a second, independent answer to "is this organization Pro", and the two
 // are combined only where an entitlement is decided.
 import crypto from "node:crypto";
-import { db, maybe, rows, single } from "./supabase";
+import { db, rows, single } from "./supabase";
 import { countGenerations } from "./store";
 
 /** How long one invitation is worth. */
@@ -27,6 +27,39 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Postgres unique violation — the outcome we *want* from the idempotence constraints below. */
 const UNIQUE_VIOLATION = "23505";
+
+type SupabaseError = { message: string; code?: string };
+
+/**
+ * Tables this code knows about and the database does not — a deployment running ahead of its
+ * migrations.
+ *
+ * The same failure `isMissingColumn` handles in `store.ts`, one level coarser, and it is here for the
+ * same reason: that helper exists because a database behind one migration used to take down the
+ * project list and the interview screen, which are the screens whose only job is to *tell* a founder
+ * where they stand. Referrals reach further — Settings, the import screen and the delivery screen all
+ * read them — so an unmigrated database would have broken more, not less.
+ *
+ * PostgREST answers `PGRST205` from its schema cache; Postgres itself reports `42P01`. Either way the
+ * honest answer is that nobody has any invitations yet, which is exactly what an empty read means.
+ */
+function isMissingTable(error: SupabaseError): boolean {
+  return error.code === "PGRST205" || error.code === "42P01";
+}
+
+/**
+ * `rows`, with one extra outcome: **null** when the tables are not there yet.
+ *
+ * Distinct from `[]` on purpose — "this workspace has no invitations" and "this deployment has no
+ * invitations feature" look the same to a query and read very differently on a screen.
+ */
+function rowsOrAbsent<T>(res: { data: T[] | null; error: SupabaseError | null }): T[] | null {
+  if (res.error) {
+    if (isMissingTable(res.error)) return null;
+    throw new Error(`Supabase: ${res.error.message}`);
+  }
+  return res.data ?? [];
+}
 
 /** Where an invited workspace has got to, for the inviter's own list. */
 export interface InviteStanding {
@@ -70,10 +103,12 @@ interface GrantRow {
  * `randomBytes` rather than a counter or a slug: the code is the only thing standing between a
  * stranger and a referral attached to someone else's workspace, so it is 80 bits of nothing.
  */
-export async function referralCode(orgId: string): Promise<string> {
-  const existing = maybe<{ code: string }>(
-    await db().from("referral_codes").select("code").eq("organization_id", orgId).maybeSingle()
+export async function referralCode(orgId: string): Promise<string | null> {
+  const found = rowsOrAbsent<{ code: string }>(
+    await db().from("referral_codes").select("code").eq("organization_id", orgId)
   );
+  if (found === null) return null;
+  const existing = found[0];
   if (existing) return existing.code;
 
   const code = crypto.randomBytes(10).toString("base64url");
@@ -104,9 +139,10 @@ export async function referralCode(orgId: string): Promise<string> {
  * duplicate confirmation clicks this is most likely to see.
  */
 export async function attachReferral(code: string, referredOrgId: string): Promise<boolean> {
-  const owner = maybe<{ organization_id: string }>(
-    await db().from("referral_codes").select("organization_id").eq("code", code).maybeSingle()
+  const owners = rowsOrAbsent<{ organization_id: string }>(
+    await db().from("referral_codes").select("organization_id").eq("code", code)
   );
+  const owner = owners?.[0];
   if (!owner) return false;
 
   const insert = await db().from("referrals").insert({
@@ -131,14 +167,14 @@ export async function attachReferral(code: string, referredOrgId: string): Promi
  * our side earns nobody a week.
  */
 export async function matureReferral(orgId: string, now: Date = new Date()): Promise<void> {
-  const referral = maybe<{ id: string; referrer_organization_id: string }>(
+  const pending = rowsOrAbsent<{ id: string; referrer_organization_id: string }>(
     await db()
       .from("referrals")
       .select("id, referrer_organization_id")
       .eq("referred_organization_id", orgId)
       .is("matured_at", null)
-      .maybeSingle()
   );
+  const referral = pending?.[0];
   if (!referral) return;
   if ((await countGenerations(orgId)) === 0) return;
 
@@ -175,9 +211,12 @@ export async function matureReferral(orgId: string, now: Date = new Date()): Pro
   if (update.error) throw new Error(`Supabase: ${update.error.message}`);
 }
 
-/** Grants for an organization, newest last — the order a queue is consumed in. */
-async function grantsFor(orgId: string): Promise<GrantRow[]> {
-  return rows<GrantRow>(
+/**
+ * Grants for an organization, newest last — the order a queue is consumed in. Null while the table
+ * does not exist yet.
+ */
+async function grantsFor(orgId: string): Promise<GrantRow[] | null> {
+  return rowsOrAbsent<GrantRow>(
     await db()
       .from("plan_grants")
       .select("id, starts_at, expires_at, created_at")
@@ -200,7 +239,9 @@ function isActive(grant: GrantRow, now: Date): boolean {
  * their projects.
  */
 export async function grantStanding(orgId: string, now: Date = new Date()): Promise<GrantStanding> {
-  const grants = await grantsFor(orgId);
+  // A deployment whose database has not run this spec's migration has no grants, which is the truth
+  // and is also the only answer that keeps the projects list and the interview screen on their feet.
+  const grants = (await grantsFor(orgId)) ?? [];
   return {
     activeUntil: grants.find((g) => isActive(g, now))?.expires_at ?? null,
     queued: grants.filter((g) => g.starts_at === null).length
@@ -222,6 +263,7 @@ export async function grantStanding(orgId: string, now: Date = new Date()): Prom
  */
 export async function claimPro(orgId: string, now: Date = new Date()): Promise<string | null> {
   const grants = await grantsFor(orgId);
+  if (grants === null) return null;
 
   const running = grants.find((g) => isActive(g, now));
   if (running?.expires_at) return running.expires_at;
@@ -243,7 +285,7 @@ export async function claimPro(orgId: string, now: Date = new Date()): Promise<s
   if (started[0]) return started[0].expires_at;
 
   // Somebody else started this week between the read and the write. Theirs is the one that counts.
-  const reread = await grantsFor(orgId);
+  const reread = (await grantsFor(orgId)) ?? [];
   return reread.find((g) => isActive(g, now))?.expires_at ?? null;
 }
 
@@ -253,8 +295,14 @@ export async function claimPro(orgId: string, now: Date = new Date()): Promise<s
  * Deliberately a separate function from `claimPro` rather than a flag on it: one of these two is safe
  * to call from a page render and the other is not, and a boolean argument is a poor place to keep a
  * distinction that matters this much.
+ *
+ * **Null** while the database is behind this spec's migration. Callers render nothing rather than an
+ * error: a founder whose Settings page will not load has a bigger problem than a missing invite card.
  */
-export async function referralSummary(orgId: string, now: Date = new Date()): Promise<ReferralSummary> {
+export async function referralSummary(
+  orgId: string,
+  now: Date = new Date()
+): Promise<ReferralSummary | null> {
   const sentQuery = db()
     .from("referrals")
     .select("attached_at, matured_at, plan_grant_id")
@@ -266,9 +314,12 @@ export async function referralSummary(orgId: string, now: Date = new Date()): Pr
     sentQuery,
     grantsFor(orgId)
   ]);
-  const sent = rows<{ attached_at: string; matured_at: string | null; plan_grant_id: string | null }>(
-    sentResult
-  );
+  const sent = rowsOrAbsent<{
+    attached_at: string;
+    matured_at: string | null;
+    plan_grant_id: string | null;
+  }>(sentResult);
+  if (code === null || sent === null || grants === null) return null;
 
   const credited = sent.filter((r) => r.plan_grant_id !== null).length;
 

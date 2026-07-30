@@ -65,8 +65,10 @@ export default async function SettingsPage({
   // Read-only, and the invite code is created here on first visit. Starting a *week* from a page
   // render would be wrong; minting a link when the founder is looking at where to find it is exactly
   // when it should exist (spec 122).
+  // Null on a deployment whose database has not run the referrals migration yet; the card is then
+  // simply absent rather than the page being a 500 (spec 122).
   const referral = await referralSummary(org.id);
-  const inviteLink = `${await requestOrigin()}/invite/${referral.code}`;
+  const inviteLink = referral ? `${await requestOrigin()}/invite/${referral.code}` : null;
   const intervals = stripePrices().map((p) => p.interval);
   const github = await githubIdentity();
   const githubConfigured = Boolean(process.env.GITHUB_APP_ID && process.env.GITHUB_APP_PRIVATE_KEY);
@@ -151,7 +153,7 @@ export default async function SettingsPage({
               </p>
               {/* A week is not a subscription and must never be dressed as one: there is no card
                   behind it, nothing renews, and Stripe has never heard of it (spec 122). */}
-              {allowance.allowed && allowance.grant === "referral" && referral.activeUntil ? (
+              {allowance.allowed && allowance.grant === "referral" && referral?.activeUntil ? (
                 <p className="mt-1.5 max-w-prose text-xs leading-relaxed text-fg-faint">
                   This is a week from an invitation, not a subscription — nothing is being charged and
                   nothing renews. It runs until {referral.activeUntil.slice(0, 10)}, and everything
@@ -203,7 +205,7 @@ export default async function SettingsPage({
         </CardBody>
       </Card>
 
-      <InviteCard summary={referral} link={inviteLink} />
+      {referral && inviteLink ? <InviteCard summary={referral} link={inviteLink} /> : null}
 
       <Card className="mt-4">
         <CardHeader>

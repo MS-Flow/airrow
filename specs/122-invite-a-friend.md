@@ -187,6 +187,22 @@ and timing-dependent under a loaded jsdom; not investigated here, and worth its 
 delivery-screen line — were ticked on a reading of the code, with no test behind either. Both now have
 one; the counts above are after that.
 
+**A bug found after `/analyze`, in the first minute of real use.** A dev server pointed at the hosted
+project — which will not have this migration until the PR chain merges and `supabase-migrate.yml` runs —
+answered `Could not find the table 'public.plan_grants' in the schema cache`, and **Settings would not
+load at all**. The projects list, the interview screen, the import screen and the delivery screen would
+all have gone the same way, because every one of them reads referrals now.
+
+This is the failure `isMissingColumn` in [`store.ts`](../apps/web/src/lib/data/store.ts) already exists
+to prevent at column granularity, and its comment says so in as many words: a database one migration
+behind used to take down the very screens whose job is to *tell* a founder where they stand. The fix is
+the same shape one level coarser — `isMissingTable` plus `rowsOrAbsent`, which distinguishes "this
+workspace has no invitations" (`[]`) from "this deployment has no invitations feature" (`null`). Six
+regression tests in `referrals.test.ts`, one page-level test in `settings/page.test.tsx`, and the
+tolerance is deliberately narrow: a connection error still throws.
+
+Final counts after the fix: `pnpm -r test` **522 passed, 0 skipped, 0 failed**; typecheck and lint clean.
+
 ---
 
 ## Exact changes (file:line)
@@ -304,6 +320,10 @@ if every other guard is bypassed.
 - **Inviter's account is deleted** → grants and referrals go with the organization; nothing is orphaned.
 - **Link clicked by someone who is already signed in** → no attachment, no error page; they are simply
   sent on to their workspace.
+- **The database has not run this migration yet** → every read answers "no invitations" rather than
+  failing. `referralSummary` is null and the card and the delivery-screen line are absent; `claimPro`
+  grants nothing, so the free ceiling applies exactly as before. Only a missing *table*
+  (`PGRST205`/`42P01`) is tolerated — any other fault still throws.
 
 ---
 

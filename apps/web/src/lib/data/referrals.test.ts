@@ -27,6 +27,12 @@ function tableRows(name: string): Row[] {
 }
 
 let nextId = 0;
+
+/** Answer every query the way PostgREST does when the migration has not been applied. */
+let missingTables = false;
+/** Or with some other fault entirely, to prove the tolerance above is not a blanket catch. */
+let brokenWith: { message: string; code?: string } | null = null;
+
 const countGenerations = vi.hoisted(() => vi.fn(async () => 1));
 
 vi.mock("./store", () => ({ countGenerations }));
@@ -55,6 +61,18 @@ function makeChain(table: string) {
   let updateValues: Row | null = null;
   let projection: string[] = [];
   let orderBy: string | null = null;
+
+  /** What PostgREST answers with instead of rows, when it answers with a fault. */
+  const fault = (): { message: string; code?: string } | null => {
+    if (brokenWith) return brokenWith;
+    if (missingTables) {
+      return {
+        message: `Could not find the table 'public.${table}' in the schema cache`,
+        code: "PGRST205"
+      };
+    }
+    return null;
+  };
 
   const rowsFor = (): Row[] => {
     // Filters are applied here rather than when `update` is called: PostgREST builds the whole
@@ -112,14 +130,20 @@ function makeChain(table: string) {
       return chain;
     },
     single() {
+      const error = fault();
+      if (error) return Promise.resolve({ data: null, error });
       const found = rowsFor()[0];
       return Promise.resolve(found ? { data: found, error: null } : { data: null, error: null });
     },
     maybeSingle() {
+      const error = fault();
+      if (error) return Promise.resolve({ data: null, error });
       return Promise.resolve({ data: rowsFor()[0] ?? null, error: null });
     },
     then(onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) {
-      return Promise.resolve({ data: rowsFor(), error: null }).then(onFulfilled, onRejected);
+      const error = fault();
+      const result = error ? { data: null, error } : { data: rowsFor(), error: null };
+      return Promise.resolve(result).then(onFulfilled, onRejected);
     }
   };
   return chain;
@@ -128,6 +152,7 @@ function makeChain(table: string) {
 const {
   REFERRAL_CAP,
   REFERRAL_GRANT_DAYS,
+  attachReferral,
   claimPro,
   grantStanding,
   matureReferral,
@@ -158,6 +183,8 @@ beforeEach(() => {
   tables.referrals = [];
   tables.plan_grants = [];
   nextId = 0;
+  missingTables = false;
+  brokenWith = null;
   countGenerations.mockResolvedValue(1);
 });
 
@@ -295,9 +322,55 @@ describe("the invite card's summary", () => {
 
     const summary = await referralSummary(INVITER, NOW);
 
-    expect(summary.credited).toBe(1);
-    expect(summary.remaining).toBe(REFERRAL_CAP - 1);
-    expect(summary.invites.map((i) => i.state)).toEqual(["generated", "joined"]);
-    expect(summary.code).toHaveLength(14);
+    expect(summary?.credited).toBe(1);
+    expect(summary?.remaining).toBe(REFERRAL_CAP - 1);
+    expect(summary?.invites.map((i) => i.state)).toEqual(["generated", "joined"]);
+    expect(summary?.code).toHaveLength(14);
+  });
+});
+
+/* ── A database behind its migrations ──────────────────────────────────────
+ *
+ * The regression this exists for was real and immediate: a dev server pointed at a project that had
+ * not run the referrals migration answered `Could not find the table 'public.plan_grants' in the
+ * schema cache`, and Settings died on it — as would the projects list, the interview screen, the
+ * import screen and the delivery screen, because all five read referrals now.
+ *
+ * `store.ts` already learned this lesson at column granularity (`isMissingColumn`). These are the same
+ * lesson at table granularity: a missing feature reads as "nobody has any invitations", never as a
+ * failure, because the screens that would break are the ones whose only job is to tell a founder where
+ * they stand.
+ */
+describe("when the tables do not exist yet", () => {
+  beforeEach(() => {
+    missingTables = true;
+  });
+
+  it("reports no earned weeks instead of throwing", async () => {
+    await expect(grantStanding(INVITER, NOW)).resolves.toEqual({ activeUntil: null, queued: 0 });
+  });
+
+  it("grants nothing, so the free ceiling still applies", async () => {
+    await expect(claimPro(INVITER, NOW)).resolves.toBeNull();
+  });
+
+  it("has no summary to show, rather than a broken page", async () => {
+    await expect(referralSummary(INVITER, NOW)).resolves.toBeNull();
+  });
+
+  it("attaches nothing, and does not break the signup asking", async () => {
+    await expect(attachReferral("some-code", INVITED)).resolves.toBe(false);
+  });
+
+  it("credits nothing, and does not fail the generation that finished", async () => {
+    await expect(matureReferral(INVITED, NOW)).resolves.toBeUndefined();
+  });
+
+  it("still throws on an error that is not a missing table", async () => {
+    // The tolerance is narrow on purpose: a real fault must not be read as "no invitations".
+    missingTables = false;
+    brokenWith = { message: "connection reset", code: "08006" };
+
+    await expect(grantStanding(INVITER, NOW)).rejects.toThrow(/connection reset/);
   });
 });

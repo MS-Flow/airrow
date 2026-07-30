@@ -23,8 +23,10 @@ export default async function ContinuePage({ params }: { params: Promise<{ id: s
   const slug = project.slug;
   // The one moment a founder has just seen what Airrow made them, which is when recommending it is a
   // natural thing to do rather than an ask (spec 122). Read-only: nothing here starts a week.
+  // Null while the database is behind the referrals migration — the handoff below is the point of this
+  // screen and must not depend on an aside being available.
   const referral = await referralSummary(org.id);
-  const inviteLink = `${await requestOrigin()}/invite/${referral.code}`;
+  const inviteLink = referral ? `${await requestOrigin()}/invite/${referral.code}` : null;
   const isGh = model?.stack.repoProvider !== "azure_devops";
 
   const remote = isGh
@@ -92,7 +94,7 @@ export default async function ContinuePage({ params }: { params: Promise<{ id: s
 
       {/* One line, and only while there is something in it for them. A founder who has used all
           three places has already done more than enough recommending. */}
-      {referral.remaining > 0 ? (
+      {referral && inviteLink && referral.remaining > 0 ? (
         <div className="mt-10 border-t border-border pt-6">
           <p className="text-sm leading-relaxed text-fg-muted">
             Know another founder starting something? Send them this — when they generate their first

@@ -59,10 +59,15 @@ const referral = vi.hoisted(
     current: { activeUntil: null, queued: 0, remaining: 3 }
   })
 );
+/** Null is what a database behind the referrals migration produces (spec 122). */
+const referralsInstalled = vi.hoisted((): { current: boolean } => ({ current: true }));
 vi.mock("@/lib/data/referrals", () => ({
   REFERRAL_CAP: 3,
   REFERRAL_GRANT_DAYS: 7,
-  referralSummary: async () => ({ code: "invite-code", invites: [], credited: 0, ...referral.current })
+  referralSummary: async () =>
+    referralsInstalled.current
+      ? { code: "invite-code", invites: [], credited: 0, ...referral.current }
+      : null
 }));
 vi.mock("@/lib/site-url", () => ({ requestOrigin: async () => "https://airrow.test" }));
 
@@ -177,6 +182,22 @@ describe("Settings — invitations", () => {
     expect(screen.getByText(/runs until 2026-08-08/i)).toBeInTheDocument();
     expect(screen.queryByText(/renews automatically/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /manage billing/i })).not.toBeInTheDocument();
+  });
+
+  it("still renders the page when the database has never heard of referrals", async () => {
+    // The regression: a dev server pointed at a project without the migration answered "Could not
+    // find the table 'public.plan_grants' in the schema cache" and Settings died on it. An absent
+    // card is a missing aside; an unloadable Settings page is somebody unable to manage their billing.
+    plan.current = "free";
+    onEarnedWeek.current = false;
+    referralsInstalled.current = false;
+    render(await settings());
+
+    expect(screen.getByText("Settings")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^plan$/i })).toBeInTheDocument();
+    expect(screen.queryByText(/invite a friend/i)).not.toBeInTheDocument();
+
+    referralsInstalled.current = true;
   });
 
   it("says a waiting week is not counting down yet", async () => {
