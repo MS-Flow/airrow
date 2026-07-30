@@ -165,6 +165,8 @@ _What "done" means. Every line is something a reviewer can check._
 - [x] The reconciliation applies a *cancellation* as readily as a purchase — it is a sync, not an
       upgrade button in disguise.
 - [x] Settings never claims a plan the database does not hold.
+- [x] The plan card distinguishes renewing, cancelled, trialing, failed payment, paused and ended —
+      and names the date each of them turns on. A cancelled subscription never reads as renewing.
 - [x] A misconfigured or unreachable Stripe degrades to the honest disabled state and a named
       variable in the log, never to a crash on the button a founder pressed to pay.
 - [x] Going live is a written checklist, not folklore: live keys, live price, live webhook endpoint,
@@ -471,6 +473,24 @@ What that bought, in order of how much it matters:
 arrive when nobody is looking at a screen, and no sync runs then. What changed is that it is no longer
 the *only* way a payment can become a plan.
 
+**7. And the plan card still said "Renews automatically" to someone who had just cancelled.** Stripe
+keeps a cancelled subscription `active` until the last day of the paid period, so reading the status
+alone never had the answer — the flag beside it does, and the card was reading the wrong one first.
+The row was stale on top of that, for the same reason as everything else in this section: the
+`customer.subscription.updated` event had nowhere to land.
+
+- **`features/billing/plan-standing.ts`** — one derivation of where a paid workspace stands, from all
+  three fields Stripe gives us. `cancelAtPeriodEnd` is checked *before* the status, which is the whole
+  bug. Cancelled, Trial, Payment failed, Paused, Ended, Not started and Renews each say what happens
+  next and when, and a status Stripe has not invented yet promises nothing about money. Pure, so the
+  wording is tested without a database or a browser (10 tests).
+- **The billing portal returns through the reconciliation too** (`?from=portal`), so a cancellation is
+  visible the moment the founder comes back rather than whenever a webhook manages to arrive. That
+  return says "Updated from Stripe" rather than "Payment confirmed" — greeting someone who just
+  cancelled with a payment confirmation is the same class of mistake as §5.
+- **"Check again" is offered on Pro as well**, beside Manage billing. Being stale is not a state that
+  only free organizations get to be in.
+
 **Going live is now written down.** `INFRASTRUCTURE_SETUP.md` §6 covers what test mode does not carry
 over — live product and price, live keys, a live webhook endpoint and its own signing secret, the
 customer portal Stripe requires you to switch on before `Manage billing` works — plus the two things
@@ -485,7 +505,7 @@ pnpm -r typecheck   Done — clean across schemas, engine, web
 pnpm -r lint        Done — no new issues
 pnpm -r test        schemas   35 passed
                     engine   219 passed
-                    web      407 passed (56 files)
+                    web      418 passed (57 files)
 pnpm test:scripts     13 passed
 pnpm build          Done
 ```
@@ -505,7 +525,9 @@ the organization that has been to Checkout and is still on free; `features/billi
 the reconciliation grants from what Stripe reports, applies a cancellation the same way, prefers a paid
 subscription over an abandoned attempt, writes nothing when there is nothing to write, and reports
 rather than throws when Stripe is unreachable; `features/billing/actions.test.ts` (+1) — Checkout
-returns through the reconciling route rather than straight to Settings.
+returns through the reconciling route rather than straight to Settings;
+`features/billing/plan-standing.test.ts` (10) — every state a paid workspace can be in, including the
+one that started it: a cancelled subscription must never read as renewing.
 
 ---
 

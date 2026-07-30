@@ -62,9 +62,9 @@ export function UpgradeButtons({ intervals }: { intervals: string[] }) {
  * A plain form posting a server action rather than another `useActionState` pair: this one has
  * nothing to report back, it redirects, and the plan it changes is read by the whole shell.
  */
-export function RefreshPlanButton() {
+export function RefreshPlanButton({ className = "mt-3" }: { className?: string }) {
   return (
-    <form action={refreshPlanAction} className="mt-3">
+    <form action={refreshPlanAction} className={className}>
       <SubmitButton size="sm" variant="secondary" pendingLabel="Checking with Stripe…">
         Already paid? Check again
       </SubmitButton>

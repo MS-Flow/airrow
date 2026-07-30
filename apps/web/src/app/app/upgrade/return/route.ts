@@ -18,6 +18,11 @@ import { requireSession } from "@/lib/auth";
 export async function GET(req: Request) {
   const { org } = await requireSession();
   await syncPlanFromStripe(org.id);
-  // Settings reads the plan again for itself; `upgraded=1` only tells it where the founder came from.
-  return NextResponse.redirect(new URL("/app/settings?upgraded=1", req.url));
+
+  // Where they came from changes only what Settings *says*, never what was written. Someone returning
+  // from the billing portal may have just cancelled, so greeting them with "Payment confirmed" would
+  // be the same class of mistake this route exists to fix.
+  const from = new URL(req.url).searchParams.get("from");
+  const target = from === "portal" ? "/app/settings?refreshed=1" : "/app/settings?upgraded=1";
+  return NextResponse.redirect(new URL(target, req.url));
 }

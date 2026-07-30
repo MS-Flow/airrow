@@ -32,7 +32,11 @@ vi.mock("@/features/generation/allowance", () => ({
   FREE_GENERATION_LIMIT: 1,
   FREE_REPAIR_LIMIT: 2,
   REPAIR_WINDOW_HOURS: 24,
-  checkAllowance: async () => ({ allowed: true, unlimited: false, used: 0, remaining: 1 })
+  // Follows the plan, the way the real one does: Pro is what makes the card render its billing half.
+  checkAllowance: async () =>
+    plan.current === "pro"
+      ? { allowed: true, plan: "pro", grant: "pro", unlimited: true, used: 3, remaining: Infinity }
+      : { allowed: true, plan: "free", grant: "free", unlimited: false, used: 0, remaining: 1 }
 }));
 vi.mock("@/features/auth/actions", () => ({ signInWithGitHubAction: vi.fn() }));
 
@@ -77,6 +81,25 @@ describe("Settings — coming back from Checkout", () => {
     render(await settings());
 
     expect(screen.getByRole("button", { name: /already paid\? check again/i })).toBeEnabled();
+  });
+
+  it("tells a Pro founder who cancelled that it is ending, not that it renews", async () => {
+    plan.current = "pro";
+    customer.current = {
+      organizationId: "o1",
+      customerId: "cus_1",
+      subscriptionId: "sub_1",
+      status: "active",
+      currentPeriodEnd: "2026-08-30T09:00:00.000Z",
+      cancelAtPeriodEnd: true
+    };
+    render(await settings({}));
+
+    expect(screen.getByText("Cancelled")).toBeInTheDocument();
+    expect(screen.getByText(/runs until 2026-08-30 and does not renew/i)).toBeInTheDocument();
+    expect(screen.queryByText(/renews automatically/i)).not.toBeInTheDocument();
+    // And a way to make the page agree with Stripe without waiting for a webhook.
+    expect(screen.getByRole("button", { name: /check again/i })).toBeEnabled();
   });
 
   it("does not offer it to someone who has never started a payment", async () => {

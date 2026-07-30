@@ -25,6 +25,7 @@ import {
   RefreshPlanButton,
   UpgradeButtons
 } from "@/features/billing/BillingActions";
+import { PLAN_BADGE_TONE, planStanding } from "@/features/billing/plan-standing";
 import { githubIdentity, requireSession, updateName } from "@/lib/auth";
 import { getSubscription } from "@/lib/data/store";
 import { stripeConfigured, stripePrices } from "@/lib/stripe";
@@ -52,6 +53,7 @@ export default async function SettingsPage({
   // Read whatever the plan, not only on Pro: a founder who paid and is still on free has a customer
   // record, and that record is what makes "check again" worth offering them.
   const subscription = await getSubscription(org.id);
+  const standing = subscription ? planStanding(subscription) : null;
   const intervals = stripePrices().map((p) => p.interval);
   const github = await githubIdentity();
   const githubConfigured = Boolean(process.env.GITHUB_APP_ID && process.env.GITHUB_APP_PRIVATE_KEY);
@@ -110,7 +112,12 @@ export default async function SettingsPage({
               assumed. */}
           {upgraded || refreshed ? (
             org.plan === "pro" ? (
-              <p className="mb-4 text-sm text-success">Payment confirmed. You&rsquo;re on Pro.</p>
+              // "Payment confirmed" is only true of a founder who just paid. Coming back from the
+              // billing portal they may have just done the opposite, so that path says the neutral
+              // thing and lets the standing below carry the meaning.
+              <p className="mb-4 text-sm text-success">
+                {upgraded ? "Payment confirmed. You're on Pro." : "Updated from Stripe."}
+              </p>
             ) : (
               <Notice title="Stripe has no paid subscription for this workspace" className="mb-4" role="status">
                 We asked Stripe directly and it reports nothing active here yet. A payment taken
@@ -129,17 +136,20 @@ export default async function SettingsPage({
                 </span>{" "}
                 · unlimited generations. {allowance.used} used so far.
               </p>
-              {subscription && org.plan === "pro" ? (
+              {subscription && standing && org.plan === "pro" ? (
                 <>
-                  <p className="mt-1.5 text-xs text-fg-faint">
-                    {subscription.cancelAtPeriodEnd
-                      ? "Cancelled — Pro runs until the end of the period you've paid for."
-                      : "Renews automatically."}
-                    {subscription.currentPeriodEnd
-                      ? ` Current period ends ${subscription.currentPeriodEnd.slice(0, 10)}.`
-                      : ""}
+                  {/* The state, then what happens next and when. Both derived from the subscription
+                      as last reconciled with Stripe — never from which button was pressed. */}
+                  <Badge tone={PLAN_BADGE_TONE[standing.tone]} className="mt-3">
+                    {standing.label}
+                  </Badge>
+                  <p className="mt-2 max-w-prose text-xs leading-relaxed text-fg-faint">
+                    {standing.detail}
                   </p>
-                  <ManageBillingButton />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ManageBillingButton />
+                    <RefreshPlanButton className="mt-4" />
+                  </div>
                 </>
               ) : null}
             </>

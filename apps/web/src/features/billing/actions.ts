@@ -157,7 +157,10 @@ export async function openBillingPortalAction(): Promise<BillingRedirect> {
   return fromStripe("billing portal", async () =>
     stripe().billingPortal.sessions.create({
       customer: subscription.customerId,
-      return_url: `${await origin()}/app/settings`
+      // Back through the same reconciliation Checkout returns through. Someone who has just cancelled
+      // in the portal must not land on a page still telling them it renews automatically — the change
+      // happened at Stripe, and only Stripe can be asked what it was.
+      return_url: `${await origin()}/app/upgrade/return?from=portal`
     })
   );
 }
