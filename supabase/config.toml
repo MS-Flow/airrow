@@ -261,7 +261,7 @@ otp_expiry = 3600
 # admin_email = "noreply@airrow.app"
 # sender_name = "Airrow"
 
-# The confirmation email, versioned in the repo. `scripts/sync-auth-email-templates.mjs` pushes the
+# The confirmation email, versioned in the repo. `scripts/sync-supabase-auth.mjs` pushes the
 # same file to the hosted project, so the dashboard copy is derived rather than maintained — the
 # lesson spec 77 paid for.
 [auth.email.template.confirmation]

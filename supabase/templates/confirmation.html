@@ -1,7 +1,7 @@
 <!--
   The signup confirmation email (spec 113). This file is the source of truth: the local stack reads it
   through `[auth.email.template.confirmation]` in supabase/config.toml, and
-  `scripts/sync-auth-email-templates.mjs` pushes it to the hosted project. Do not edit the copy in the
+  `scripts/sync-supabase-auth.mjs` pushes it to the hosted project. Do not edit the copy in the
   Supabase dashboard — it is derived from here and the script will overwrite it.
 
   Supabase substitutes {{ .ConfirmationURL }}. Nothing else here is interpolated, and nothing

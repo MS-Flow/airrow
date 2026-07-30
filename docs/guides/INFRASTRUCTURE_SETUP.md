@@ -191,44 +191,40 @@ real traffic. Spec 113 replaces it with Resend over plain SMTP.
    or the DNS provider if it moves. Wait for Resend to report the domain **Verified**; mail sent before
    that is likely to be filed as spam.
 3. **Create an API key** (Resend → **API keys**) with send permission only.
-4. **Point Supabase at it** — dashboard → _Project Settings → Authentication → SMTP Settings_:
-
-   | Field | Value |
-   | --- | --- |
-   | Host | `smtp.resend.com` |
-   | Port | `587` |
-   | Username | `resend` |
-   | Password | the Resend API key |
-   | Sender email | `noreply@airrow.app` |
-   | Sender name | `Airrow` |
-
-   This dashboard form is the only place these values are active. The same block sits **commented out**
-   in [`supabase/config.toml`](../../supabase/config.toml) for reference: that file governs the local
-   stack, where enabling it would override the local inbox and start mailing real addresses from a
-   developer's machine.
-5. **Allow the confirmation redirect.** Under _Authentication → URL Configuration → Redirect URLs_ add:
-   - `https://airrow.app/auth/confirm` — production
-   - `https://airrow-dev.vercel.app/auth/confirm` — the dev environment as it is today
-   - `https://*.vercel.app/auth/confirm` — preview deploys, whose hostnames change every time
-
-   Supabase rejects an `emailRedirectTo` it was not told about, and the app passes one per environment
-   (the host is allow-listed on our side too — `apps/web/src/lib/site-url.ts`). If the
-   `dev.airrow.app` branch domain from §3 is ever attached, add its `/auth/confirm` as well.
-6. **Push the template:**
+4. **Get a Supabase access token** from <https://supabase.com/dashboard/account/tokens>.
+5. **Push the whole auth configuration** — SMTP, the email template, the redirect allow-list and the
+   site URL, in one call:
    ```bash
-   SUPABASE_ACCESS_TOKEN=… SUPABASE_PROJECT_ID=… node scripts/sync-auth-email-templates.mjs
+   SUPABASE_ACCESS_TOKEN=… SUPABASE_PROJECT_ID=… RESEND_API_KEY=… \
+     node scripts/sync-supabase-auth.mjs --dry-run   # inspect first; the key is redacted
+   SUPABASE_ACCESS_TOKEN=… SUPABASE_PROJECT_ID=… RESEND_API_KEY=… \
+     node scripts/sync-supabase-auth.mjs
    ```
+   Run it again whenever the template or the host list changes. Without `RESEND_API_KEY` it updates
+   everything **except** SMTP and says so — blanking working sending credentials would be worse than
+   leaving them.
+6. **Check it took:** _Project Settings → Authentication_ shows the SMTP host, and
+   _Authentication → URL Configuration_ the redirect list. Then sign up with a real address and read the
+   mail that arrives.
 
-**The template lives in the repo, not in the dashboard.**
-[`supabase/templates/confirmation.html`](../../supabase/templates/confirmation.html) is the source of
-truth; the script above pushes it to the hosted project. Editing the dashboard copy directly is
-pointless — the next sync overwrites it. `--dry-run` prints what would be sent without sending it.
+**The repo is the source of truth for all of it, not the dashboard.** The template is
+[`supabase/templates/confirmation.html`](../../supabase/templates/confirmation.html); the SMTP values,
+the redirect allow-list and the site URL are constants in
+[`scripts/sync-supabase-auth.mjs`](../../scripts/sync-supabase-auth.mjs). Editing any of them in the
+dashboard is pointless — the next sync overwrites it. Only the two secrets live outside the repo: the
+Resend key and the access token.
 
-**Why a script and not a "paste this into the dashboard" step:** one fact in two places, kept in step
-by someone remembering, is what [spec 77](../../specs/77-auto-apply-migrations.md) was written to
-remove after it had already shipped a broken production database. A stale email template is cheaper
-than a stale schema, but it fails the same way — the version reviewers approve stops being the version
-founders receive.
+The same SMTP block sits **commented out** in [`supabase/config.toml`](../../supabase/config.toml) for
+reference. That file governs the local stack, where enabling it would override the local inbox and start
+mailing real addresses from a developer's machine.
+
+**Why a script and not a set of dashboard forms:** one fact in two places, kept in step by someone
+remembering, is what [spec 77](../../specs/77-auto-apply-migrations.md) was written to remove after it
+had already shipped a broken production database. A stale email template or a missing redirect host is
+cheaper than a stale schema, but it fails the same way — what reviewers approved stops being what
+founders get, and nothing announces it. The redirect list has a second guard: a test fails if the app's
+own host allow-list (`apps/web/src/lib/site-url.ts`) and this script's list stop agreeing, because a
+host in one and not the other builds a confirmation link that Supabase then rejects.
 
 **Local development sends nothing outward.** `[auth.email.smtp]` stays commented out, so the local stack
 keeps using `[local_smtp]` — the mail catcher on port 54324 — and no real address is ever mailed from a

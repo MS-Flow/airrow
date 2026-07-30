@@ -53,13 +53,12 @@ needs no integration code — a host, a port, and an API key as the password. It
 domain through DNS records, and its free tier covers our volume with room to spare. Nothing about this
 choice leaks into application code, so swapping providers later is a config change, not a refactor.
 
-**The repo owns the template; a script pushes it to cloud.** `supabase/templates/*.html` plus
-`[auth.email.template.confirmation]` in `config.toml` governs the **local** stack only — the hosted
-project's subject and body are dashboard fields. Rather than documenting a paste step, a script under
-`scripts/` reads the versioned template and pushes it to the linked project through the Supabase
-Management API (`PATCH /v1/projects/{ref}/config/auth`, the `mailer_subjects_confirmation` /
-`mailer_templates_confirmation_content` fields — `/implement` confirms the exact names against the current
-API). The repo is the source of truth and the cloud copy is derived from it.
+**The repo owns the hosted auth configuration; a script pushes it.** `config.toml` governs the **local**
+stack only — the hosted project's SMTP settings, email subject and body, redirect allow-list and site URL
+are all dashboard fields. Rather than documenting which forms to fill, `scripts/sync-supabase-auth.mjs`
+sends all of them to `PATCH /v1/projects/{ref}/config/auth` in one call, reading the template from
+`supabase/templates/` and the Resend key from the environment. The repo is the source of truth; only the
+two secrets live outside it.
 
 That is deliberately the same shape as [spec 77](77-auto-apply-migrations.md), and for the same reason: a
 fact that lives in two places and is kept in step by someone remembering a command is a fact that will
@@ -85,8 +84,12 @@ template engine: this is an HTML file, not a system.
 _What "done" means. Every line is something a reviewer can check._
 
 - [ ] The verification email is sent from an Airrow address on our own domain, with Airrow as the sender
-      name — verified by receiving one, not by reading config. _(Code and config in place; needs the
-      Resend account, the DNS records and the dashboard SMTP fields — see Implementation notes.)_
+      name — verified by receiving one, not by reading config. _(Everything scriptable is in place; needs
+      the Resend account and the DNS records, then one `sync-supabase-auth.mjs` run.)_
+- [x] Configuring the hosted project is a command, not a set of dashboard forms: SMTP, the template, the
+      redirect allow-list and the site URL all come from the repo through
+      [scripts/sync-supabase-auth.mjs](../scripts/sync-supabase-auth.mjs). A run without
+      `RESEND_API_KEY` updates everything except SMTP rather than blanking it.
 - [x] Subject and body are ours and versioned in the repo, not Supabase's default.
       [supabase/templates/confirmation.html](../supabase/templates/confirmation.html), wired through
       `[auth.email.template.confirmation]`.
@@ -96,14 +99,15 @@ _What "done" means. Every line is something a reviewer can check._
       production rather than being followed. 13 tests in
       [apps/web/src/lib/site-url.test.ts](../apps/web/src/lib/site-url.test.ts).
 - [x] The template that cloud sends is the one committed in the repo, and keeping them in step is not a
-      manual step: [scripts/sync-auth-email-templates.mjs](../scripts/sync-auth-email-templates.mjs)
+      manual step: [scripts/sync-supabase-auth.mjs](../scripts/sync-supabase-auth.mjs)
       pushes it, and refuses to push an empty template or one that lost its confirmation link.
 - [ ] The sending domain is authenticated — SPF and DKIM, plus DMARC if the provider supports it — so the
       mail is not filed as spam. _(DNS step; the exact records come from Resend once the domain is added.)_
 - [ ] Sending is no longer capped by Supabase's built-in limit. _(Follows from the SMTP switch above.)_
 - [x] SMTP credentials live in the Supabase project configuration and, where CI needs them, in GitHub
-      Secrets — never in the repo, never in logs, never in generated output. `config.toml` reads
-      `env(RESEND_API_KEY)`; the sync script takes its token from the environment and never echoes it.
+      Secrets — never in the repo, never in logs, never in generated output. The sync script reads both
+      secrets from the environment, sends the Resend key only in the request body, and `--dry-run`
+      redacts it so the output can be pasted anywhere.
 - [x] [docs/guides/INFRASTRUCTURE_SETUP.md](../docs/guides/INFRASTRUCTURE_SETUP.md) documents the setup in
       the same change (constitution §IV), separating the dashboard steps from what is versioned. New §6
       _Auth email (Resend)_ carries the six setup steps and says plainly that the dashboard template is
@@ -150,7 +154,7 @@ _How each criterion above is proven._
    `[auth.email.template.confirmation]` and two `additional_redirect_urls` entries in
    [supabase/config.toml](../supabase/config.toml). `[auth.email.smtp]` is documented there but
    commented out — see the correction below.
-6. [scripts/sync-auth-email-templates.mjs](../scripts/sync-auth-email-templates.mjs) (new) + its test.
+6. [scripts/sync-supabase-auth.mjs](../scripts/sync-supabase-auth.mjs) (new) + its test.
 7. `docs/guides/INFRASTRUCTURE_SETUP.md` §6 and `apps/web/.env.example`.
 8. [apps/web/vercel.json](../apps/web/vercel.json) — the `noindex` host rule, plus the runbook lines that
    named the wrong dev hostname. Outside the original scope; see the note below for why it is here.
@@ -173,10 +177,25 @@ _How each criterion above is proven._
   suffix because their hostnames cannot be enumerated in advance, and the lookalike cases
   (`airrow.app.evil.example.com`, `notairrow.app`, `evil-vercel.app`) are tested.
 
-**Deliberately left for the dashboard, and unprovable in a diff:** creating the Resend account, adding
-`airrow.app` there, publishing the DKIM records, filling the SMTP fields, and adding the production
-redirect URL. §6 of the runbook is the checklist. Until they are done the app still signs founders up —
-mail simply keeps coming from Supabase, exactly as before, so nothing regresses in the meantime.
+**Extended after the first pass: the script now configures the whole hosted auth setup, not just the
+template.** SMTP, the redirect allow-list and the site URL sit on the same
+`PATCH /v1/projects/{ref}/config/auth` endpoint, so leaving them as dashboard forms would have contradicted
+this spec's own argument for scripting the template. What remains outside the repo is the Resend account
+and its DNS records — genuinely not scriptable from here — plus the two secrets.
+
+Two safety properties that are tested rather than assumed:
+
+- **A run without `RESEND_API_KEY` omits the SMTP fields entirely** instead of sending blanks. Sending
+  empty credentials would take working production sending down, which is worse than not touching it.
+- **The redirect allow-list is cross-checked against the app's.** `apps/web/src/lib/site-url.ts` decides
+  at request time which hosts a link may point at; the script tells Supabase which to accept. A host in
+  one and not the other builds a confirmation link that Supabase then rejects — invisible until somebody
+  signs up on that environment. A test reads the app's `ALLOWED_HOSTS` and fails if the two diverge, and
+  a second test fails if it can no longer find that list, so the check cannot pass by failing to look.
+
+**Still outside a diff, and unprovable here:** creating the Resend account, adding `airrow.app` to it, and
+publishing the DKIM records. §6 of the runbook is the checklist. Until they are done the app still signs
+founders up — mail simply keeps coming from Supabase, exactly as before, so nothing regresses meanwhile.
 
 **No open dependency on the dev hostname.** The dev environment is `airrow-dev.vercel.app` (verified
 serving 200 on 2026-07-30), not the `dev.airrow.app` branch domain the runbook describes, which is not
@@ -234,7 +253,7 @@ the implementation's own summary.
 **Verification run** (2026-07-30, local): `pnpm -r typecheck` clean · `pnpm -r lint` clean ·
 `pnpm -r test` **525 passed / 28 skipped** (42 files in `apps/web`, 8 in `packages/engine`, 2 in
 `packages/schemas`) · `pnpm test:scripts` **61 passed** (3 files) — no failures; the skips are
-pre-existing. `node scripts/sync-auth-email-templates.mjs --dry-run` assembles both fields from the
+pre-existing. `node scripts/sync-supabase-auth.mjs --dry-run` assembles the request from the
 committed template and sends nothing.
 
 ---
@@ -249,8 +268,9 @@ Shape settled; `/implement` grounds each line in exact `file:line`.
 2. **`supabase/config.toml`** — `[auth.email.template.confirmation]` pointing at it, and
    `[auth.email.smtp]` for Resend with the key read from the environment, never inline
    ([:242-250](../supabase/config.toml) is the commented block to replace).
-3. **`scripts/sync-auth-email-templates.mjs`** (new) + its test — read the template, push subject and body
-   to the linked project via the Management API. The repo stays the source of truth.
+3. **`scripts/sync-supabase-auth.mjs`** (new) + its test — push the whole auth configuration to the linked
+   project via the Management API: the template, the SMTP settings, the redirect allow-list and the site
+   URL. The repo stays the source of truth; only the two secrets live outside it.
 4. **`apps/web/src/lib/auth.ts`** — `signUp` passes `emailRedirectTo` derived from the request host
    ([:83-87](../apps/web/src/lib/auth.ts#L83-L87)), following the OAuth-callback pattern spec 67 set.
 5. **`supabase/config.toml`** — add the confirmation callback to `additional_redirect_urls`
