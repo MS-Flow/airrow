@@ -74,16 +74,23 @@ export type SignUpResult =
   | { status: "confirmation-required" }
   | { status: "error"; message: string };
 
+/**
+ * `emailRedirectTo` is where the confirmation link lands, and it has to be passed per request rather
+ * than left to the project's Site URL (spec 113). Production and Preview share one Supabase project,
+ * so a single configured Site URL would mail every founder a link to production — including the ones
+ * who signed up on dev. The caller derives it, matching `signInWithGitHub` above.
+ */
 export async function signUp(
   name: string,
   email: string,
-  password: string
+  password: string,
+  emailRedirectTo: string
 ): Promise<SignUpResult> {
   const supabase = await supabaseServer();
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { name } }
+    options: { data: { name }, emailRedirectTo }
   });
   if (error) return { status: "error", message: error.message };
   return data.session ? { status: "signed-in" } : { status: "confirmation-required" };

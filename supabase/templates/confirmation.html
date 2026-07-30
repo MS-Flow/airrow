@@ -1,0 +1,78 @@
+<!--
+  The signup confirmation email (spec 113). This file is the source of truth: the local stack reads it
+  through `[auth.email.template.confirmation]` in supabase/config.toml, and
+  `scripts/sync-supabase-auth.mjs` pushes it to the hosted project. Do not edit the copy in the
+  Supabase dashboard — it is derived from here and the script will overwrite it.
+
+  Supabase substitutes {{ .ConfirmationURL }}. Nothing else here is interpolated, and nothing
+  user-controlled may be added: this is an email, so it renders wherever the founder reads mail.
+
+  Written as inline-styled tables on purpose. Every serious mail client strips <style> blocks, and
+  Outlook ignores most of modern CSS — so the design tokens the app uses cannot come along, and the
+  colours here are deliberate literals rather than a violation of §III.
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="background:#09090b;margin:0;padding:40px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+             style="max-width:440px;background:#111113;border:1px solid #26262a;border-radius:12px;">
+        <tr>
+          <td style="padding:36px 36px 0;">
+            <!--
+              Most mail clients block remote images until the reader allows them, so this renders as
+              its alt text more often than not. That is the reason for the type styling on the <img>:
+              blocked, it degrades to a styled "Airrow" wordmark — which is exactly what stood here
+              before the logo existed, so nothing is lost in the common case.
+
+              width/height as attributes as well as CSS because Outlook ignores the CSS. Served at 2x
+              (240x64 for a 120x32 slot) from the production domain, dedicated to email at 5 KB
+              rather than the 664 KB app asset.
+
+              A new asset here is only reachable once it has merged all the way to `main` — that is
+              what airrow.app serves. Until then every email sent renders the alt text instead, with
+              nothing failing anywhere: the test asserts the file exists in the repo, which it cannot
+              extend to "and is deployed" without a network call. Add the image and send the mail in
+              that order, not the reverse.
+            -->
+            <img src="https://airrow.app/brand/airrow-lockup-email.png"
+                 alt="Airrow" width="120" height="32"
+                 style="display:block;border:0;width:120px;height:32px;font-size:15px;font-weight:600;letter-spacing:-0.01em;color:#fafafa;text-decoration:none;">
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px 36px 0;">
+            <h1 style="margin:0;font-size:19px;line-height:1.35;font-weight:600;letter-spacing:-0.02em;color:#fafafa;">
+              Confirm your email address
+            </h1>
+            <p style="margin:12px 0 0;font-size:14px;line-height:1.6;color:#a1a1aa;">
+              Your Airrow account is created. Confirm this address and your workspace is ready.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:28px 36px 0;">
+            <a href="{{ .ConfirmationURL }}"
+               style="display:inline-block;background:#fafafa;color:#09090b;font-size:14px;font-weight:600;text-decoration:none;padding:11px 20px;border-radius:8px;">
+              Confirm email address
+            </a>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px 36px 36px;">
+            <p style="margin:0;font-size:13px;line-height:1.6;color:#71717a;">
+              If the button does not work, paste this into your browser:
+            </p>
+            <p style="margin:6px 0 0;font-size:12px;line-height:1.5;word-break:break-all;">
+              <a href="{{ .ConfirmationURL }}" style="color:#a1a1aa;">{{ .ConfirmationURL }}</a>
+            </p>
+            <p style="margin:20px 0 0;font-size:12px;line-height:1.6;color:#52525b;">
+              You received this because someone signed up for Airrow with this address. If that was not
+              you, ignore this email — no account can be used until it is confirmed.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
