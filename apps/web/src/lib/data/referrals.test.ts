@@ -11,16 +11,30 @@ interface Row {
   [column: string]: string | number | null;
 }
 
-const tables: { referral_codes: Row[]; referrals: Row[]; plan_grants: Row[] } = {
+const tables: {
+  referral_codes: Row[];
+  referrals: Row[];
+  plan_grants: Row[];
+  // Read, never written, and only to put a name on an invitation (spec 133).
+  organizations: Row[];
+  organization_members: Row[];
+  profiles: Row[];
+} = {
   referral_codes: [],
   referrals: [],
-  plan_grants: []
+  plan_grants: [],
+  organizations: [],
+  organization_members: [],
+  profiles: []
 };
+
+/** Every table a query touched, so "does not look up names for an empty list" is assertable. */
+const queried: string[] = [];
 
 /** The table, or a loud failure — a harness that invents a table is a harness that proves nothing. */
 function tableRows(name: string): Row[] {
   // Cast rather than a lookup type: the query builder is handed a string, and the check below is
-  // exactly what turns it back into one of the three tables this module uses.
+  // exactly what turns it back into one of the tables this module uses.
   const found = (tables as Record<string, Row[] | undefined>)[name];
   if (!found) throw new Error(`Unexpected table: ${name}`);
   return found;
@@ -44,6 +58,7 @@ vi.mock("./store", () => ({ countGenerations }));
  */
 const dbMock = vi.hoisted(() => ({
   from(table: string) {
+    queried.push(table);
     return makeChain(table);
   }
 }));
@@ -113,6 +128,10 @@ function makeChain(table: string) {
       filters.push((row) => (row[column] ?? null) !== null);
       return chain;
     },
+    in(column: string, values: string[]) {
+      filters.push((row) => values.includes(String(row[column])));
+      return chain;
+    },
     order(column: string) {
       orderBy = column;
       return chain;
@@ -152,6 +171,7 @@ function makeChain(table: string) {
 const {
   REFERRAL_CAP,
   REFERRAL_GRANT_DAYS,
+  UNNAMED_INVITE,
   attachReferral,
   claimPro,
   grantStanding,
@@ -182,6 +202,10 @@ beforeEach(() => {
   tables.referral_codes = [];
   tables.referrals = [];
   tables.plan_grants = [];
+  tables.organizations = [];
+  tables.organization_members = [];
+  tables.profiles = [];
+  queried.length = 0;
   nextId = 0;
   missingTables = false;
   brokenWith = null;
@@ -326,6 +350,81 @@ describe("the invite card's summary", () => {
     expect(summary?.remaining).toBe(REFERRAL_CAP - 1);
     expect(summary?.invites.map((i) => i.state)).toEqual(["generated", "joined"]);
     expect(summary?.code).toHaveLength(14);
+  });
+});
+
+/* ── Who each invitation is about (spec 133) ───────────────────────────────
+ *
+ * Three identical rows saying "Generated their foundation" tell the person who sent the links nothing.
+ * The name is read at render time rather than copied onto the referral, so rows written before this
+ * existed get names too — which is the case the last test here stands for.
+ */
+describe("naming an invitation", () => {
+  function invited(
+    orgId: string,
+    { workspace, display }: { workspace?: string; display?: string } = {}
+  ): void {
+    tables.referrals.push({
+      id: `ref-${orgId}`,
+      referrer_organization_id: INVITER,
+      referred_organization_id: orgId,
+      attached_at: "2026-07-30T00:00:00.000Z",
+      matured_at: null,
+      plan_grant_id: null
+    });
+    if (workspace !== undefined) tables.organizations.push({ id: orgId, name: workspace });
+    if (display !== undefined) {
+      tables.organization_members.push({ organization_id: orgId, user_id: `user-${orgId}` });
+      tables.profiles.push({ id: `user-${orgId}`, display_name: display });
+    }
+  }
+
+  it("uses the account's own name", async () => {
+    invited(INVITED, { workspace: "Ada's workspace", display: "Ada Lovelace" });
+
+    const summary = await referralSummary(INVITER, NOW);
+
+    expect(summary?.invites[0]?.name).toBe("Ada Lovelace");
+  });
+
+  it("falls back to the workspace name when there is no profile", async () => {
+    invited(INVITED, { workspace: "Ada's workspace" });
+
+    const summary = await referralSummary(INVITER, NOW);
+
+    expect(summary?.invites[0]?.name).toBe("Ada's workspace");
+  });
+
+  it("falls back to the workspace name when the profile has no display name", async () => {
+    invited(INVITED, { workspace: "Ada's workspace", display: "" });
+
+    const summary = await referralSummary(INVITER, NOW);
+
+    expect(summary?.invites[0]?.name).toBe("Ada's workspace");
+  });
+
+  it("says something neutral rather than leaving a gap", async () => {
+    invited(INVITED);
+
+    const summary = await referralSummary(INVITER, NOW);
+
+    expect(summary?.invites[0]?.name).toBe(UNNAMED_INVITE);
+  });
+
+  it("names each invitation separately", async () => {
+    invited("org-a", { display: "Ada" });
+    invited("org-b", { display: "Grace" });
+
+    const summary = await referralSummary(INVITER, NOW);
+
+    expect(summary?.invites.map((i) => i.name)).toEqual(["Ada", "Grace"]);
+  });
+
+  it("looks up no names at all for a card with no invitations", async () => {
+    await referralSummary(INVITER, NOW);
+
+    expect(queried).not.toContain("organizations");
+    expect(queried).not.toContain("profiles");
   });
 });
 
