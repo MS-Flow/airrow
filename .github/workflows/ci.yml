@@ -114,12 +114,15 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
         run: |
-          # A migration this PR adds is expected to be unapplied — the merge is what applies it.
-          # The script needs the base branch to tell those apart from drift that was already there.
-          # `checkout` fetches the full history of one ref, so the base still has to be fetched — but
+          # A migration this change adds is expected to be unapplied — the merge is what applies it.
+          # The script needs something to diff against to tell those apart from drift that was already
+          # there: the base branch on a pull request, `develop` on a push to any other branch (spec
+          # 130). `checkout` fetches the full history of one ref, so that ref still has to be fetched —
           # deliberately without `--depth`, which would make an otherwise complete clone shallow and
           # take the merge base away again, which is the failure this whole block exists to avoid.
           if [ -n "$GITHUB_BASE_REF" ]; then
             git fetch --no-tags origin "$GITHUB_BASE_REF"
+          elif [ "$GITHUB_REF_NAME" != "develop" ] && [ "$GITHUB_REF_NAME" != "main" ]; then
+            git fetch --no-tags origin develop
           fi
           node scripts/supabase-migration-drift.mjs
