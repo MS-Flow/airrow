@@ -18,7 +18,7 @@ vi.mock("@/lib/data/store", () => ({
   setDisplayName: vi.fn()
 }));
 
-const { githubEmailVerified, signIn, signInWithGitHub, signUp } = await import("./auth");
+const { githubEmailVerified, signIn, signInWithGitHub, signUp, signUpFailure } = await import("./auth");
 
 beforeEach(() => {
   signUpMock.mockReset();
@@ -43,11 +43,55 @@ describe("signUp", () => {
     });
   });
 
-  it("surfaces the provider error message", async () => {
-    signUpMock.mockResolvedValue({ data: { session: null }, error: { message: "User exists" } });
+  // Every failure used to come back as one message, which the screen then rendered as "that email is
+  // already registered" — telling a rate-limited founder they have an account they do not have (spec 135).
+  it("classifies the failure instead of passing the provider's words on", async () => {
+    signUpMock.mockResolvedValue({
+      data: { session: null },
+      error: { message: "User already registered", code: "user_already_exists" }
+    });
+
     await expect(signUp("Ada", "ada@example.com", "hunter22", CONFIRM_URL)).resolves.toEqual({
       status: "error",
-      message: "User exists"
+      reason: "already-registered"
+    });
+  });
+
+  it("does not call a rate limit a duplicate address", async () => {
+    // The failure that started this: a fresh address, refused because Supabase would not send more
+    // confirmation mail that hour, reported to the founder as "that email is already registered".
+    signUpMock.mockResolvedValue({
+      data: { session: null },
+      error: { message: "email rate limit exceeded", code: "over_email_send_rate_limit" }
+    });
+
+    await expect(signUp("Ada", "new@example.com", "hunter22", CONFIRM_URL)).resolves.toEqual({
+      status: "error",
+      reason: "rate-limited"
+    });
+  });
+
+  describe("classifying a failure", () => {
+    it.each([
+      ["a duplicate by code", { code: "user_already_exists" }, "already-registered"],
+      ["a duplicate by the other code", { code: "email_exists" }, "already-registered"],
+      ["a rate limit by code", { code: "over_email_send_rate_limit" }, "rate-limited"],
+      ["a rate limit by status", { status: 429, message: "Too Many Requests" }, "rate-limited"],
+      // No code at all: an older client, where the message is all there is.
+      ["a duplicate by message", { message: "User already registered" }, "already-registered"],
+      [
+        "a rate limit by message",
+        { message: "For security purposes, you can only request this after 51 seconds." },
+        "rate-limited"
+      ]
+    ])("reads %s", (_label, error, expected) => {
+      expect(signUpFailure(error)).toBe(expected);
+    });
+
+    it("refuses to guess at a cause it does not recognise", () => {
+      // The whole bug in one line: the old code called this one "already registered" too.
+      expect(signUpFailure({ message: "Database error saving new user" })).toBe("unknown");
+      expect(signUpFailure({})).toBe("unknown");
     });
   });
 
