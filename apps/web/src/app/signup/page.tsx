@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { InlineError } from "@/components/ui/states";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { PasswordFields } from "@/features/auth/PasswordFields";
 import { ProviderButtons } from "@/features/auth/ProviderButtons";
 import { signUp } from "@/lib/auth";
 import { requestOrigin } from "@/lib/site-url";
@@ -18,9 +19,15 @@ async function signupAction(formData: FormData) {
   const parsed = signupSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
-    password: formData.get("password")
+    password: formData.get("password"),
+    confirmPassword: formData.get("confirmPassword")
   });
-  if (!parsed.success) redirect("/signup?error=invalid");
+  // A mismatch gets its own answer: it is the one failure here the founder fixes by retyping rather than
+  // by choosing something different, and "check your details" would send them looking in the wrong place.
+  if (!parsed.success) {
+    const mismatch = parsed.error.issues.some((issue) => issue.path[0] === "confirmPassword");
+    redirect(`/signup?error=${mismatch ? "password-mismatch" : "invalid"}`);
+  }
 
   // The confirmation link has to come back to the environment this signup happened on — one Supabase
   // project serves dev and production alike, so its Site URL cannot answer for both (spec 113).
@@ -46,7 +53,8 @@ export const metadata = { title: "Create account" };
  * URL from before this change, and a query string nobody recognises would render a blank error.
  */
 const messages: Record<string, string> = {
-  invalid: "Enter a name, a valid email, and a password of at least 8 characters.",
+  invalid: "Enter a name, a valid email, and a password that meets every requirement listed below.",
+  "password-mismatch": "The two passwords do not match. Retype them and try again.",
   "already-registered": "That email already has an account. Try signing in instead.",
   exists: "That email already has an account. Try signing in instead.",
   // Deliberately no "try signing in": there is no account yet, and sending them to a login that will
@@ -111,23 +119,13 @@ export default async function SignupPage({
             <form action={signupAction} className="mt-6 space-y-4">
               <div>
                 <Label htmlFor="name">Name</Label>
-                <Input id="name" name="name" placeholder="Ada Lovelace" required autoFocus maxLength={80} />
+                <Input id="name" name="name" placeholder="John Smith" required autoFocus maxLength={80} />
               </div>
               <div>
                 <Label htmlFor="email">Email</Label>
                 <Input id="email" name="email" type="email" placeholder="you@company.com" required />
               </div>
-              <div>
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  placeholder="At least 8 characters"
-                  required
-                  minLength={8}
-                />
-              </div>
+              <PasswordFields />
               <SubmitButton className="w-full" pendingLabel="Creating account…">
                 Create account
               </SubmitButton>

@@ -36,7 +36,17 @@ const ERRORS: Record<string, string> = {
   // Verified by GitHub, not by us: an address nobody has proved they own is no way to identify
   // someone, and linking on it would let anyone claim an existing Airrow account (spec 67).
   github_unverified:
-    "GitHub has not verified the email address on your account. Verify it with GitHub, then sign in here again — nothing was created."
+    "GitHub has not verified the email address on your account. Verify it with GitHub, then sign in here again — nothing was created.",
+  // The same two sentences for Google, because the same two things can go wrong (spec 140). Named
+  // separately rather than shared: a founder who pressed Google is not helped by being told about GitHub.
+  google: "Google sign-in did not complete. Try again, or sign in with your email and password.",
+  google_unverified:
+    "Google has not verified the email address on that account. Verify it with Google, then sign in here again — nothing was created.",
+  // A flow that failed before there was a session to ask which provider it was. Deliberately names
+  // neither: the alternative was a query-string hint on the redirect target, which Supabase's allow-list
+  // matches as an exact path and would have refused (spec 140). One vaguer sentence on a rare path is a
+  // better trade than two providers that cannot sign anyone in.
+  oauth: "That sign-in did not complete. Try again, or sign in with your email and password."
 };
 
 export default async function LoginPage({
