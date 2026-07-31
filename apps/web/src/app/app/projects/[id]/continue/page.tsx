@@ -5,7 +5,9 @@ import { PageContainer } from "@/components/shell/page-container";
 import { DownloadProject } from "@/features/import/DownloadProject";
 import { Card, CardBody } from "@/components/ui/card";
 import { requireSession } from "@/lib/auth";
+import { REFERRAL_GRANT_DAYS, referralSummary } from "@/lib/data/referrals";
 import { getProject, latestModelVersion } from "@/lib/data/store";
+import { requestOrigin } from "@/lib/site-url";
 import { CopyBlock } from "@/features/delivery/CopyBlock";
 
 export const metadata = { title: "Continue locally" };
@@ -19,6 +21,12 @@ export default async function ContinuePage({ params }: { params: Promise<{ id: s
 
   const model = (await latestModelVersion(id))?.model;
   const slug = project.slug;
+  // The one moment a founder has just seen what Airrow made them, which is when recommending it is a
+  // natural thing to do rather than an ask (spec 122). Read-only: nothing here starts a week.
+  // Null while the database is behind the referrals migration — the handoff below is the point of this
+  // screen and must not depend on an aside being available.
+  const referral = await referralSummary(org.id);
+  const inviteLink = referral ? `${await requestOrigin()}/invite/${referral.code}` : null;
   const isGh = model?.stack.repoProvider !== "azure_devops";
 
   const remote = isGh
@@ -83,6 +91,18 @@ export default async function ContinuePage({ params }: { params: Promise<{ id: s
           </Card>
         ))}
       </div>
+
+      {/* One line, and only while there is something in it for them. A founder who has used all
+          three places has already done more than enough recommending. */}
+      {referral && inviteLink && referral.remaining > 0 ? (
+        <div className="mt-10 border-t border-border pt-6">
+          <p className="text-sm leading-relaxed text-fg-muted">
+            Know another founder starting something? Send them this — when they generate their first
+            foundation you get {REFERRAL_GRANT_DAYS} days of Pro.
+          </p>
+          <CopyBlock text={inviteLink} mono={false} />
+        </div>
+      ) : null}
 
       <div className="mt-8 flex items-center justify-between">
         <Link href={`/app/projects/${id}/preview`} className="text-sm text-fg-muted hover:text-fg">

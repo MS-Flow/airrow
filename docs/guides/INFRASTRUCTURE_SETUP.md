@@ -264,7 +264,10 @@ host in one and not the other builds a confirmation link that Supabase then reje
 **Local development sends nothing outward.** `[auth.email.smtp]` stays commented out, so the local stack
 keeps using `[local_smtp]` — the mail catcher on port 54324 — and no real address is ever mailed from a
 developer machine. Enabling it is a deliberate act, and the point at which that stops being true.
-## 6. Taking Pro live (specs 99, 100)
+
+---
+
+## 7. Taking Pro live (specs 99, 100)
 
 Test mode and live mode are two separate Stripe accounts wearing one dashboard. Nothing carries over:
 not the product, not the price id, not the keys, not the webhook endpoint or its signing secret. Every
