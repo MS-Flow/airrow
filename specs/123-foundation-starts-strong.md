@@ -383,6 +383,13 @@ _What "done" means. Every line is something a reviewer can check._
 
 **The authoring ceiling**
 
+- [x] **Amended by [spec 128](128-reject-invalid-answers.md): the two calls now run concurrently.**
+      Sequencing them bought one thing — the second call reading the prefix the first had cached — and
+      that saving is zero while the shared preamble sits below Haiku 4.5's 4096-token cache minimum.
+      What it cost was real: the latencies added up and crossed the 60-second stale-heartbeat window
+      again on the develop deployment (2026-07-31), reporting a working generation as interrupted. The
+      runner now also heartbeats through the call, so the window can no longer close on a live job —
+      which is the fix the note below was reaching for by choosing a faster model.
 - [x] **Settled on `claude-haiku-4-5`, after three live-API attempts.** First: `claude-opus-5`, two
       sequential calls, each thinking by default, pushed the "author" stage past the 60-second
       stale-heartbeat window checked in `apps/web/src/app/api/projects/[id]/job/route.ts:16` — the

@@ -7,7 +7,9 @@
 // here is additionally scoped by organization_id server-side (defense in depth, §II).
 import crypto from "node:crypto";
 import { cache } from "react";
+import { pickFlaggedAnswers } from "@airrow/schemas";
 import type {
+  AnswerId,
   ConflictResolution,
   GenerationResult,
   ImportAnalysis,
@@ -88,6 +90,12 @@ export interface JobRecord {
   totalFiles: number;
   currentPath: string | null;
   error: string | null;
+  /**
+   * Why a `failed` job failed, when the reason was the founder's answers rather than ours (spec 128).
+   * Non-null — empty included — means the authoring layer refused the answers and named these; null
+   * means the job fell over on our side and a retry is the right offer.
+   */
+  rejectedAnswers: AnswerId[] | null;
   heartbeatAt: string;
   startedAt: string | null;
   finishedAt: string | null;
@@ -131,14 +139,21 @@ type SupabaseError = { message: string; code?: string };
  * A column this code knows about and the database does not — a deployment running ahead of its
  * migrations.
  *
- * Postgres reports `42703` (undefined_column); the qualified name is matched as well because
- * PostgREST does not always forward the code. Callers name the column they are prepared to do
- * without, so an unrelated typo in a select still throws instead of being quietly swallowed.
+ * Three shapes, because there are three ways to be told. Postgres reports `42703`
+ * (undefined_column); the qualified name is matched as well because PostgREST does not always
+ * forward the code; and a **write** never reaches Postgres at all — PostgREST rejects it against its
+ * own schema cache first, with `PGRST204` and its own wording ("Could not find the 'x' column of
+ * 'y' in the schema cache"). Callers name the column they are prepared to do without, so an
+ * unrelated typo in a select still throws instead of being quietly swallowed.
  */
 function isMissingColumn(error: SupabaseError, column: string): boolean {
+  const message = error.message.toLowerCase();
+  const qualified = column.toLowerCase();
+  const [table, name] = qualified.split(".");
   return (
     error.code === "42703" ||
-    error.message.toLowerCase().includes(`${column.toLowerCase()} does not exist`)
+    message.includes(`${qualified} does not exist`) ||
+    (error.code === "PGRST204" && message.includes(`'${name}'`) && message.includes(`'${table}'`))
   );
 }
 
@@ -208,6 +223,8 @@ interface JobRow {
   total_files: number;
   current_path: string | null;
   error: string | null;
+  /** Absent on a deployment running ahead of the spec-128 migration, and on every older row. */
+  rejected_answers?: string[] | null;
   heartbeat_at: string;
   started_at: string | null;
   finished_at: string | null;
@@ -223,6 +240,9 @@ const toJob = (r: JobRow): JobRecord => ({
   totalFiles: r.total_files,
   currentPath: r.current_path,
   error: r.error,
+  // Re-checked on the way out rather than trusted: these ids are named by a model, and a question
+  // removed from the interview since the row was written must not reach a screen that looks it up.
+  rejectedAnswers: r.rejected_answers ? pickFlaggedAnswers(r.rejected_answers) : null,
   heartbeatAt: r.heartbeat_at,
   startedAt: r.started_at,
   finishedAt: r.finished_at
@@ -607,6 +627,7 @@ function jobPatchToRow(patch: Partial<JobRecord>): Record<string, unknown> {
   if (patch.totalFiles !== undefined) row.total_files = patch.totalFiles;
   if (patch.currentPath !== undefined) row.current_path = patch.currentPath;
   if (patch.error !== undefined) row.error = patch.error;
+  if (patch.rejectedAnswers !== undefined) row.rejected_answers = patch.rejectedAnswers;
   if (patch.startedAt !== undefined) row.started_at = patch.startedAt;
   if (patch.finishedAt !== undefined) row.finished_at = patch.finishedAt;
   return row;
@@ -614,7 +635,17 @@ function jobPatchToRow(patch: Partial<JobRecord>): Record<string, unknown> {
 
 export async function updateJob(jobId: string, patch: Partial<JobRecord>): Promise<void> {
   const res = await db().from("generation_jobs").update(jobPatchToRow(patch)).eq("id", jobId);
-  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
+  if (!res.error) return;
+
+  // A branch deploy runs against the shared database, so this code can legitimately reach it before
+  // its migration does. Losing the flagged ids there costs the per-question marks on the review
+  // screen; failing the write instead would cost the founder the whole explanation, which already
+  // travels in `error` — so the rejection is recorded without them and the run still ends the way it
+  // should (spec 128).
+  if (patch.rejectedAnswers !== undefined && isMissingColumn(res.error, "generation_jobs.rejected_answers")) {
+    return updateJob(jobId, { ...patch, rejectedAnswers: undefined });
+  }
+  throw new Error(`Supabase: ${res.error.message}`);
 }
 
 /* ── Authoring provenance & memoisation ───────────────────────────────────── */

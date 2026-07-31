@@ -16,6 +16,8 @@
 // engine falls back to its deterministic value, which already emits `[NEEDS CLARIFICATION: …]`
 // rather than inventing one.
 import { z } from "zod";
+import { interviewQuestions } from "./questions.ts";
+import type { AnswerId } from "./types.ts";
 
 /**
  * The slots an LLM may write — prose a reader judges as writing.
@@ -326,4 +328,41 @@ export type AuthoredToolchain = Partial<Record<ToolchainSlot, string | null>>;
 /** The commands in `raw` that satisfy the contract. Anything else stays deterministic. */
 export function pickValidToolchain(raw: unknown): AuthoredToolchain {
   return pickValid<AuthoredToolchain>(raw, authoredToolchainSchema.shape);
+}
+
+/* ── Refusing the answers outright ────────────────────────────────────────────
+ *
+ * Everything above is about a response that came back imperfect. This is about the model saying the
+ * answers do not describe a software product at all — the one verdict that stops a generation instead
+ * of degrading it (spec 128). It arrives with the answers that led the model there, and those ids are
+ * all the founder is ever told: what they read is written from the interview's own question titles,
+ * never from the response.
+ */
+
+/**
+ * The answers a rejection may name: the free-text ones.
+ *
+ * A picked option cannot be "not a software product" — it came from a list we wrote — so only what the
+ * founder typed is ever flagged. Derived from the interview rather than listed again, so a text
+ * question added tomorrow is flaggable the day it ships.
+ */
+export const FLAGGABLE_ANSWERS: readonly AnswerId[] = interviewQuestions
+  .filter((q) => q.type === "text")
+  .map((q) => q.id);
+
+const FLAGGABLE_ANSWER_SET: ReadonlySet<string> = new Set(FLAGGABLE_ANSWERS);
+
+/**
+ * The answers in `raw` that name a real free-text question, deduplicated.
+ *
+ * An allowlist for the same reason the slots have one: this is a model naming things, and a name the
+ * interview does not recognise must reach no screen. Anything else — an invented id, a sentence, a
+ * number — is dropped, and a rejection that names nothing usable is still a rejection.
+ */
+export function pickFlaggedAnswers(raw: unknown): AnswerId[] {
+  if (!Array.isArray(raw)) return [];
+  const flagged = raw.filter(
+    (value): value is AnswerId => typeof value === "string" && FLAGGABLE_ANSWER_SET.has(value)
+  );
+  return [...new Set(flagged)];
 }
