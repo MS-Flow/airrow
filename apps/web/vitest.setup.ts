@@ -8,6 +8,16 @@ if (typeof Element !== "undefined") {
   Element.prototype.scrollTo = function scrollTo() {};
 }
 
+// Nor does it implement ResizeObserver, which Radix measures its controls with. Nothing here asserts
+// on a measurement — a stub that never reports is enough to let the components mount.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 afterEach(() => {
   cleanup();
 });

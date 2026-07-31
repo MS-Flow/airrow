@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Menu, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
+import { LayoutGrid, LifeBuoy, Menu, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
 import { AirrowLogo } from "@/components/brand/logo";
 import { AirrowMark } from "@/components/brand/mark";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -14,7 +14,8 @@ import { cn } from "@/lib/utils";
 
 const icons = {
   projects: LayoutGrid,
-  settings: Settings
+  settings: Settings,
+  support: LifeBuoy
 } as const;
 
 function isActive(pathname: string, href: string): boolean {
