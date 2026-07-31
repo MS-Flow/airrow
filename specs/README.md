@@ -64,3 +64,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Unusable answers stop the generation instead of producing a generic foundation | [128-reject-invalid-answers.md](128-reject-invalid-answers.md) | 🔄 In progress |
 | Invite a friend, get a week of Pro | [122-invite-a-friend.md](122-invite-a-friend.md) | ✅ Done |
 | The migration check answers what a push can ask | [130-migration-check-on-push.md](130-migration-check-on-push.md) | 🔄 In progress |
+| The invite list says who, not just what | [133-invite-names.md](133-invite-names.md) | 🔄 In progress |

@@ -16,10 +16,12 @@ const day = (iso: string): string => iso.slice(0, 10);
  * link and being paid for it is days long and silence in between reads as a broken feature.
  */
 function inviteLine(invite: ReferralSummary["invites"][number]): string {
-  if (invite.state === "joined") return "Signed up — waiting for their first foundation.";
+  if (invite.state === "joined") {
+    return `${invite.name} signed up — waiting for their first foundation.`;
+  }
   return invite.uncredited
-    ? "Generated their foundation, after your last place was used."
-    : `Generated their foundation — ${REFERRAL_GRANT_DAYS} days of Pro credited.`;
+    ? `${invite.name} generated their foundation, after your last place was used.`
+    : `${invite.name} generated their foundation — ${REFERRAL_GRANT_DAYS} days of Pro credited.`;
 }
 
 export function InviteCard({ summary, link }: { summary: ReferralSummary; link: string }) {
