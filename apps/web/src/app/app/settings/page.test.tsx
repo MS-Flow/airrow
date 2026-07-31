@@ -54,16 +54,28 @@ vi.mock("@/features/auth/actions", () => ({ signInWithGitHubAction: vi.fn() }));
 
 // The invite card reads the database and builds its link from the request's own host — neither exists
 // here. The constants come with the mock because the card renders them (spec 122).
+interface InviteRow {
+  attachedAt: string;
+  name: string;
+  state: "joined" | "generated";
+  uncredited: boolean;
+}
 const referral = vi.hoisted(
-  (): { current: { activeUntil: string | null; queued: number; remaining: number } } => ({
-    current: { activeUntil: null, queued: 0, remaining: 3 }
-  })
+  (): {
+    current: {
+      activeUntil: string | null;
+      queued: number;
+      remaining: number;
+      invites?: InviteRow[];
+    };
+  } => ({ current: { activeUntil: null, queued: 0, remaining: 3 } })
 );
 /** Null is what a database behind the referrals migration produces (spec 122). */
 const referralsInstalled = vi.hoisted((): { current: boolean } => ({ current: true }));
 vi.mock("@/lib/data/referrals", () => ({
   REFERRAL_CAP: 3,
   REFERRAL_GRANT_DAYS: 7,
+  UNNAMED_INVITE: "Someone",
   referralSummary: async () =>
     referralsInstalled.current
       ? { code: "invite-code", invites: [], credited: 0, ...referral.current }
@@ -198,6 +210,29 @@ describe("Settings — invitations", () => {
     expect(screen.queryByText(/invite a friend/i)).not.toBeInTheDocument();
 
     referralsInstalled.current = true;
+  });
+
+  it("names the founder each invitation is about", async () => {
+    // Three rows reading "Generated their foundation" tell the person who sent the links nothing
+    // about which of their invitations paid out (spec 133).
+    plan.current = "free";
+    onEarnedWeek.current = false;
+    referralsInstalled.current = true;
+    referral.current = {
+      activeUntil: null,
+      queued: 1,
+      remaining: 2,
+      invites: [
+        { attachedAt: "2026-07-31T00:00:00.000Z", name: "Ada Lovelace", state: "generated", uncredited: false },
+        { attachedAt: "2026-07-31T00:00:00.000Z", name: "Grace Hopper", state: "joined", uncredited: false }
+      ]
+    };
+    render(await settings());
+
+    expect(screen.getByText(/Ada Lovelace generated their foundation/i)).toBeInTheDocument();
+    expect(screen.getByText(/Grace Hopper signed up/i)).toBeInTheDocument();
+
+    referral.current = { activeUntil: null, queued: 0, remaining: 3 };
   });
 
   it("says a waiting week is not counting down yet", async () => {
