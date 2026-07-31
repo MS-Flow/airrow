@@ -14,6 +14,15 @@ const SRC = fileURLToPath(new URL("../", import.meta.url));
 /** SVG geometry (viewBox, path data, gradient offsets) is not styling. */
 const SVG_ATTRS = /\b(viewBox|d|x1|y1|x2|y2|offset|strokeWidth|width|height)=/;
 
+/**
+ * Third-party brand marks, which are the one thing tokens cannot express: their colours belong to
+ * somebody else, are fixed by that owner's terms, and must not follow our theme.
+ *
+ * An allowlist of exact paths rather than a pattern, so adding one stays a deliberate act — and so this
+ * never becomes a way to smuggle our own colours past the rule (spec 140).
+ */
+const VENDOR_MARKS = ["components/brand/google-mark.tsx"];
+
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
     const full = join(dir, entry);
@@ -30,10 +39,12 @@ const files = sourceFiles(SRC).map((path) => ({
 describe("design tokens", () => {
   it("has no raw hex colors outside the token layer", () => {
     const offenders = files.flatMap(({ path, lines }) =>
-      lines
-        .map((line, i) => ({ line, n: i + 1 }))
-        .filter(({ line }) => /#[0-9a-fA-F]{3,8}\b/.test(line) && !SVG_ATTRS.test(line))
-        .map(({ n }) => `${path}:${n}`)
+      VENDOR_MARKS.includes(path)
+        ? []
+        : lines
+            .map((line, i) => ({ line, n: i + 1 }))
+            .filter(({ line }) => /#[0-9a-fA-F]{3,8}\b/.test(line) && !SVG_ATTRS.test(line))
+            .map(({ n }) => `${path}:${n}`)
     );
     expect(offenders).toEqual([]);
   });

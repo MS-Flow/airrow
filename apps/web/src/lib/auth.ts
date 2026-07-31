@@ -170,21 +170,59 @@ export async function signInWithGitHub(redirectTo: string): Promise<{ url: strin
 }
 
 /**
- * Has GitHub verified the address this identity signed in with?
+ * Start the Google OAuth flow (spec 140). The same shape as `signInWithGitHub` — the caller owns the
+ * navigation — and the same posture: Airrow asks for an identity and nothing more.
+ *
+ * `prompt: "select_account"` is the one thing GitHub cannot offer. Google otherwise assumes the first
+ * account already signed in on the device, which for a founder holding a personal and a work account is
+ * a coin flip they never got to call. Asking every time costs one click and removes a whole class of
+ * "why is my workspace on the wrong address".
+ */
+export async function signInWithGoogle(redirectTo: string): Promise<{ url: string } | { error: string }> {
+  const supabase = await supabaseServer();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo, queryParams: { prompt: "select_account" } }
+  });
+  if (error || !data.url) return { error: error?.message ?? "Google sign-in is unavailable." };
+  return { url: data.url };
+}
+
+/** The OAuth providers a founder can sign in with. */
+export type OAuthProvider = "github" | "google";
+
+/**
+ * Has the provider verified the address this identity signed in with?
  *
  * An unverified address is no evidence of who someone is: anyone can put a stranger's address on a
- * GitHub account, and linking on it would hand them the stranger's Airrow account. So an explicit
- * `false` always blocks, and is never talked out of it by anything else.
+ * GitHub or Google account, and linking on it would hand them the stranger's Airrow account. So an
+ * explicit `false` always blocks, and is never talked out of it by anything else.
  *
  * The `email_confirmed_at` fallback covers only the case where the identity carries no flag at all —
  * an absent field is not a claim that the address is unverified, and treating it as one would lock
- * out every GitHub sign-in if the provider payload ever changed shape.
+ * out every OAuth sign-in if a provider payload ever changed shape.
+ *
+ * The provider is an argument rather than a search across identities (spec 140): a founder who has
+ * linked both accounts has two identities, and the one that matters is the one they just used. Reading
+ * the wrong one would answer a question nobody asked.
  */
-export function githubEmailVerified(user: User): boolean {
-  const identity = user.identities?.find((i) => i.provider === "github");
+export function providerEmailVerified(user: User, provider: OAuthProvider): boolean {
+  const identity = user.identities?.find((i) => i.provider === provider);
   const flag: unknown = identity?.identity_data?.email_verified;
   if (typeof flag === "boolean") return flag;
   return Boolean(user.email_confirmed_at);
+}
+
+/**
+ * Which provider this session was created by, for a callback that has to name it in an error.
+ *
+ * `app_metadata.provider` is Supabase's record of the identity used *for this sign-in*, which is the
+ * question being asked. Anything unrecognised is treated as GitHub-shaped only in so far as it still
+ * gets checked — an unknown provider name finds no identity and therefore falls back, rather than
+ * skipping the gate.
+ */
+export function oauthProviderOf(user: User): OAuthProvider {
+  return user.app_metadata?.provider === "google" ? "google" : "github";
 }
 
 /** The GitHub account behind the signed-in user, when there is one (spec 67). */
