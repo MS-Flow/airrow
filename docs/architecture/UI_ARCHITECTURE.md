@@ -122,6 +122,15 @@ a visitor with nothing generated goes to their free foundation, and one who has 
 straight to `/app/upgrade`. Sending everyone to `/app/projects/new` handed the only visitor who had met
 the limit the one screen that cannot lift it.
 
+The landing page carries one overlay of its own: a chat panel, fixed to the corner, that answers
+questions about what Airrow builds and what it costs (`features/chat/`, spec 141). It is on `/` and
+nowhere else — not `/login`, `/signup` or the legal pages. It answers in English whatever language it
+is asked in, keeps its thread in `sessionStorage` so a reload does not lose it, and sets no cookie.
+Every state that is not an answer — the day's limit, the visitor's own, an unreachable model, an
+unconfigured deployment — falls back to the same four handwritten questions and the call to action,
+so the panel is never broken, only quieter. It is **not** the `ChatSlot` below: that one is
+repository-aware and signed-in, and remains unbuilt.
+
 Shell: collapsible sidebar + sticky top bar with breadcrumbs derived from the URL + ⌘K command
 palette + a reserved `ChatSlot` column for the future repository-aware assistant. The sidebar logo
 links to `/`, not `/app` — the rail already has Projects. Theme switch and account menu sit top-right
