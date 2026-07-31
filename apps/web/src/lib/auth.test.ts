@@ -18,7 +18,15 @@ vi.mock("@/lib/data/store", () => ({
   setDisplayName: vi.fn()
 }));
 
-const { githubEmailVerified, signIn, signInWithGitHub, signUp, signUpFailure } = await import("./auth");
+const {
+  oauthProviderOf,
+  providerEmailVerified,
+  signIn,
+  signInWithGitHub,
+  signInWithGoogle,
+  signUp,
+  signUpFailure
+} = await import("./auth");
 
 beforeEach(() => {
   signUpMock.mockReset();
@@ -173,14 +181,14 @@ describe("signInWithGitHub", () => {
   });
 });
 
-describe("githubEmailVerified", () => {
+describe("providerEmailVerified", () => {
   // `as` justified throughout: these are the two fields the function reads, and building a whole
   // Supabase `User` would say nothing extra about the decision being tested.
-  const asUser = (value: unknown) => value as Parameters<typeof githubEmailVerified>[0];
+  const asUser = (value: unknown) => value as Parameters<typeof providerEmailVerified>[0];
 
   it("accepts an address GitHub says it verified", () => {
     const user = { identities: [{ provider: "github", identity_data: { email_verified: true } }] };
-    expect(githubEmailVerified(asUser(user))).toBe(true);
+    expect(providerEmailVerified(asUser(user), "github")).toBe(true);
   });
 
   it("rejects an unverified address even when the account looks confirmed", () => {
@@ -188,14 +196,75 @@ describe("githubEmailVerified", () => {
       email_confirmed_at: "2026-07-01T00:00:00Z",
       identities: [{ provider: "github", identity_data: { email_verified: false } }]
     };
-    expect(githubEmailVerified(asUser(user))).toBe(false);
+    expect(providerEmailVerified(asUser(user), "github")).toBe(false);
   });
 
   it("falls back to the account's own confirmation when the identity carries no flag", () => {
     const withFlag = { email_confirmed_at: "2026-07-01T00:00:00Z", identities: [] };
     const without = { email_confirmed_at: null, identities: [] };
 
-    expect(githubEmailVerified(asUser(withFlag))).toBe(true);
-    expect(githubEmailVerified(asUser(without))).toBe(false);
+    expect(providerEmailVerified(asUser(withFlag), "github")).toBe(true);
+    expect(providerEmailVerified(asUser(without), "github")).toBe(false);
+  });
+
+  it("reads Google's own flag, not GitHub's, for a Google sign-in (spec 140)", () => {
+    const user = { identities: [{ provider: "google", identity_data: { email_verified: false } }] };
+    expect(providerEmailVerified(asUser(user), "google")).toBe(false);
+  });
+
+  /*
+   * The bug the provider argument exists to prevent. A founder who linked both accounts has two
+   * identities; searching for "the GitHub one" would clear a Google sign-in on evidence GitHub gave
+   * about a different address.
+   */
+  it("does not let a verified GitHub identity vouch for an unverified Google one", () => {
+    const user = {
+      email_confirmed_at: null,
+      identities: [
+        { provider: "github", identity_data: { email_verified: true } },
+        { provider: "google", identity_data: { email_verified: false } }
+      ]
+    };
+
+    expect(providerEmailVerified(asUser(user), "google")).toBe(false);
+    expect(providerEmailVerified(asUser(user), "github")).toBe(true);
+  });
+});
+
+describe("oauthProviderOf", () => {
+  const asUser = (value: unknown) => value as Parameters<typeof oauthProviderOf>[0];
+
+  it("names Google when that is the identity the session was created with", () => {
+    expect(oauthProviderOf(asUser({ app_metadata: { provider: "google" } }))).toBe("google");
+  });
+
+  it("treats anything else as GitHub, so the gate still runs", () => {
+    expect(oauthProviderOf(asUser({ app_metadata: { provider: "github" } }))).toBe("github");
+    expect(oauthProviderOf(asUser({ app_metadata: {} }))).toBe("github");
+  });
+});
+
+describe("signInWithGoogle", () => {
+  it("always asks Google which account to use", async () => {
+    oauthMock.mockResolvedValue({ data: { url: "https://accounts.google.com/o/oauth2" }, error: null });
+
+    await expect(signInWithGoogle("https://airrow.test/auth/callback?provider=google")).resolves.toEqual({
+      url: "https://accounts.google.com/o/oauth2"
+    });
+    expect(oauthMock).toHaveBeenCalledWith({
+      provider: "google",
+      options: {
+        redirectTo: "https://airrow.test/auth/callback?provider=google",
+        queryParams: { prompt: "select_account" }
+      }
+    });
+  });
+
+  it("reports a provider that is switched off without repeating its wording", async () => {
+    oauthMock.mockResolvedValue({ data: { url: null }, error: { message: "provider disabled" } });
+
+    await expect(signInWithGoogle("https://airrow.test/auth/callback")).resolves.toEqual({
+      error: "provider disabled"
+    });
   });
 });

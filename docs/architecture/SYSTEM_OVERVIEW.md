@@ -95,11 +95,18 @@ both need permissions a scope-less identity does not have. ZIP covers the import
 and is the only way in for a private project.
 
 ## Roles & tenancy
-Supabase Auth: email + password, and **GitHub OAuth with no scopes** (spec 67) — an identity that
-reaches nothing an anonymous visitor could not already fetch. A GitHub address that GitHub itself has
-not verified is refused at `/auth/callback`, since linking on an unproven address would hand somebody
-else's account away. Every user gets a personal **organization** at signup; all resources hang off
-`organization_id`, and RLS enforces tenancy on every table.
+Supabase Auth: email + password, **GitHub OAuth with no scopes** (spec 67), and **Google** (spec 140) —
+identities that reach nothing an anonymous visitor could not already fetch. An address the provider
+itself has not verified is refused at `/auth/callback`, since linking on an unproven address would hand
+somebody else's account away; a verified one links to the account that already holds it, so the same
+workspace meets the founder whichever way they came in. Every user gets a personal **organization** at
+signup; all resources hang off `organization_id`, and RLS enforces tenancy on every table.
+
+New passwords must carry an uppercase, a lowercase and a number on top of the eight-character floor
+(spec 140), enforced by `signupSchema`; a special character is deliberately **not** required, because
+that rule produces `Passw0rd!` more reliably than it produces strong passwords. Guessability is judged
+instead by a zxcvbn score gate on the signup form. `loginSchema` deliberately keeps the older, looser
+rule so accounts created before it still sign in.
 
 ## External services & failure posture
 | Service | Use | Failure posture |
