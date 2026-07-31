@@ -72,7 +72,12 @@ export interface InterviewAnswers {
   hosting?: Hosting;
   repoProvider?: RepoProvider;
   team?: TeamShape;
+  /** How the product should look, feel, and move — free text, feeds `UI_ARCHITECTURE.md` and `/start`. */
+  uiDirection?: string;
 }
+
+/** One question's id — what the interview keys an answer by, and what names an answer elsewhere. */
+export type AnswerId = keyof InterviewAnswers;
 
 /**
  * Where a project came from, and — for an import — whether the analysis found code to read.
@@ -129,6 +134,8 @@ export interface ProjectModel {
   coreEntities: string;
   /** The problem and who has it. Empty when unanswered — never inferred. */
   problem: string;
+  /** How the product should look, feel, and move. Empty when unanswered — never inferred. */
+  uiDirection: string;
   /** What the product deliberately is not doing. Empty when unanswered. */
   nonGoals: string;
   derived: {

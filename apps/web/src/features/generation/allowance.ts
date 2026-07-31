@@ -8,6 +8,7 @@
 // none of them knows that plans exist. What is counted lives in `generation_usage` and outlives the
 // projects it refers to — counting live jobs made the limit refundable, and a call already paid for
 // would be forgotten the moment a project was deleted.
+import { claimPro, grantStanding } from "@/lib/data/referrals";
 import { countGenerations, isAdminUser, projectUsage } from "@/lib/data/store";
 import type { OrgPlan } from "@/lib/data/store";
 import { FREE_GENERATION_LIMIT, FREE_REPAIR_LIMIT, REPAIR_WINDOW_HOURS } from "./limits";
@@ -24,6 +25,8 @@ export type AllowanceGrant =
   | "repair"
   /** A paid plan. */
   | "pro"
+  /** A week of Pro earned by inviting someone who then generated a foundation (spec 122). */
+  | "referral"
   /** An account exempt from the limit entirely. */
   | "admin";
 
@@ -67,8 +70,27 @@ export interface AllowanceQuery {
  * repair window second. The order matters: a founder who still has their free foundation is on the
  * `free` path even when generating a project that already exists, so their first regeneration is not
  * silently charged to the repair budget.
+ *
+ * Reports; changes nothing. Screens call this — the projects list, the interview, Settings — and a
+ * founder who is merely being told where they stand must not spend anything by looking. The two
+ * places that are about to spend call `claimAllowance` instead.
  */
 export async function checkAllowance(query: AllowanceQuery): Promise<Entitlement> {
+  return decide(query, false);
+}
+
+/**
+ * The same answer, at the moment it is acted on.
+ *
+ * The one difference is that an earned week may *start* here (spec 122). Called from
+ * `submitInterviewAction` and `retryGenerationAction`, which are the two paths that turn an
+ * entitlement into a Claude call.
+ */
+export async function claimAllowance(query: AllowanceQuery): Promise<Entitlement> {
+  return decide(query, true);
+}
+
+async function decide(query: AllowanceQuery, spending: boolean): Promise<Entitlement> {
   const { orgId, plan, userId, projectId, now = new Date() } = query;
 
   const [used, admin] = await Promise.all([
@@ -87,6 +109,12 @@ export async function checkAllowance(query: AllowanceQuery): Promise<Entitlement
 
   if (admin) return unlimited("admin");
   if (plan === "pro") return unlimited("pro");
+
+  // A week earned by inviting somebody (spec 122). Asked here and nowhere earlier: a workspace Stripe
+  // already covers short-circuits above, which is exactly what keeps an earned week queued instead of
+  // burning behind a subscription that made it unnecessary.
+  const week = spending ? await claimPro(orgId, now) : (await grantStanding(orgId, now)).activeUntil;
+  if (week) return unlimited("referral");
 
   const remaining = Math.max(0, FREE_GENERATION_LIMIT - used);
   if (used < FREE_GENERATION_LIMIT) {

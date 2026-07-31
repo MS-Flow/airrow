@@ -3,7 +3,7 @@
 
 import type { Framework, InterviewAnswers, ProductType } from "./types.ts";
 
-export const INTERVIEW_SCHEMA_VERSION = "1";
+export const INTERVIEW_SCHEMA_VERSION = "2";
 
 export interface QuestionOption {
   value: string;
@@ -64,12 +64,11 @@ export const ANSWER_MAX_CHARS = {
   vision: 300,
   mvpFocus: 300,
   coreEntities: 600,
+  uiDirection: 500,
   nonGoals: 400,
   frameworkOther: 300,
   integrations: 300
 } as const;
-
-const WEB_PRODUCT_TYPES = ["saas", "marketplace", "ai_agent", "mobile_app", "api", "browser_extension"];
 
 /** The stack a product type points at before the founder says otherwise. */
 export interface StandardStack {
@@ -179,19 +178,6 @@ export const interviewQuestions: Question[] = [
     placeholder: "e.g. Let a property manager create a listing and receive tenant applications online."
   },
   {
-    id: "audience",
-    title: "Who is it for?",
-    help: "B2B and B2C foundations differ: tenancy, onboarding, billing, compliance.",
-    type: "single",
-    required: true,
-    showIf: [{ questionId: "productType", in: WEB_PRODUCT_TYPES }],
-    options: [
-      { value: "b2b", label: "Businesses (B2B)", description: "Teams and companies pay" },
-      { value: "b2c", label: "Consumers (B2C)", description: "Individuals use and pay" },
-      { value: "both", label: "Both", description: "Prosumer or two-sided" }
-    ]
-  },
-  {
     id: "coreEntities",
     title: "What are the core objects in your product?",
     help: "The 3–7 most important things and how they relate. Skip it if you're not sure yet — you can fill it in later.",
@@ -199,6 +185,20 @@ export const interviewQuestions: Question[] = [
     required: false,
     maxChars: ANSWER_MAX_CHARS.coreEntities,
     placeholder: "e.g. Landlords own Properties; a Property has many Listings; a Listing receives Applications from Tenants."
+  },
+  {
+    // Two readers: the founder, who wants to know what their product looks like, and the assistant
+    // running `/start`, for whom this is a build brief — so the help text pushes toward something
+    // specific enough to act on, not merely a mood board. Never a hard requirement: a thin or empty
+    // answer still produces a usable, if less specific, `UI_ARCHITECTURE.md`.
+    id: "uiDirection",
+    title: "How should it look and feel?",
+    help: "Layout, tone, the screens that matter most, how someone moves through it. This becomes docs/architecture/UI_ARCHITECTURE.md — the design brief your AI assistant builds the first version from. Change it any time; it's a starting point, not a lock-in.",
+    type: "text",
+    required: false,
+    maxChars: ANSWER_MAX_CHARS.uiDirection,
+    placeholder:
+      "e.g. Calm and uncluttered, like Linear — a sidebar of properties, a single detail view per listing, dense tables over cards. Dark mode first. The applications inbox is the screen a property manager lives in."
   },
   {
     // Written into the generated CLAUDE.md, where it is the only thing standing between a coding
@@ -238,18 +238,6 @@ export const interviewQuestions: Question[] = [
       { value: "social", label: "Social login", description: "Google, GitHub, etc." },
       { value: "sso", label: "Enterprise SSO", description: "SAML / OIDC for B2B customers" },
       { value: "public", label: "No accounts (public)", description: "Anonymous — no sign-in" }
-    ]
-  },
-  {
-    id: "roles",
-    title: "How sophisticated should roles & permissions be?",
-    help: "You chose a multi-member tenancy — Airrow will spec the permission model.",
-    type: "single",
-    required: true,
-    showIf: [{ questionId: "tenancy", in: ["organizations", "marketplace"] }],
-    options: [
-      { value: "simple", label: "Simple", description: "Owner, admin, member — enough for most products" },
-      { value: "granular", label: "Granular", description: "Custom roles / per-resource permissions" }
     ]
   },
   {
@@ -295,29 +283,6 @@ export const interviewQuestions: Question[] = [
     showIf: [{ questionId: "capabilities", in: ["payments", "email", "notifications", "analytics", "ai"] }],
     maxChars: ANSWER_MAX_CHARS.integrations,
     placeholder: "e.g. Stripe for billing, Resend for email, Slack for alerts, HubSpot for CRM."
-  },
-  {
-    id: "dataSensitivity",
-    title: "How sensitive is your data?",
-    help: "Drives encryption, audit, and security posture across the generated standards.",
-    type: "single",
-    required: true,
-    options: [
-      { value: "standard", label: "Standard", description: "Normal user data, best-practice security" },
-      { value: "pii", label: "PII at scale", description: "Lots of personal data or payment details" },
-      { value: "regulated", label: "Regulated", description: "Health, finance, or data about minors — compliance regime applies" }
-    ]
-  },
-  {
-    id: "scale",
-    title: "What scale are you designing for first?",
-    type: "single",
-    required: true,
-    options: [
-      { value: "validate", label: "Validate first", description: "Optimize for speed of learning — hundreds of users" },
-      { value: "growth", label: "Growth-ready", description: "Expect rapid adoption — design for tens of thousands" },
-      { value: "high_scale", label: "High scale", description: "Millions of users / heavy load from the start" }
-    ]
   },
   {
     // Every stack question states what it *changes* in the output, not just what it means. A founder
@@ -418,24 +383,12 @@ export const interviewQuestions: Question[] = [
   {
     id: "repoProvider",
     title: "Where will your code live?",
+    help: "Decides the CI workflow, the branch-policy setup, and which CLI your assistant uses to open PRs — GitHub Actions and `gh`, or Azure Pipelines and `az`.",
     type: "single",
     required: true,
     options: [
       { value: "github", label: "GitHub", recommended: true, description: "Best Claude Code & CI ecosystem" },
       { value: "azure_devops", label: "Azure DevOps", description: "For Microsoft-centric organizations" }
-    ]
-  },
-  {
-    id: "team",
-    title: "Who's building it?",
-    help: "Shapes workflow, branching, and how much process Airrow prescribes.",
-    type: "single",
-    required: true,
-    options: [
-      { value: "solo", label: "Just me", description: "Solo founder + AI assistants" },
-      { value: "small_team", label: "2–5 people", description: "Founding team" },
-      { value: "startup", label: "Growing startup", description: "Multiple engineers, needs coordination" },
-      { value: "agency", label: "Agency", description: "Building for clients, repeatable process" }
     ]
   }
 ];

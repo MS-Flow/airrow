@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
-import { getInterview, getProject } from "@/lib/data/store";
+import { getInterview, getProject, latestJob } from "@/lib/data/store";
 import { AllowanceNotice } from "@/features/generation/AllowanceNotice";
 import { checkAllowance } from "@/features/generation/allowance";
 import { AuthedInterview } from "@/features/interview/AuthedInterview";
@@ -16,6 +16,10 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
 
   // A generated project may come back to change its answers; submitting regenerates from scratch.
   const interview = await getInterview(id);
+  // Why the founder is back here, when they were sent back rather than arriving on their own: the
+  // last run refused these answers (spec 128). Read from the job, so it survives a refresh and cannot
+  // be conjured by a link.
+  const lastJob = await latestJob(id);
   // Said here so the founder knows before answering thirty questions, not after (spec 100). The
   // interview itself is never blocked — the wall is at generate, and only there.
   const allowance = await checkAllowance({
@@ -33,6 +37,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
         projectName={project.name}
         initialAnswers={interview?.answers ?? {}}
         regenerating={project.status === "ready"}
+        rejectedAnswers={lastJob?.rejectedAnswers ?? null}
       />
     </>
   );

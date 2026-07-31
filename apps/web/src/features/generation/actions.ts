@@ -4,7 +4,7 @@
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { createJob, getProject, latestModelVersion, setProjectStatus } from "@/lib/data/store";
-import { allowanceMessage, checkAllowance } from "./allowance";
+import { allowanceMessage, claimAllowance } from "./allowance";
 
 export async function retryGenerationAction(
   projectId: string
@@ -18,7 +18,7 @@ export async function retryGenerationAction(
   // Retrying after a failure does not consume allowance — `countGenerations` excludes failed jobs,
   // so a founder is never charged for a generation that fell over on our side. A retry that *is*
   // charged (the previous run completed) is measured against this project's repair window.
-  const allowance = await checkAllowance({
+  const allowance = await claimAllowance({
     orgId: org.id,
     plan: org.plan,
     userId: user.id,
