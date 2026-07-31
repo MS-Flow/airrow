@@ -12,6 +12,7 @@ import {
   pruneHiddenAnswers,
   visibleQuestions,
   withSuggestions,
+  type AnswerId,
   type InterviewAnswers,
   type Question
 } from "@airrow/schemas";
@@ -22,7 +23,8 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
-import { InlineError, UpgradeNotice } from "@/components/ui/states";
+import { InlineError, Notice, UpgradeNotice } from "@/components/ui/states";
+import { rejectionSummary } from "@/features/generation/rejection";
 import { cn } from "@/lib/utils";
 
 /**
@@ -48,6 +50,12 @@ interface Props {
   pendingLabel: string;
   /** Where the "back" affordance leads out of the interview. */
   back: { href: string; label: string };
+  /**
+   * The answers the last generation was refused for, if it was (spec 128). Null on every ordinary
+   * visit — including a founder who simply walked back here, which is why it comes from the job
+   * rather than from where they came from.
+   */
+  rejectedAnswers?: readonly AnswerId[] | null;
 }
 
 function answerLabel(q: Question, answers: InterviewAnswers): string {
@@ -68,7 +76,8 @@ export function InterviewRuntime({
   submit: submitAnswers,
   submitLabel,
   pendingLabel,
-  back
+  back,
+  rejectedAnswers = null
 }: Props) {
   const router = useRouter();
   // A resumed interview is seeded the same way a live one is, so where the founder left off is
@@ -92,6 +101,7 @@ export function InterviewRuntime({
   const visible = useMemo(() => visibleQuestions(answers), [answers]);
   const complete = useMemo(() => firstUnanswered(answers) === null, [answers]);
   const current = visible[Math.min(cursor, visible.length - 1)];
+  const rejected = useMemo(() => new Set(rejectedAnswers ?? []), [rejectedAnswers]);
 
   const persist = useCallback(
     (next: InterviewAnswers) => {
@@ -151,11 +161,24 @@ export function InterviewRuntime({
             ? "Change any answer, then regenerate. This builds a fresh foundation — edits you made to the current files are not carried over."
             : "Check your answers — each one shapes the output. Generation takes under a minute."}
         </p>
+        {/* The last run stopped on these answers rather than generating around them (spec 128). A
+            caution, not an error: nothing failed and nothing was lost — there is something to rewrite.
+            Short, because the rows below carry which ones. */}
+        {rejectedAnswers ? (
+          <Notice role="status" title="These answers weren't accepted" className="mt-6">
+            {rejectionSummary(rejectedAnswers)}
+          </Notice>
+        ) : null}
         <Card className="mt-6 divide-y divide-border">
           {visible.map((q) => (
             <div key={q.id} className="flex items-start justify-between gap-4 px-5 py-3.5">
               <div className="min-w-0">
-                <p className="text-sm text-fg-muted">{q.title}</p>
+                <p className="flex flex-wrap items-center gap-2 text-sm text-fg-muted">
+                  {q.title}
+                  {/* Beside the question, not under the answer: what the founder is scanning for is
+                      which rows to open, and the pencil to open one is on the same line. */}
+                  {rejected.has(q.id) ? <Badge tone="warn">Rewrite this</Badge> : null}
+                </p>
                 <p className="mt-0.5 truncate text-base font-medium text-fg">
                   {answerLabel(q, answers)}
                 </p>

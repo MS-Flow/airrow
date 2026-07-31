@@ -61,3 +61,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | `/createspec` syncs `develop` into the feature branch first | [104-createspec-sync-develop.md](104-createspec-sync-develop.md) | ✅ Done |
 | Migrations apply themselves, or the PR is blocked | [77-auto-apply-migrations.md](77-auto-apply-migrations.md) | ✅ Done |
 | The verification email comes from Airrow | [113-branded-auth-email.md](113-branded-auth-email.md) | 🔄 In progress |
+| Unusable answers stop the generation instead of producing a generic foundation | [128-reject-invalid-answers.md](128-reject-invalid-answers.md) | 🔄 In progress |

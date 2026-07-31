@@ -76,6 +76,9 @@ export interface InterviewAnswers {
   uiDirection?: string;
 }
 
+/** One question's id — what the interview keys an answer by, and what names an answer elsewhere. */
+export type AnswerId = keyof InterviewAnswers;
+
 /**
  * Where a project came from, and — for an import — whether the analysis found code to read.
  *

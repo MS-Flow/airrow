@@ -18,6 +18,7 @@ type JobPatch = {
   stage?: string | null;
   stagesDone?: string[];
   error?: string;
+  rejectedAnswers?: string[];
 };
 
 const store = vi.hoisted(() => ({
@@ -26,7 +27,8 @@ const store = vi.hoisted(() => ({
   setProjectStatus: vi.fn(async (_projectId: string, _status: string) => {}),
   getJob: vi.fn(async (_jobId: string) => ({ id: "job1", projectId: "proj1" })),
   saveAuthoringProvenance: vi.fn(async (_jobId: string, _p: unknown) => {}),
-  findAuthoredByInputs: vi.fn(async (): Promise<unknown> => null)
+  findAuthoredByInputs: vi.fn(async (): Promise<unknown> => null),
+  previousCompletedJob: vi.fn(async (): Promise<unknown> => null)
 }));
 
 vi.mock("@/lib/data/store", () => store);
@@ -34,7 +36,8 @@ vi.mock("@/lib/template/load", () => ({ loadTemplate: () => [] }));
 
 // The one network call in generation, stubbed: these tests are about the runner's control flow, and
 // §V forbids reaching the network from a test regardless.
-const authorFoundation = vi.hoisted(() => vi.fn(async (): Promise<unknown> => null));
+const UNAVAILABLE = { status: "unavailable" } as const;
+const authorFoundation = vi.hoisted(() => vi.fn(async (): Promise<unknown> => ({ status: "unavailable" })));
 vi.mock("./author", () => ({
   authorFoundation,
   PROMPT_VERSION: "test-prompt",
@@ -62,7 +65,7 @@ describe("runGenerationJob", () => {
     order.length = 0;
     store.getJob.mockResolvedValue({ id: "job1", projectId: "proj1" });
     store.findAuthoredByInputs.mockResolvedValue(null);
-    authorFoundation.mockResolvedValue(null);
+    authorFoundation.mockResolvedValue(UNAVAILABLE);
     store.saveArtifact.mockImplementation(async () => {
       await Promise.resolve();
       order.push("artifact-saved");
@@ -119,6 +122,112 @@ describe("runGenerationJob", () => {
   });
 });
 
+// A live call must never be mistaken for a crashed one. The job endpoint declares a job dead after 60
+// seconds without a write, and authoring is one long await with no writes in it — so a slow call
+// reported itself as "Generation was interrupted" while it was still working (spec 128).
+describe("staying alive through a long authoring call", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    store.getJob.mockResolvedValue({ id: "job1", projectId: "proj1" });
+    store.findAuthoredByInputs.mockResolvedValue(null);
+    generate.mockReturnValue({ files: [{ path: "README.md" }], manifest: { fileCount: 1 } });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("beats while the call is in flight, well inside the 60-second window", async () => {
+    // A call slow enough to have tripped the check: the job must have written something in between.
+    authorFoundation.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve(UNAVAILABLE), 50_000))
+    );
+
+    await runToCompletion();
+
+    // The heartbeat writes nothing but a timestamp, which is exactly how it is recognised here.
+    const beats = store.updateJob.mock.calls.filter(([, patch]) => Object.keys(patch).length === 0);
+    expect(beats.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("stops beating once the call is done", async () => {
+    await runToCompletion();
+
+    const beatsAfter = store.updateJob.mock.calls.filter(([, patch]) => Object.keys(patch).length === 0).length;
+    await vi.advanceTimersByTimeAsync(120_000);
+
+    expect(
+      store.updateJob.mock.calls.filter(([, patch]) => Object.keys(patch).length === 0)
+    ).toHaveLength(beatsAfter);
+  });
+});
+
+// The answers themselves being refused (spec 128). Everything here is about the run *stopping*: it
+// used to continue, hand over a deterministic foundation, and never say why.
+describe("refused answers", () => {
+  const rejected = { status: "rejected", answers: ["problem", "mvpFocus"] } as const;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    store.getJob.mockResolvedValue({ id: "job1", projectId: "proj1" });
+    store.findAuthoredByInputs.mockResolvedValue(null);
+    store.previousCompletedJob.mockResolvedValue(null);
+    authorFoundation.mockResolvedValue(rejected);
+    generate.mockReturnValue({ files: [{ path: "README.md" }], manifest: { fileCount: 1 } });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("generates nothing, so the founder is never handed a foundation about nothing", async () => {
+    await runToCompletion();
+
+    expect(generate).not.toHaveBeenCalled();
+    expect(store.saveArtifact).not.toHaveBeenCalled();
+    expect(store.updateJob).not.toHaveBeenCalledWith("job1", expect.objectContaining({ status: "completed" }));
+  });
+
+  it("ends the job failed and names the answers to rewrite", async () => {
+    // `failed` is also what keeps the run out of the allowance ledger: `chargedUsage` excludes it, so
+    // a founder is never charged for answers we declined.
+    await runToCompletion();
+
+    expect(store.updateJob).toHaveBeenCalledWith(
+      "job1",
+      expect.objectContaining({ status: "failed", rejectedAnswers: ["problem", "mvpFocus"] })
+    );
+  });
+
+  it("sends the project back to the interview, where the answers can be changed", async () => {
+    await runToCompletion();
+
+    expect(store.setProjectStatus).toHaveBeenCalledWith("proj1", "interviewing");
+  });
+
+  it("leaves an existing foundation standing when a regeneration is refused", async () => {
+    // A refused rewrite must not cost the founder the foundation they already have.
+    store.previousCompletedJob.mockResolvedValue({ id: "job0" });
+
+    await runToCompletion();
+
+    expect(store.setProjectStatus).toHaveBeenCalledWith("proj1", "ready");
+  });
+
+  it("still generates deterministically when the call was merely unavailable", async () => {
+    // The other half of the distinction: no key or no network is ours to absorb, and the ZIP promise
+    // depends on it.
+    authorFoundation.mockResolvedValue(UNAVAILABLE);
+
+    await runToCompletion();
+
+    expect(store.saveArtifact).toHaveBeenCalled();
+    expect(store.setProjectStatus).toHaveBeenCalledWith("proj1", "ready");
+  });
+});
+
 // A regeneration with unchanged answers costs ~37s, a paid call, and a slice of the founder's
 // three-generation allowance. Founders regenerate constantly while tuning one answer, so this is the
 // difference between the limit being a budget and the limit being a wall.
@@ -130,7 +239,7 @@ describe("authoring memoisation", () => {
     vi.clearAllMocks();
     store.getJob.mockResolvedValue({ id: "job1", projectId: "proj1" });
     store.findAuthoredByInputs.mockResolvedValue(null);
-    authorFoundation.mockResolvedValue(null);
+    authorFoundation.mockResolvedValue(UNAVAILABLE);
     generate.mockReturnValue({ files: [{ path: "README.md" }], manifest: { fileCount: 1 } });
   });
 
@@ -148,7 +257,7 @@ describe("authoring memoisation", () => {
   });
 
   it("calls out when nothing matches, and stores what it got", async () => {
-    authorFoundation.mockResolvedValue(stored);
+    authorFoundation.mockResolvedValue({ status: "authored", foundation: stored });
 
     await runToCompletion();
 
@@ -173,7 +282,7 @@ describe("authoring memoisation", () => {
   });
 
   it("records a live call as chargeable", async () => {
-    authorFoundation.mockResolvedValue(stored);
+    authorFoundation.mockResolvedValue({ status: "authored", foundation: stored });
 
     await runToCompletion();
 
