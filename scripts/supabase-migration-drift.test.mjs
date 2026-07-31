@@ -4,6 +4,7 @@ import {
   MigrationListError,
   MissingCredentialsError,
   REQUIRED_CREDENTIALS,
+  addedMigrationsRange,
   describeDrift,
   isForkPullRequest,
   localMigrationVersions,
@@ -246,6 +247,63 @@ describe("parseAddedMigrations", () => {
 
   it("returns nothing for empty output — a change that adds no migration", () => {
     expect(parseAddedMigrations("")).toEqual([]);
+  });
+});
+
+/* ── What a change is measured against (spec 130) ──────────────────────────
+ *
+ * `verify` is one required context produced by two events, and only the pull request one states its
+ * base. Reading `GITHUB_BASE_REF` and giving up otherwise failed a required check on every push that
+ * carried a migration — a red that blocked PR #129 for drift that did not exist.
+ */
+describe("addedMigrationsRange", () => {
+  it("uses the stated base on a pull request", () => {
+    expect(addedMigrationsRange({ baseRef: "develop", refName: "feature/pro" })).toBe(
+      "origin/develop...HEAD"
+    );
+  });
+
+  it("prefers the stated base even on a branch that has one", () => {
+    // A PR into a feature branch is measured against that feature branch, not against develop.
+    expect(addedMigrationsRange({ baseRef: "feature/pro", refName: "122-invite-a-friend" })).toBe(
+      "origin/feature/pro...HEAD"
+    );
+  });
+
+  it("measures a pushed branch against develop", () => {
+    // The regression: on push there is no base ref, and what this branch adds on top of develop has
+    // not merged yet — whichever push introduced it.
+    expect(addedMigrationsRange({ refName: "feature/pro", before: "abc123" })).toBe(
+      "origin/develop...HEAD"
+    );
+  });
+
+  it("measures a push to develop against what that push brought in", () => {
+    expect(addedMigrationsRange({ refName: "develop", before: "abc123" })).toBe("abc123..HEAD");
+  });
+
+  it("measures a push to main the same way", () => {
+    expect(addedMigrationsRange({ refName: "main", before: "def456" })).toBe("def456..HEAD");
+  });
+
+  it("has nothing to measure on develop without a before sha", () => {
+    // Fails closed: the caller treats a null range as "everything unapplied was already merged".
+    expect(addedMigrationsRange({ refName: "develop" })).toBeNull();
+    expect(addedMigrationsRange({ refName: "develop", before: "0".repeat(40) })).toBeNull();
+  });
+
+  it("has nothing to measure with no ref at all", () => {
+    expect(addedMigrationsRange({})).toBeNull();
+    expect(addedMigrationsRange()).toBeNull();
+  });
+
+  it("keeps failing on develop for a migration an earlier push merged", () => {
+    // The property this whole check exists for (spec 77): `before..HEAD` deliberately excludes a
+    // migration that merged days ago and never applied, so it stays blocking.
+    const range = addedMigrationsRange({ refName: "develop", before: "abc123" });
+
+    expect(range).not.toContain("origin/develop");
+    expect(range).toBe("abc123..HEAD");
   });
 });
 

@@ -272,33 +272,64 @@ function supabase(args) {
   }
 }
 
+/** A push payload's `before` when the ref did not exist yet — nothing to diff against. */
+const EMPTY_SHA = /^0{40}$/;
+
 /**
- * The migrations this pull request adds on top of its base branch. Empty outside a PR, and empty
- * when the base cannot be resolved — failing closed on purpose: blocking on drift we cannot
- * explain is the safe direction, waving it through is not.
+ * The git range that answers "which migrations does this change add?", or null when nothing can.
+ *
+ * `verify` is one required context produced by two events (`setup-branch-protection.sh`), and only the
+ * pull request one states its base. Reading `GITHUB_BASE_REF` and giving up otherwise meant every push
+ * that carried a migration failed a required check for drift that did not exist — which blocked PR #129
+ * outright. Three situations, three different questions:
+ *
+ * - **pull_request** — the base is stated. Unchanged.
+ * - **push to any other branch** — whatever it adds on top of `develop` has not merged yet, no matter
+ *   which push introduced it. That is the branch's own diff, not this push's.
+ * - **push to `develop`/`main`** — `before..HEAD` is what this push brought in, and
+ *   `supabase-migrate.yml` applies it seconds later. Deliberately *not* the branch diff: on develop
+ *   there is nothing to compare against, and a migration that merged days ago and never applied has to
+ *   stay failing. That is the 2026-07-27 incident and the reason spec 77 exists.
+ *
+ * Pure, so all three are testable without Actions (spec 130).
  */
-function migrationsAddedInPullRequest() {
-  const base = process.env.GITHUB_BASE_REF;
-  if (!base) return [];
+export function addedMigrationsRange({
+  baseRef,
+  refName,
+  before,
+  defaultBranches = ["develop", "main"]
+} = {}) {
+  if (baseRef) return `origin/${baseRef}...HEAD`;
+  if (!refName) return null;
+  if (!defaultBranches.includes(refName)) return `origin/develop...HEAD`;
+  if (!before || EMPTY_SHA.test(before)) return null;
+  return `${before}..HEAD`;
+}
+
+/**
+ * The migrations this change adds on top of what it is measured against. Empty when the range cannot
+ * be derived or the diff fails — failing closed on purpose: blocking on drift we cannot explain is the
+ * safe direction, waving it through is not.
+ */
+function migrationsAddedInThisChange(event = readGitHubEvent()) {
+  const range = addedMigrationsRange({
+    baseRef: process.env.GITHUB_BASE_REF,
+    refName: process.env.GITHUB_REF_NAME,
+    before: event?.before
+  });
+  if (!range) return [];
 
   try {
     return parseAddedMigrations(
       execFileSync(
         "git",
-        [
-          "diff",
-          "--name-only",
-          "--diff-filter=A",
-          `origin/${base}...HEAD`,
-          "--",
-          "supabase/migrations"
-        ],
+        ["diff", "--name-only", "--diff-filter=A", range, "--", "supabase/migrations"],
         { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }
       )
     );
   } catch {
     console.log(
-      `::warning::Kunde inte jämföra mot origin/${base}, så alla oapplicerade migrationer räknas som redan merge:ade. Hämtades basgrenen i workflowet?`
+      `::warning::Kunde inte jämföra mot ${range}, så alla oapplicerade migrationer räknas som redan merge:ade. Hämtades jämförelsegrenen i workflowet?`
     );
     return [];
   }
@@ -331,7 +362,7 @@ function main() {
     const verdict = describeDrift(
       parseMigrationList(stdout),
       localMigrationVersions(),
-      migrationsAddedInPullRequest()
+      migrationsAddedInThisChange()
     );
     verdict.messages.forEach(report);
     process.exit(verdict.ok ? 0 : 1);
