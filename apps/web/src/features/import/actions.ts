@@ -26,6 +26,7 @@ import {
 } from "@airrow/schemas";
 import { githubToken, requireSession } from "@/lib/auth";
 import { githubReader } from "@/lib/github";
+import { claimPro } from "@/lib/data/referrals";
 import {
   clearConflictResolution,
   createImportSource,
@@ -122,7 +123,11 @@ async function completeImport(
   // analysis on purpose — that runs locally, makes no Claude call and costs Airrow nothing, and it
   // is the moment a founder with an existing repo sees that Airrow read their code. Asking them to
   // pay before it would be asking them to buy blind. Everything below this line is a durable write.
-  if (org.plan !== "pro") {
+  //
+  // An earned week counts as Pro here for the same reason it does in `checkAllowance`: it *is* Pro,
+  // and telling a founder they are on Pro and then refusing the one other thing Pro buys would be the
+  // product contradicting itself (spec 122).
+  if (org.plan !== "pro" && !(await claimPro(org.id))) {
     return {
       requiresPro: true,
       preview: {

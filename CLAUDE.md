@@ -88,3 +88,7 @@ passes it in.
   `features/billing/sync.ts`, both through `applySubscriptionState`. A Checkout redirect still proves
   nothing and grants nothing — spec 100 amended spec 99's "webhook only" to name the second path,
   because a founder whose webhook never arrives must not be stuck paying for free. Specs 74, 99, 100.
+  Pro can also be **earned**: inviting someone who then generates their first foundation is worth a
+  week, capped at three per workspace. That week is a `plan_grants` row, never `organizations.plan` —
+  the entitlement is resolved as *the plan or an active grant*, and only `claimAllowance` and the
+  import gate may start one, so a screen that merely reports never spends it. Spec 122.

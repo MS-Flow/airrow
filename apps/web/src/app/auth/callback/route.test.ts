@@ -7,6 +7,9 @@ import { NextRequest } from "next/server";
 const exchange = vi.fn();
 const signOut = vi.fn();
 const purge = vi.fn();
+const attachPendingReferral = vi.hoisted(() => vi.fn(async () => {}));
+
+vi.mock("@/features/referrals/attach", () => ({ attachPendingReferral }));
 
 vi.mock("@/lib/data/supabase-server", () => ({
   supabaseServer: async () => ({ auth: { exchangeCodeForSession: exchange, signOut } })
@@ -36,6 +39,7 @@ beforeEach(() => {
   exchange.mockReset();
   signOut.mockReset();
   purge.mockReset();
+  attachPendingReferral.mockClear();
 });
 
 describe("GET /auth/callback", () => {
@@ -46,6 +50,27 @@ describe("GET /auth/callback", () => {
 
     expect(response.headers.get("location")).toBe("https://airrow.test/app");
     expect(purge).not.toHaveBeenCalled();
+  });
+
+  // GitHub is the other way in, and losing the invitation for everyone who prefers it would leave
+  // half the feature silently broken (spec 122).
+  it("spends a pending invitation on a verified sign-in", async () => {
+    exchange.mockResolvedValue({ data: { user: user(true, "2026-08-01T09:00:00.000Z") }, error: null });
+
+    await GET(request("?code=abc"));
+
+    expect(attachPendingReferral).toHaveBeenCalledWith({
+      id: "user-1",
+      createdAt: "2026-08-01T09:00:00.000Z"
+    });
+  });
+
+  it("spends nothing for an address GitHub has not verified", async () => {
+    exchange.mockResolvedValue({ data: { user: user(false) }, error: null });
+
+    await GET(request("?code=abc"));
+
+    expect(attachPendingReferral).not.toHaveBeenCalled();
   });
 
   it("refuses an address GitHub has not verified, and leaves no account behind", async () => {

@@ -3,6 +3,7 @@
 //
 // Deliberately outside the middleware matcher — the founder has no session yet when they arrive.
 import { NextResponse, type NextRequest } from "next/server";
+import { attachPendingReferral } from "@/features/referrals/attach";
 import { githubEmailVerified } from "@/lib/auth";
 import { purgeUnverifiedSignup } from "@/lib/data/store";
 import { supabaseServer } from "@/lib/data/supabase-server";
@@ -35,6 +36,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (identities.length === 1 && fresh) await purgeUnverifiedSignup(data.user.id);
     return back("github_unverified");
   }
+
+  // Past the gate above, the address is verified by GitHub — the same standard the email route's link
+  // click meets, so an invitation counts here too (spec 122). `attachPendingReferral` decides for
+  // itself whether this account is new enough: this route runs on every sign-in, not only the first.
+  await attachPendingReferral({ id: data.user.id, createdAt: data.user.created_at });
 
   return NextResponse.redirect(`${origin}/app`);
 }

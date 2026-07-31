@@ -18,6 +18,15 @@ jobs:
       TZ: UTC
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history, for the migration check at the bottom of this job. It asks
+          # `git diff origin/<base>...HEAD` to tell a migration this PR *adds* — expected to be
+          # unapplied, the merge is what applies it — from one that merged earlier and never reached
+          # the database. The three-dot form needs a merge base, and the default depth-1 checkout has
+          # no ancestry to find one in: the diff fails, the script falls back to "treat every
+          # unapplied migration as already merged", and every PR that adds a migration goes red for a
+          # drift that does not exist. Seen on PR #124 (spec 122). Amends spec 77.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4   # version comes from package.json "packageManager"
       - uses: actions/setup-node@v4
         with:
@@ -106,10 +115,11 @@ jobs:
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
         run: |
           # A migration this PR adds is expected to be unapplied — the merge is what applies it.
-          # The script needs the base branch to tell those apart from drift that was already there,
-          # and `checkout` clones one commit deep, so fetch it. Without this the script warns and
-          # falls back to treating every unapplied migration as pre-existing.
+          # The script needs the base branch to tell those apart from drift that was already there.
+          # `checkout` fetches the full history of one ref, so the base still has to be fetched — but
+          # deliberately without `--depth`, which would make an otherwise complete clone shallow and
+          # take the merge base away again, which is the failure this whole block exists to avoid.
           if [ -n "$GITHUB_BASE_REF" ]; then
-            git fetch --no-tags --depth=50 origin "$GITHUB_BASE_REF"
+            git fetch --no-tags origin "$GITHUB_BASE_REF"
           fi
           node scripts/supabase-migration-drift.mjs

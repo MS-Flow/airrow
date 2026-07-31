@@ -16,6 +16,19 @@ vi.mock("@/features/import/actions", () => ({ importProjectAction: vi.fn() }));
 vi.mock("@/features/import/archive-cache", () => ({ cacheArchive: vi.fn() }));
 vi.mock("@/features/import/RepoPicker", () => ({ RepoPicker: () => null }));
 
+// No earned week by default, so the paywall assertions below are about the plan and nothing else.
+const referralSummary = vi.hoisted(() =>
+  vi.fn(async () => ({
+    code: "invite-code",
+    invites: [],
+    credited: 0,
+    remaining: 3,
+    activeUntil: null as string | null,
+    queued: 0
+  }))
+);
+vi.mock("@/lib/data/referrals", () => ({ referralSummary }));
+
 import ImportProject from "./page";
 
 const screenFor = () => ImportProject({ searchParams: Promise.resolve({}) });
