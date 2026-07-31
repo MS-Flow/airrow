@@ -21,16 +21,23 @@ Every feature, screen, and generated file is judged against these.
 - **Preparation, and a starting point.** Airrow's hosted product generates engineering *foundations* —
   documents, rules, workflow and CI — never application code. The `/start` command it ships **inside**
   a generated repository is the deliberate exception: run explicitly by the founder, on their own
-  machine, it scaffolds the stack and sets the project up to the bare minimum that runs, using the
-  information already in the repo. **Bare minimum is the ceiling** — enough to open, change and
-  continue from, never a guess at the product. Everything past that goes through the spec loop.
-  A foundation generated for a project that **already exists** ships `/cleanup` in its place: run the
-  same way, it reads the codebase that is there and rewrites the foundation's documents to describe
-  it. Its ceiling is narrower — it changes no code and deletes nothing. A foundation ships exactly one
-  of the two, decided by where the project came from. Airrow's servers still never write application
-  code, and ZIP delivery is still a complete foundation on its own. (Amended by
-  [spec 66](../../specs/66-start-command.md), which records the previous wording, and extended by
-  [spec 91](../../specs/91-cleanup-command.md).)
+  machine, it scaffolds the stack and then builds the product's core action — `mvpFocus` — for real,
+  to the design in `UI_ARCHITECTURE.md`, using only information already in the repo. **The ceiling is
+  `mvpFocus`, built well** — not a second feature, not a roadmap item, not a capability picked for
+  later, and never a guess at the product: everything created must trace back to something the
+  founder actually wrote, or it is left as a `[NEEDS CLARIFICATION]` marker rather than invented.
+  Presentation may go further than function — `/start` may finish the screen to the design language
+  already in the repo where the founder's own direction was thin — but schema, persistence and any
+  real auth service stay out; those are the founder's first spec. Everything past `mvpFocus` goes
+  through the spec loop. A foundation generated for a project that **already exists** ships `/cleanup`
+  in its place: run the same way, it reads the codebase that is there and rewrites the foundation's
+  documents to describe it. Its ceiling is narrower — it changes no code and deletes nothing. A
+  foundation ships exactly one of the two, decided by where the project came from. Airrow's servers
+  still never write application code, and ZIP delivery is still a complete foundation on its own.
+  (Amended by [spec 66](../../specs/66-start-command.md), which records the previous wording, extended
+  by [spec 91](../../specs/91-cleanup-command.md), and amended again by
+  [spec 123](../../specs/123-foundation-starts-strong.md) — which records the "bare minimum that runs"
+  wording spec 66 introduced.)
 - **The output is the product.** Generated repos must read like a senior CTO wrote them for *this*
   project — never like a filled-in template. Generic output is a top-severity bug.
 - **Adaptive, never bureaucratic.** The interview asks only questions whose answers change the output.

@@ -47,6 +47,7 @@ export const interviewAnswersSchema = z
     mvpFocus: textAnswer(ANSWER_MAX_CHARS.mvpFocus),
     audience: z.enum(["b2b", "b2c", "both", "internal"]),
     coreEntities: textAnswer(ANSWER_MAX_CHARS.coreEntities),
+    uiDirection: textAnswer(ANSWER_MAX_CHARS.uiDirection),
     nonGoals: textAnswer(ANSWER_MAX_CHARS.nonGoals),
     tenancy: z.enum(["single_user", "organizations", "marketplace", "internal"]),
     authModel: z.array(z.enum(["email_password", "magic_link", "social", "sso", "public"])).min(1).max(5),

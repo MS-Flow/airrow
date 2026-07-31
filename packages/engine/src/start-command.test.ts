@@ -203,19 +203,35 @@ describe("the commands /start makes real are the ones every other file names", (
   });
 });
 
-describe("bare minimum is stated as a ceiling, not a starting budget", () => {
+describe("the MVP focus is stated as a ceiling, not a starting budget (spec 123)", () => {
   it("says what to build and, as plainly, what not to", () => {
     const { start } = render(nextjs);
     expect(start).toContain("ceiling");
-    expect(start).toMatch(/No features/i);
+    expect(start).toMatch(/No second feature/i);
     expect(start).toContain("/createspec");
   });
 
   // Without this the ceiling reads as forbidding the design system section 1 just installed, and
   // the founder gets a plain-CSS screen plus a question about which document to believe.
   it("puts styling inside the ceiling rather than leaving it to be guessed at", () => {
-    expect(render(nextjs).start).toContain("design system and using it is not a feature");
+    expect(render(nextjs).start).toContain("design system, and using it is not a feature");
     expect(render(custom).start).toMatch(/Style it the way this stack styles things/);
+  });
+
+  it("reads UI_ARCHITECTURE.md before writing anything, and traces every element back to an answer", () => {
+    const { start } = render(nextjs);
+    expect(start).toContain("docs/architecture/UI_ARCHITECTURE.md");
+    expect(start).toContain("must trace back to something the founder wrote");
+  });
+
+  it("allows a sign-in surface but never an auth service, secret, or user table", () => {
+    const { start } = render(nextjs);
+    expect(start).toContain("provision no auth service, write no secret, and create no user table");
+  });
+
+  it("builds against local state — no schema, no persistence", () => {
+    const { start } = render(nextjs);
+    expect(start).toContain("No schema, no persistence");
   });
 
   it("draws the minimum from the founder's own answers", () => {
