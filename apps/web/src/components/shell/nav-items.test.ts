@@ -7,7 +7,7 @@ import { NAV_ITEMS } from "./nav-items";
  */
 describe("NAV_ITEMS", () => {
   it("lists only screens that exist", () => {
-    expect(NAV_ITEMS.map((n) => n.href)).toEqual(["/app", "/app/settings"]);
+    expect(NAV_ITEMS.map((n) => n.href)).toEqual(["/app", "/app/settings", "/app/support"]);
   });
 
   it("has no entry for the removed Templates and Prompts screens", () => {

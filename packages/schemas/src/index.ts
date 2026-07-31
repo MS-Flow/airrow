@@ -131,6 +131,41 @@ export const profileUpdateSchema = z.object({
   name: z.string().trim().min(1).max(80)
 });
 
+/**
+ * What a support ticket can be about (spec 144).
+ *
+ * Four, and deliberately not more. The category exists so a ticket can be read in the right frame of
+ * mind, not so it can be routed — one person reads them all — and a longer list only makes a founder
+ * in trouble stop to classify their own problem.
+ */
+export const SUPPORT_CATEGORIES = ["generation", "billing", "account", "other"] as const;
+
+export const supportTicketSchema = z.object({
+  category: z.enum(SUPPORT_CATEGORIES),
+  subject: z.string().trim().min(3).max(120),
+  body: z.string().trim().min(10).max(TEXT_MAX),
+  /** The project this is about, when the founder picked one. `""` from an unset <select> means none. */
+  projectId: z.union([z.string().uuid(), z.literal("")])
+});
+
+export type SupportTicketInput = z.infer<typeof supportTicketSchema>;
+
+/**
+ * A founder's verdict on the foundation they were just given (spec 144).
+ *
+ * The stars are required and the words are not: a rating alone is still worth having, and demanding a
+ * paragraph is how you get no answer at all. `consentPublic` is what separates feedback from a
+ * testimonial — without it the review is ours to read and nobody else's to see.
+ */
+export const projectReviewSchema = z.object({
+  rating: z.coerce.number().int().min(1).max(5),
+  body: z.string().trim().max(1000),
+  consentPublic: z.boolean(),
+  displayName: z.string().trim().max(80)
+});
+
+export type ProjectReviewInput = z.infer<typeof projectReviewSchema>;
+
 export const loginSchema = z.object({
   email: z.string().trim().email().max(200),
   password: z.string().min(8).max(200)

@@ -107,6 +107,7 @@ failure teaches founders to dismiss both. Below ~24px the mark drops the gradien
 /app/projects/[id]/import          Import review: what was derived, and conflicts to decide (spec 63)
 /app/projects/[id]/continue        "Continue locally" handoff
 /app/settings                      Profile, plan & billing, theme, workspace, connections
+/app/support                       Write to us — a ticket that reaches a real inbox (spec 144)
 /app/upgrade                       What Pro gives, and the way to buy it (specs 99, 100)
 /app/upgrade/return                Where Checkout returns: reconciles with Stripe, then Settings (spec 100)
 ```
