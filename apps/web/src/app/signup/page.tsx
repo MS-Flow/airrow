@@ -30,7 +30,8 @@ async function signupAction(formData: FormData) {
     parsed.data.password,
     `${await requestOrigin()}/auth/confirm`
   );
-  if (result.status === "error") redirect("/signup?error=exists");
+  // The reason travels; the provider's own words never do (spec 135).
+  if (result.status === "error") redirect(`/signup?error=${result.reason}`);
   // No session means the project requires e-mail confirmation — say so instead of
   // sending them to /app, which would bounce them back to /login.
   redirect(result.status === "signed-in" ? "/app" : "/signup?status=check-inbox");
@@ -38,9 +39,21 @@ async function signupAction(formData: FormData) {
 
 export const metadata = { title: "Create account" };
 
+/**
+ * One sentence per cause, and each gives the advice that is right for *that* cause (spec 135).
+ *
+ * `exists` is kept alongside `already-registered`: a founder can be holding a bookmarked or half-typed
+ * URL from before this change, and a query string nobody recognises would render a blank error.
+ */
 const messages: Record<string, string> = {
   invalid: "Enter a name, a valid email, and a password of at least 8 characters.",
-  exists: "That email is already registered, or signup failed. Try signing in."
+  "already-registered": "That email already has an account. Try signing in instead.",
+  exists: "That email already has an account. Try signing in instead.",
+  // Deliberately no "try signing in": there is no account yet, and sending them to a login that will
+  // also fail is how a temporary limit turns into a founder who never comes back.
+  "rate-limited":
+    "Too many signups from here in the last hour, so we can't send the confirmation email yet. Wait a few minutes and try again — nothing is wrong with your details.",
+  unknown: "Signup didn't go through. Nothing was created, so it's safe to try again."
 };
 
 export default async function SignupPage({
