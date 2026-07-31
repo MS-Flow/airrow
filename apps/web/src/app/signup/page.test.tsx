@@ -10,6 +10,7 @@ import { render, screen } from "@testing-library/react";
 vi.mock("@/lib/auth", () => ({ signUp: vi.fn() }));
 vi.mock("@/lib/site-url", () => ({ requestOrigin: async () => "https://airrow.test" }));
 vi.mock("@/features/auth/ProviderButtons", () => ({ ProviderButtons: () => null }));
+vi.mock("@/features/auth/PasswordFields", () => ({ PasswordFields: () => null }));
 
 import SignupPage from "./page";
 
@@ -43,7 +44,20 @@ describe("signup — telling the founder which wall they hit", () => {
   it("still explains a form that did not validate", async () => {
     render(await signup("invalid"));
 
-    expect(screen.getByText(/at least 8 characters/i)).toBeInTheDocument();
+    expect(screen.getByText(/meets every requirement/i)).toBeInTheDocument();
+  });
+
+  /*
+   * A mismatch is the one failure here that is fixed by retyping rather than by choosing something else,
+   * so it gets its own sentence — "check your details" would send the founder looking in the wrong place
+   * (spec 140).
+   */
+  it("tells someone whose passwords differ to retype them", async () => {
+    render(await signup("password-mismatch"));
+
+    const notice = screen.getByText(/do not match/i);
+    expect(notice).toBeInTheDocument();
+    expect(notice.textContent).toMatch(/retype/i);
   });
 
   it("keeps answering the old query string, for a link someone already has", async () => {

@@ -1,6 +1,8 @@
-// The OAuth callback, and the one rule it enforces that Supabase does not: GitHub must have verified
-// the address. The unverified case is the security-relevant one — an account nobody proved they own
-// must not exist afterwards, and must not be linked to anybody's workspace.
+// The OAuth callback, and the one rule it enforces that Supabase does not: the provider must have
+// verified the address. The unverified case is the security-relevant one — an account nobody proved they
+// own must not exist afterwards, and must not be linked to anybody's workspace.
+//
+// Both GitHub and Google land here (spec 140), so the route also has to name the right one.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
@@ -26,13 +28,24 @@ const { GET } = await import("./route");
 const request = (query: string): NextRequest =>
   new NextRequest(`https://airrow.test/auth/callback${query}`);
 
-/** A user as Supabase returns one, with the GitHub identity's verification flag under our control. */
-const user = (emailVerified: boolean | undefined, createdAt = new Date().toISOString()) => ({
+/**
+ * A user as Supabase returns one, with the identity's verification flag under our control.
+ *
+ * `app_metadata.provider` is what the route reads to decide *which* identity to check, so it travels
+ * with the provider rather than being set separately — a fixture where the two disagree would be
+ * testing a state Supabase never produces.
+ */
+const user = (
+  emailVerified: boolean | undefined,
+  createdAt = new Date().toISOString(),
+  provider: "github" | "google" = "github"
+) => ({
   id: "user-1",
   email: "ada@example.com",
   created_at: createdAt,
   email_confirmed_at: null,
-  identities: [{ provider: "github", identity_data: { email_verified: emailVerified } }]
+  app_metadata: { provider },
+  identities: [{ provider, identity_data: { email_verified: emailVerified } }]
 });
 
 beforeEach(() => {
@@ -102,11 +115,25 @@ describe("GET /auth/callback", () => {
     expect(exchange).not.toHaveBeenCalled();
   });
 
+  /*
+   * Names no provider, and that is the point (spec 140). Before the exchange there is no session, so
+   * nothing here can say which button was pressed — and the obvious fix, a `?provider=` hint on the
+   * redirect target, is the one thing that must not happen: Supabase matches that target against an
+   * allow-list of exact paths, so a query string would have stopped both GitHub and Google working.
+   */
   it("reports a failed exchange rather than pretending to be signed in", async () => {
     exchange.mockResolvedValue({ data: { user: null }, error: { message: "bad code" } });
 
     const response = await GET(request("?code=abc"));
 
-    expect(response.headers.get("location")).toBe("https://airrow.test/login?error=github");
+    expect(response.headers.get("location")).toBe("https://airrow.test/login?error=oauth");
+  });
+
+  it("names the provider once the session can say which one it was", async () => {
+    exchange.mockResolvedValue({ data: { user: user(false, new Date().toISOString(), "google") }, error: null });
+
+    const response = await GET(request("?code=abc"));
+
+    expect(response.headers.get("location")).toBe("https://airrow.test/login?error=google_unverified");
   });
 });
