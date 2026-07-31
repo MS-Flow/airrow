@@ -117,6 +117,27 @@ stripe_events                               -- delivered event ids, for idempote
   event_id text pk                          -- the pk *is* the mechanism: claiming is an insert
   event_type text
   received_at timestamptz
+
+support_tickets                             -- written from /app/support (spec 144)
+  id uuid pk
+  organization_id uuid → organizations
+  user_id uuid
+  project_id uuid → projects on delete set null   -- the answer is still owed after the project goes
+  category text check in ('generation','billing','account','other')
+  subject text
+  body text
+  status text check in ('open','closed')    -- ours to set; no app path writes it
+
+project_reviews                             -- the founder's verdict on a foundation (spec 144)
+  id uuid pk
+  organization_id uuid → organizations
+  project_id uuid → projects unique         -- one per project, editable: the constraint is the rule
+  user_id uuid
+  rating smallint check (rating between 1 and 5)
+  body text
+  consent_public boolean                    -- the founder's permission
+  display_name text                         -- the byline they chose, never their address
+  published_at timestamptz null             -- ours; nothing in the app ever writes it
 ```
 
 ## RLS pattern
@@ -132,6 +153,8 @@ So the plan is protected by **column-level privilege** instead: spec 74's migrat
 Read this as the general rule it implies: when a column decides what someone is *entitled to*, membership of the row is not sufficient authorization, and RLS is not the tool. Two denial tests in `schema.rls.test.ts` hold the line — one for a member's own organization, one for someone else's.
 
 `subscriptions` follows the same rule at table scope: members may `select` it and nothing more, because `status = 'active'` is an entitlement too. `stripe_events` goes further and has **RLS enabled with no policy at all** — the deny-everything shape `admin_emails` uses. It is the webhook's own bookkeeping, and there is no query a founder should be making against it.
+
+`support_tickets` and `project_reviews` are select-only for `authenticated` for the same family of reasons (spec 144). A ticket inserted from a browser console would skip the rate limit and the session the server action resolves the organization from; and `published_at` sits on a review row that genuinely belongs to the founder, so "may edit my own review" and "may publish my own testimonial" would be the same privilege. Writes go through the service-role path only, and the denial tests in `support.db.test.ts` say so.
 
 ## Design decisions
 

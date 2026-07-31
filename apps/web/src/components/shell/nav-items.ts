@@ -3,10 +3,11 @@ export interface NavItem {
   href: string;
   label: string;
   /** Lucide icon name, resolved by the sidebar so this file stays serialisable. */
-  icon: "projects" | "settings";
+  icon: "projects" | "settings" | "support";
 }
 
 export const NAV_ITEMS: NavItem[] = [
   { href: "/app", label: "Projects", icon: "projects" },
-  { href: "/app/settings", label: "Settings", icon: "settings" }
+  { href: "/app/settings", label: "Settings", icon: "settings" },
+  { href: "/app/support", label: "Support", icon: "support" }
 ];

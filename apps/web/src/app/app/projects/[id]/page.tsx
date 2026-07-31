@@ -23,8 +23,11 @@ import { STATUS_META } from "@/features/projects/ProjectCard";
 import { deleteProjectAction } from "@/features/projects/actions";
 import { diffGenerations } from "@airrow/engine";
 import { RevisionDiff } from "@/features/preview/RevisionDiff";
+import { ReviewCard } from "@/features/support/ReviewCard";
+import { submitReviewAction } from "@/features/support/actions";
 import { requireSession } from "@/lib/auth";
 import { getProject, latestJob, loadArtifact, previousCompletedJob } from "@/lib/data/store";
+import { getReview } from "@/lib/data/support";
 import { timeAgo } from "@/lib/utils";
 
 export const metadata = { title: "Project" };
@@ -37,9 +40,16 @@ const SECTIONS = [
   { icon: BookOpen, title: "Getting started", file: "START_HERE.md" }
 ];
 
-export default async function ProjectOverview({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProjectOverview({
+  params,
+  searchParams
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ review?: string }>;
+}) {
   const { id } = await params;
-  const { org } = await requireSession();
+  const { review } = await searchParams;
+  const { user, org } = await requireSession();
   const project = await getProject(org.id, id);
   if (!project) notFound();
 
@@ -58,6 +68,9 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
 
   const meta = STATUS_META[project.status];
   const ready = project.status === "ready";
+  // Asked only once there is something to have an opinion about. Mid-interview or after a failure the
+  // honest answer would be about us, not about the foundation, and we have not made one yet.
+  const existingReview = ready ? await getReview(org.id, id) : null;
   // The interview is behind them, so there are answers to change. Mid-interview the primary button
   // already says "Resume interview", and offering both would be the same link twice.
   const answered = ready || project.status === "failed";
@@ -181,6 +194,16 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
             className="mt-8"
             title="Milestone tracking"
             description="Your generated roadmap will track itself here as you ship each milestone."
+          />
+
+          {/* The last thing on the page, and deliberately after everything the founder came for
+              (spec 144). Asking before they have looked would be asking about nothing. */}
+          <ReviewCard
+            projectId={id}
+            action={submitReviewAction}
+            existing={existingReview}
+            defaultName={user.name}
+            outcome={review === "saved" || review === "invalid" ? review : null}
           />
         </>
       ) : null}

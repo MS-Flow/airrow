@@ -66,3 +66,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | The migration check answers what a push can ask | [130-migration-check-on-push.md](130-migration-check-on-push.md) | 🔄 In progress |
 | Signup says which wall you walked into | [135-signup-error-causes.md](135-signup-error-causes.md) | 🔄 In progress |
 | The invite list says who, not just what | [133-invite-names.md](133-invite-names.md) | 🔄 In progress |
+| A way to reach us, and a way to say what it was worth | [144-support-review.md](144-support-review.md) | ✅ Done |
