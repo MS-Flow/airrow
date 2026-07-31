@@ -20,6 +20,7 @@ import { UserMenu } from "@/components/shell/user-menu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
+import { ChatWidget } from "@/features/chat/ChatWidget";
 import { GUEST_INTERVIEW_PATH } from "@/features/interview/guest-route";
 import { SpecDrivenShowcase } from "@/features/landing/SpecDrivenShowcase";
 import {
@@ -269,6 +270,11 @@ export default async function Landing() {
       </main>
 
       <SiteFooter />
+
+      {/* Last in the tree and fixed to the corner, so it overlays the page instead of taking a place
+          in it. The landing page only — someone already on their way into the product does not need
+          to be convinced, and a chat panel on a sign-in screen is in the way (spec 141). */}
+      <ChatWidget ctaHref={primaryHref} />
     </div>
   );
 }

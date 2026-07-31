@@ -58,9 +58,15 @@ Every feature, screen, and generated file is judged against these.
   Route Handlers → feature `queries.ts` / `actions.ts` → the DataStore
   (`apps/web/src/lib/data/store.ts`). Never reach around a layer; routes are thin, logic lives in
   features, pure logic lives in packages.
-- **External calls are server-side only, in one place each.** Claude API only via the generation
-  engine's authoring provider; Supabase / GitHub App only via the DataStore and server actions.
-  Never from client components; never from `packages/engine` or `packages/schemas`.
+- **External calls are server-side only, in one place each.** The Claude API has exactly **two**
+  callers, and adding a third takes an amendment: the generation engine's authoring provider
+  (`features/generation/author.ts`), which writes foundations, and the landing chat's provider
+  (`features/chat/provider.ts`), which answers visitors. They share no key — the chat is a public,
+  unauthenticated surface and carries its own, so abuse of it can never reach generation's budget.
+  Supabase / GitHub App only via the DataStore and server actions. Never from client components;
+  never from `packages/engine` or `packages/schemas`. (Amended by
+  [spec 141](../../specs/141-landing-chat.md), which records the previous wording: "Claude API only
+  via the generation engine's authoring provider".)
 - **The engine stays pure.** `packages/engine` is a headless `generate(projectModel) → RepoTree +
   Manifest`. `packages/engine` and `packages/schemas` **never** import from `apps/*` and **never**
   read `process.env` (config is injected).
@@ -76,7 +82,12 @@ Every feature, screen, and generated file is judged against these.
 ## II. Data invariants
 - **Tenancy by `organization_id`.** Every resource hangs off an organization; each user gets a
   personal org at signup. Authorization is decided server-side — never trust client-supplied
-  org/project IDs.
+  org/project IDs. **One table is exempt, and only because there is no tenant to point at:**
+  `chat_rate_limits` counts answers for anonymous visitors on the public landing page. What replaces
+  tenancy there is that nobody may read it — `authenticated` is granted nothing on the table and
+  cannot execute the functions that write it, proven by denial tests like every other table
+  ([spec 141](../../specs/141-landing-chat.md)). A resource that *has* an organization still hangs
+  off one.
 - **RLS everywhere, with denial tests.** Every table has Row-Level Security scoped through org
   membership, and server code *additionally* scopes queries (defense in depth). No exceptions,
   including "internal" tables. Access control ships in the same change as the new table/resource.
