@@ -69,10 +69,50 @@ export async function requireSession(): Promise<SessionContext> {
  * into "success" sends the founder to /app, where middleware bounces them
  * straight back to /login with no explanation.
  */
+/**
+ * Why a signup did not happen (spec 135).
+ *
+ * A reason rather than the provider's message, because the screen has to give *advice* and only one of
+ * these has "try signing in" as the right advice. Supabase's own wording is written for developers,
+ * changes without notice, and would be quoted at a founder as if it were ours.
+ */
+export type SignUpFailure =
+  /** The address already has an account. The one case where signing in is the way forward. */
+  | "already-registered"
+  /** Supabase is refusing further confirmation mail for now. Temporary, and nobody's fault. */
+  | "rate-limited"
+  /** Something we have not seen. Say so plainly rather than guessing at a cause. */
+  | "unknown";
+
 export type SignUpResult =
   | { status: "signed-in" }
   | { status: "confirmation-required" }
-  | { status: "error"; message: string };
+  | { status: "error"; reason: SignUpFailure };
+
+/**
+ * Read the provider's answer as one of the three reasons above.
+ *
+ * Code first, HTTP status second, message last — in decreasing order of how stable they are. A cause we
+ * cannot place becomes `unknown`, which is the honest outcome: the previous behaviour was to call every
+ * failure a duplicate address, and that told a rate-limited founder they had an account they do not have.
+ *
+ * Exported so the classification is testable without a Supabase client.
+ */
+export function signUpFailure(error: { message?: string; code?: string; status?: number }): SignUpFailure {
+  const code = error.code ?? "";
+  const message = error.message ?? "";
+
+  if (code === "user_already_exists" || code === "email_exists") return "already-registered";
+  if (code === "over_email_send_rate_limit" || code === "over_request_rate_limit") return "rate-limited";
+  if (error.status === 429) return "rate-limited";
+
+  // Older clients send no code at all. These two phrasings are what Supabase has used for long enough
+  // to be worth matching; anything else is deliberately not guessed at.
+  if (/already registered|already exists/i.test(message)) return "already-registered";
+  if (/rate limit|only request this after|too many requests/i.test(message)) return "rate-limited";
+
+  return "unknown";
+}
 
 /**
  * `emailRedirectTo` is where the confirmation link lands, and it has to be passed per request rather
@@ -92,7 +132,7 @@ export async function signUp(
     password,
     options: { data: { name }, emailRedirectTo }
   });
-  if (error) return { status: "error", message: error.message };
+  if (error) return { status: "error", reason: signUpFailure(error) };
   return data.session ? { status: "signed-in" } : { status: "confirmation-required" };
 }
 
