@@ -18,7 +18,15 @@ vi.mock("@/lib/data/store", () => ({
   setDisplayName: vi.fn()
 }));
 
-const { githubEmailVerified, signIn, signInWithGitHub, signUp } = await import("./auth");
+const {
+  oauthProviderOf,
+  providerEmailVerified,
+  signIn,
+  signInWithGitHub,
+  signInWithGoogle,
+  signUp,
+  signUpFailure
+} = await import("./auth");
 
 beforeEach(() => {
   signUpMock.mockReset();
@@ -43,11 +51,55 @@ describe("signUp", () => {
     });
   });
 
-  it("surfaces the provider error message", async () => {
-    signUpMock.mockResolvedValue({ data: { session: null }, error: { message: "User exists" } });
+  // Every failure used to come back as one message, which the screen then rendered as "that email is
+  // already registered" — telling a rate-limited founder they have an account they do not have (spec 135).
+  it("classifies the failure instead of passing the provider's words on", async () => {
+    signUpMock.mockResolvedValue({
+      data: { session: null },
+      error: { message: "User already registered", code: "user_already_exists" }
+    });
+
     await expect(signUp("Ada", "ada@example.com", "hunter22", CONFIRM_URL)).resolves.toEqual({
       status: "error",
-      message: "User exists"
+      reason: "already-registered"
+    });
+  });
+
+  it("does not call a rate limit a duplicate address", async () => {
+    // The failure that started this: a fresh address, refused because Supabase would not send more
+    // confirmation mail that hour, reported to the founder as "that email is already registered".
+    signUpMock.mockResolvedValue({
+      data: { session: null },
+      error: { message: "email rate limit exceeded", code: "over_email_send_rate_limit" }
+    });
+
+    await expect(signUp("Ada", "new@example.com", "hunter22", CONFIRM_URL)).resolves.toEqual({
+      status: "error",
+      reason: "rate-limited"
+    });
+  });
+
+  describe("classifying a failure", () => {
+    it.each([
+      ["a duplicate by code", { code: "user_already_exists" }, "already-registered"],
+      ["a duplicate by the other code", { code: "email_exists" }, "already-registered"],
+      ["a rate limit by code", { code: "over_email_send_rate_limit" }, "rate-limited"],
+      ["a rate limit by status", { status: 429, message: "Too Many Requests" }, "rate-limited"],
+      // No code at all: an older client, where the message is all there is.
+      ["a duplicate by message", { message: "User already registered" }, "already-registered"],
+      [
+        "a rate limit by message",
+        { message: "For security purposes, you can only request this after 51 seconds." },
+        "rate-limited"
+      ]
+    ])("reads %s", (_label, error, expected) => {
+      expect(signUpFailure(error)).toBe(expected);
+    });
+
+    it("refuses to guess at a cause it does not recognise", () => {
+      // The whole bug in one line: the old code called this one "already registered" too.
+      expect(signUpFailure({ message: "Database error saving new user" })).toBe("unknown");
+      expect(signUpFailure({})).toBe("unknown");
     });
   });
 
@@ -129,14 +181,14 @@ describe("signInWithGitHub", () => {
   });
 });
 
-describe("githubEmailVerified", () => {
+describe("providerEmailVerified", () => {
   // `as` justified throughout: these are the two fields the function reads, and building a whole
   // Supabase `User` would say nothing extra about the decision being tested.
-  const asUser = (value: unknown) => value as Parameters<typeof githubEmailVerified>[0];
+  const asUser = (value: unknown) => value as Parameters<typeof providerEmailVerified>[0];
 
   it("accepts an address GitHub says it verified", () => {
     const user = { identities: [{ provider: "github", identity_data: { email_verified: true } }] };
-    expect(githubEmailVerified(asUser(user))).toBe(true);
+    expect(providerEmailVerified(asUser(user), "github")).toBe(true);
   });
 
   it("rejects an unverified address even when the account looks confirmed", () => {
@@ -144,14 +196,75 @@ describe("githubEmailVerified", () => {
       email_confirmed_at: "2026-07-01T00:00:00Z",
       identities: [{ provider: "github", identity_data: { email_verified: false } }]
     };
-    expect(githubEmailVerified(asUser(user))).toBe(false);
+    expect(providerEmailVerified(asUser(user), "github")).toBe(false);
   });
 
   it("falls back to the account's own confirmation when the identity carries no flag", () => {
     const withFlag = { email_confirmed_at: "2026-07-01T00:00:00Z", identities: [] };
     const without = { email_confirmed_at: null, identities: [] };
 
-    expect(githubEmailVerified(asUser(withFlag))).toBe(true);
-    expect(githubEmailVerified(asUser(without))).toBe(false);
+    expect(providerEmailVerified(asUser(withFlag), "github")).toBe(true);
+    expect(providerEmailVerified(asUser(without), "github")).toBe(false);
+  });
+
+  it("reads Google's own flag, not GitHub's, for a Google sign-in (spec 140)", () => {
+    const user = { identities: [{ provider: "google", identity_data: { email_verified: false } }] };
+    expect(providerEmailVerified(asUser(user), "google")).toBe(false);
+  });
+
+  /*
+   * The bug the provider argument exists to prevent. A founder who linked both accounts has two
+   * identities; searching for "the GitHub one" would clear a Google sign-in on evidence GitHub gave
+   * about a different address.
+   */
+  it("does not let a verified GitHub identity vouch for an unverified Google one", () => {
+    const user = {
+      email_confirmed_at: null,
+      identities: [
+        { provider: "github", identity_data: { email_verified: true } },
+        { provider: "google", identity_data: { email_verified: false } }
+      ]
+    };
+
+    expect(providerEmailVerified(asUser(user), "google")).toBe(false);
+    expect(providerEmailVerified(asUser(user), "github")).toBe(true);
+  });
+});
+
+describe("oauthProviderOf", () => {
+  const asUser = (value: unknown) => value as Parameters<typeof oauthProviderOf>[0];
+
+  it("names Google when that is the identity the session was created with", () => {
+    expect(oauthProviderOf(asUser({ app_metadata: { provider: "google" } }))).toBe("google");
+  });
+
+  it("treats anything else as GitHub, so the gate still runs", () => {
+    expect(oauthProviderOf(asUser({ app_metadata: { provider: "github" } }))).toBe("github");
+    expect(oauthProviderOf(asUser({ app_metadata: {} }))).toBe("github");
+  });
+});
+
+describe("signInWithGoogle", () => {
+  it("always asks Google which account to use", async () => {
+    oauthMock.mockResolvedValue({ data: { url: "https://accounts.google.com/o/oauth2" }, error: null });
+
+    await expect(signInWithGoogle("https://airrow.test/auth/callback?provider=google")).resolves.toEqual({
+      url: "https://accounts.google.com/o/oauth2"
+    });
+    expect(oauthMock).toHaveBeenCalledWith({
+      provider: "google",
+      options: {
+        redirectTo: "https://airrow.test/auth/callback?provider=google",
+        queryParams: { prompt: "select_account" }
+      }
+    });
+  });
+
+  it("reports a provider that is switched off without repeating its wording", async () => {
+    oauthMock.mockResolvedValue({ data: { url: null }, error: { message: "provider disabled" } });
+
+    await expect(signInWithGoogle("https://airrow.test/auth/callback")).resolves.toEqual({
+      error: "provider disabled"
+    });
   });
 });

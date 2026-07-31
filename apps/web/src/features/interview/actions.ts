@@ -19,7 +19,7 @@ import {
   saveInterviewAnswers,
   setProjectStatus
 } from "@/lib/data/store";
-import { allowanceMessage, checkAllowance } from "@/features/generation/allowance";
+import { allowanceMessage, claimAllowance } from "@/features/generation/allowance";
 import { projectOrigin } from "@/features/import/origin";
 
 export async function saveAnswersAction(projectId: string, raw: unknown): Promise<{ ok: boolean }> {
@@ -66,7 +66,7 @@ export async function submitInterviewAction(
   // Checked here rather than at the point of generation: a founder who is out of allowance should
   // hear it now, not after landing on a progress screen that will never move. The idempotent
   // re-entry above is deliberately allowed through — resuming a running job costs nothing new.
-  const allowance = await checkAllowance({
+  const allowance = await claimAllowance({
     orgId: org.id,
     plan: org.plan,
     userId: user.id,

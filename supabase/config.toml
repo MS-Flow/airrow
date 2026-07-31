@@ -367,6 +367,20 @@ redirect_uri = ""
 # never usable — but it must still reach us to be refused, rather than being silently accepted here.
 email_optional = false
 
+# Sign in with Google (spec 140). Identity only — Airrow asks for a name and a verified address, and
+# reaches nothing else in the founder's Google account.
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+# DO NOT commit your OAuth provider secret to git.
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+redirect_uri = ""
+# Required for signing in with Google against a local stack, per Supabase's own note above.
+skip_nonce_check = true
+# An address Google has not verified is refused in `/auth/callback`, exactly as GitHub's is — but it has
+# to reach us to be refused, rather than being silently accepted here.
+email_optional = false
+
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.
 [auth.web3.solana]

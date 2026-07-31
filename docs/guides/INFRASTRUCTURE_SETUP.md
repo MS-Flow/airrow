@@ -195,6 +195,8 @@ real traffic. Spec 113 replaces it with Resend over plain SMTP.
 2. **Publish the DNS records.** `airrow.app` uses Vercel's nameservers (`ns1`/`ns2.vercel-dns.com`), so
    they go in the **domain's own DNS view** — Vercel dashboard → _Domains_ → `airrow.app` → DNS records.
    Not the project's _Settings → Domains_ tab, which only attaches a domain to a project.
+   _(§8 adds receiving on top of this and deliberately leaves every record here alone — DNS stays at
+   Vercel.)_
 
    Resend gives the values; they are unique to the domain and cannot be written down here in advance.
    What is worth knowing before you start:
@@ -205,7 +207,8 @@ real traffic. Spec 113 replaces it with Resend over plain SMTP.
      mistake to expect.
    - **Paste TXT values without the surrounding quotes.** Vercel adds them.
    - **The MX record needs a priority** (Resend shows it, usually `10`), and it sits on the sending
-     subdomain — not on the apex, so it cannot disturb inbound mail for `airrow.app`.
+     subdomain — not on the apex, so it cannot disturb inbound mail for `airrow.app`. That choice is
+     what later let §8 put a receiving MX and SPF on the apex without merging anything.
    - There were no TXT or MX records on the domain as of 2026-07-30, so nothing here merges with an
      existing SPF.
 
@@ -264,7 +267,10 @@ host in one and not the other builds a confirmation link that Supabase then reje
 **Local development sends nothing outward.** `[auth.email.smtp]` stays commented out, so the local stack
 keeps using `[local_smtp]` — the mail catcher on port 54324 — and no real address is ever mailed from a
 developer machine. Enabling it is a deliberate act, and the point at which that stops being true.
-## 6. Taking Pro live (specs 99, 100)
+
+---
+
+## 7. Taking Pro live (specs 99, 100)
 
 Test mode and live mode are two separate Stripe accounts wearing one dashboard. Nothing carries over:
 not the product, not the price id, not the keys, not the webhook endpoint or its signing secret. Every
@@ -312,6 +318,83 @@ If a payment ever lands without the plan following, the founder-facing repair is
 **"Already paid? Check again"** re-reads the subscription from Stripe — and the developer-facing
 diagnosis is the "Paid, and still on Free" runbook in
 [`DEVELOPER_GUIDE.md`](./DEVELOPER_GUIDE.md#paid-and-still-on-free).
+
+---
+
+## 8. Inbound email (forwarding on Vercel DNS, spec 144)
+
+§6 made Airrow able to **send**. Nothing receives: `support@airrow.app` and `hello@airrow.app` — the
+address already printed in the legal pages — reach no mailbox at all, and the support page (spec 144)
+mails tickets and reviews to the first of them. A message to an address with no MX record does not
+bounce loudly; it shows as `sent` in Resend and is simply never delivered, which is exactly how this
+was found.
+
+**Forwarding is three DNS records, not a migration.** `airrow.app` uses Vercel's nameservers
+(`ns1`/`ns2.vercel-dns.com`) and **stays there**. ImprovMX (or Forward Email — same shape) receives on
+the domain's `MX` and forwards to an ordinary Gmail account, free, and Vercel ships a preset that
+writes the records for you.
+
+> **Why not Cloudflare Email Routing.** It does the same job for the same price, but only on a zone
+> using **Cloudflare's** nameservers — so it would mean re-creating every §4 and §6 record inside
+> Cloudflare and switching nameservers at the registrar, with §6's verified sending domain riding on
+> the change. Spec 144 chose that route first and reversed it here: the receiving half is worth two
+> records, not a zone move. Cloudflare stays the right answer only if the zone is going there anyway.
+
+1. **Add the forwarding records.** Vercel dashboard → _Domains_ → `airrow.app` → **Add DNS Preset** →
+   **ImprovMX [MX]** → _Add records_. Prefer the preset and then check what landed against this:
+
+   | Type  | Name         | Value                                  | Priority |
+   | ----- | ------------ | -------------------------------------- | -------- |
+   | `MX`  | _(empty)_    | `mx1.improvmx.com`                     | `10`     |
+   | `MX`  | _(empty)_    | `mx2.improvmx.com`                     | `20`     |
+   | `TXT` | _(empty)_    | `v=spf1 include:spf.improvmx.com ~all` | —        |
+
+   - **Leave Name empty for the apex** — not `@`, not `airrow.app`. Vercel appends the domain, so `@`
+     creates `@.airrow.app` and nothing works. Same trap as §6's `send` / `resend._domainkey`.
+   - **Paste the TXT value without quotes**; Vercel adds them.
+   - Safe on the apex only because §6 deliberately put Resend's sending on the **`send.airrow.app`**
+     subdomain. Verified on 2026-07-31, before adding anything: `airrow.app` had **no** `MX` and **no**
+     `TXT`, while `send.airrow.app` carried `feedback-smtp.eu-west-1.amazonses.com` and
+     `v=spf1 include:amazonses.com ~all`. Nothing to merge. If sending is ever moved to the apex, the
+     two SPF strings must become one record — a domain may publish exactly one, and two make both
+     invalid.
+2. **Create the aliases** at <https://improvmx.com> → add the domain → forward
+   `support@airrow.app → <gmail>` and `hello@airrow.app → <gmail>`. A free account allows both, plus a
+   catch-all — leave the **catch-all off**, it forwards every typo and every address a spammer guesses.
+3. **Wait for the domain to read _Active_** in ImprovMX (usually minutes; DNS can lag an hour).
+4. **Verify receiving:** mail `support@airrow.app` from an outside account and watch it arrive in
+   Gmail. Then send a ticket from `/app/support` — Resend's log should show `last_event: delivered`
+   rather than `sent`, with the founder's address in `Reply-To`. `sent` and nothing in Gmail means the
+   MX records have not propagated yet.
+5. **Nothing in §4 or §6 changes.** No nameserver switch, no record re-created, so Resend's _Domains_
+   page keeps reading **Verified** and the signup verification email keeps working. That is the whole
+   reason this route was preferred.
+6. **DMARC already exists — edit it, never add a second.** `_dmarc.airrow.app` publishes
+   `v=DMARC1; p=none;` (checked 2026-07-31). A domain may have exactly one DMARC record, so to start
+   receiving failure reports, change that record to
+   `v=DMARC1; p=none; rua=mailto:<gmail>` rather than creating another. Tighten past `p=none` only
+   once the reports are clean.
+7. **Optional, and worth it:** in Gmail, _See all settings → Accounts → Send mail as_ →
+   `support@airrow.app`, using Resend's SMTP (`smtp.resend.com`, port 587, user `resend`, the API key
+   as the password). Without it, replies come from a personal address, which reads as a different
+   person than the one they wrote to. ImprovMX's own SMTP sending is a paid feature; Resend's is
+   already paid for.
+
+**Until the records are in place**, set `SUPPORT_INBOX` to a real mailbox
+(`apps/web/.env.example`) — the notification then goes straight there and `Reply-To` still carries the
+founder, so the support loop works with no DNS at all. It does not help anyone who writes to the
+published addresses, which is what step 1 is for.
+
+**What the app needs from this:** nothing but `RESEND_API_KEY`, which §6 already set. `SUPPORT_INBOX`
+and `MAIL_FROM` have working defaults and exist so a staging deployment can be pointed somewhere else.
+With no key at all the support page and the review card still save everything — only the notification
+to us is skipped.
+
+**Not chosen: Resend Inbound.** Resend can receive (its domain API reports a `receiving` capability),
+but a received message becomes a **webhook POST carrying metadata only** — the body is a second API
+call — so forwarding to Gmail would be a route handler we write and maintain. Its docs also steer
+receiving onto a subdomain rather than the root. It earns its place the day tickets should land *in*
+the app as threads; it does not earn it for forwarding two addresses.
 
 ---
 

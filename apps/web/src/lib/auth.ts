@@ -69,10 +69,50 @@ export async function requireSession(): Promise<SessionContext> {
  * into "success" sends the founder to /app, where middleware bounces them
  * straight back to /login with no explanation.
  */
+/**
+ * Why a signup did not happen (spec 135).
+ *
+ * A reason rather than the provider's message, because the screen has to give *advice* and only one of
+ * these has "try signing in" as the right advice. Supabase's own wording is written for developers,
+ * changes without notice, and would be quoted at a founder as if it were ours.
+ */
+export type SignUpFailure =
+  /** The address already has an account. The one case where signing in is the way forward. */
+  | "already-registered"
+  /** Supabase is refusing further confirmation mail for now. Temporary, and nobody's fault. */
+  | "rate-limited"
+  /** Something we have not seen. Say so plainly rather than guessing at a cause. */
+  | "unknown";
+
 export type SignUpResult =
   | { status: "signed-in" }
   | { status: "confirmation-required" }
-  | { status: "error"; message: string };
+  | { status: "error"; reason: SignUpFailure };
+
+/**
+ * Read the provider's answer as one of the three reasons above.
+ *
+ * Code first, HTTP status second, message last — in decreasing order of how stable they are. A cause we
+ * cannot place becomes `unknown`, which is the honest outcome: the previous behaviour was to call every
+ * failure a duplicate address, and that told a rate-limited founder they had an account they do not have.
+ *
+ * Exported so the classification is testable without a Supabase client.
+ */
+export function signUpFailure(error: { message?: string; code?: string; status?: number }): SignUpFailure {
+  const code = error.code ?? "";
+  const message = error.message ?? "";
+
+  if (code === "user_already_exists" || code === "email_exists") return "already-registered";
+  if (code === "over_email_send_rate_limit" || code === "over_request_rate_limit") return "rate-limited";
+  if (error.status === 429) return "rate-limited";
+
+  // Older clients send no code at all. These two phrasings are what Supabase has used for long enough
+  // to be worth matching; anything else is deliberately not guessed at.
+  if (/already registered|already exists/i.test(message)) return "already-registered";
+  if (/rate limit|only request this after|too many requests/i.test(message)) return "rate-limited";
+
+  return "unknown";
+}
 
 /**
  * `emailRedirectTo` is where the confirmation link lands, and it has to be passed per request rather
@@ -92,7 +132,7 @@ export async function signUp(
     password,
     options: { data: { name }, emailRedirectTo }
   });
-  if (error) return { status: "error", message: error.message };
+  if (error) return { status: "error", reason: signUpFailure(error) };
   return data.session ? { status: "signed-in" } : { status: "confirmation-required" };
 }
 
@@ -130,21 +170,59 @@ export async function signInWithGitHub(redirectTo: string): Promise<{ url: strin
 }
 
 /**
- * Has GitHub verified the address this identity signed in with?
+ * Start the Google OAuth flow (spec 140). The same shape as `signInWithGitHub` — the caller owns the
+ * navigation — and the same posture: Airrow asks for an identity and nothing more.
+ *
+ * `prompt: "select_account"` is the one thing GitHub cannot offer. Google otherwise assumes the first
+ * account already signed in on the device, which for a founder holding a personal and a work account is
+ * a coin flip they never got to call. Asking every time costs one click and removes a whole class of
+ * "why is my workspace on the wrong address".
+ */
+export async function signInWithGoogle(redirectTo: string): Promise<{ url: string } | { error: string }> {
+  const supabase = await supabaseServer();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo, queryParams: { prompt: "select_account" } }
+  });
+  if (error || !data.url) return { error: error?.message ?? "Google sign-in is unavailable." };
+  return { url: data.url };
+}
+
+/** The OAuth providers a founder can sign in with. */
+export type OAuthProvider = "github" | "google";
+
+/**
+ * Has the provider verified the address this identity signed in with?
  *
  * An unverified address is no evidence of who someone is: anyone can put a stranger's address on a
- * GitHub account, and linking on it would hand them the stranger's Airrow account. So an explicit
- * `false` always blocks, and is never talked out of it by anything else.
+ * GitHub or Google account, and linking on it would hand them the stranger's Airrow account. So an
+ * explicit `false` always blocks, and is never talked out of it by anything else.
  *
  * The `email_confirmed_at` fallback covers only the case where the identity carries no flag at all —
  * an absent field is not a claim that the address is unverified, and treating it as one would lock
- * out every GitHub sign-in if the provider payload ever changed shape.
+ * out every OAuth sign-in if a provider payload ever changed shape.
+ *
+ * The provider is an argument rather than a search across identities (spec 140): a founder who has
+ * linked both accounts has two identities, and the one that matters is the one they just used. Reading
+ * the wrong one would answer a question nobody asked.
  */
-export function githubEmailVerified(user: User): boolean {
-  const identity = user.identities?.find((i) => i.provider === "github");
+export function providerEmailVerified(user: User, provider: OAuthProvider): boolean {
+  const identity = user.identities?.find((i) => i.provider === provider);
   const flag: unknown = identity?.identity_data?.email_verified;
   if (typeof flag === "boolean") return flag;
   return Boolean(user.email_confirmed_at);
+}
+
+/**
+ * Which provider this session was created by, for a callback that has to name it in an error.
+ *
+ * `app_metadata.provider` is Supabase's record of the identity used *for this sign-in*, which is the
+ * question being asked. Anything unrecognised is treated as GitHub-shaped only in so far as it still
+ * gets checked — an unknown provider name finds no identity and therefore falls back, rather than
+ * skipping the gate.
+ */
+export function oauthProviderOf(user: User): OAuthProvider {
+  return user.app_metadata?.provider === "google" ? "google" : "github";
 }
 
 /** The GitHub account behind the signed-in user, when there is one (spec 67). */

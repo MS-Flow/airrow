@@ -41,6 +41,10 @@ vi.mock("./repo", () => ({ readRepository }));
 // The digest keyring reads a required secret from the environment and is not what this file is
 // about; the free path never reaches it, and the Pro path only has to get past it.
 vi.mock("./digest", () => ({ currentDigestVersion: () => 1, digestFor: () => () => "digest" }));
+// An earned week is Pro here too (spec 122). Nothing earned by default, so the assertions below stay
+// about the plan; the one test that cares sets it.
+const claimPro = vi.hoisted(() => vi.fn(async (): Promise<string | null> => null));
+vi.mock("@/lib/data/referrals", () => ({ claimPro }));
 
 import { importProjectAction, importRepoAction, type ImportFormState } from "./actions";
 
@@ -96,6 +100,9 @@ describe("import behind Pro", () => {
     readArchive.mockResolvedValue({ ok: true, files: [], ignored: [] });
     readRepository.mockResolvedValue({ ok: true, files: [], ignored: [] });
     createProject.mockResolvedValue({ id: "p1", name: "Loop CRM" });
+    // `clearAllMocks` clears calls, not implementations, so this has to be said out loud — otherwise
+    // one test's earned week silently makes the next test's free founder Pro.
+    claimPro.mockResolvedValue(null);
   });
 
   describe.each(entries)("from %s", (_label, run) => {
@@ -140,6 +147,18 @@ describe("import behind Pro", () => {
       await run();
 
       expect(analyzeImport).toHaveBeenCalled();
+    });
+
+    it("completes the import on a week earned by inviting somebody", async () => {
+      // A founder told they are on Pro and then refused the one other thing Pro buys would be the
+      // product contradicting itself (spec 122).
+      signedInOn("free");
+      claimPro.mockResolvedValue("2026-08-08T00:00:00.000Z");
+
+      const state = await run();
+
+      expect(state.requiresPro).toBeUndefined();
+      expect(state.projectId).toBe("p1");
     });
 
     it("completes the import for a Pro organization", async () => {

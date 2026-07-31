@@ -8,13 +8,19 @@
 import { NextResponse } from "next/server";
 
 /**
- * Authoring is one Claude call that writes 21 slots and 3 whole documents; measured against the live
- * API it takes ~20s. The platform default for a route handler is 10s, so without this the request is
- * killed mid-call, the job never completes, and the founder sees the generation hang — the exact
- * failure this endpoint was built to avoid.
+ * Authoring is two Claude calls — the slots plus three documents, and the UI build brief — measured
+ * at ~20s each against the live API. The platform default for a route handler is 10s, so without this
+ * the request is killed mid-call, the job never completes, and the founder sees the generation hang —
+ * the exact failure this endpoint was built to avoid.
+ *
+ * The two calls are fired together rather than in sequence (`author.ts`), which is what keeps the
+ * budget honest: run one after the other, their latencies added up and a working generation reported
+ * itself interrupted (spec 128). This ceiling is the plan's, not a preference — raising it past 60
+ * requires a Vercel plan that allows it.
  */
 export const maxDuration = 60;
 import { getSession } from "@/lib/auth";
+import { matureReferral } from "@/lib/data/referrals";
 import { getProject, latestJob, latestModelVersion } from "@/lib/data/store";
 import { runGenerationJob } from "@/features/generation/runner";
 
@@ -37,5 +43,12 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
   await runGenerationJob(job.id, mv.model);
   const finished = await latestJob(id);
+
+  // If somebody invited this founder, this is the moment it was worth something (spec 122). Here
+  // rather than inside the runner because the organization is already established here and the runner
+  // only knows a project — and `matureReferral` re-reads the charged ledger itself, so a job that
+  // completed but was memoised still earns nobody a week.
+  if (finished?.status === "completed") await matureReferral(session.org.id);
+
   return NextResponse.json({ started: true, status: finished?.status ?? "unknown" });
 }
