@@ -64,11 +64,20 @@ function rowsOrAbsent<T>(res: { data: T[] | null; error: SupabaseError | null })
 /** Where an invited workspace has got to, for the inviter's own list. */
 export interface InviteStanding {
   attachedAt: string;
+  /**
+   * Who this invitation is about (spec 133). The account's own name, the workspace name when there is
+   * no profile, and `UNNAMED_INVITE` when neither exists. Never an address or an id: the card is a list
+   * of people the founder invited, not a directory.
+   */
+  name: string;
   /** `joined` — signed up and verified. `generated` — the invitation has been paid for. */
   state: "joined" | "generated";
   /** True when it matured after the cap was reached, so no week was credited for it. */
   uncredited: boolean;
 }
+
+/** What a row says when the invited account has neither a profile nor a named workspace. */
+export const UNNAMED_INVITE = "Someone";
 
 /** Where an organization's earned weeks stand, without touching any of them. */
 export interface GrantStanding {
@@ -290,6 +299,47 @@ export async function claimPro(orgId: string, now: Date = new Date()): Promise<s
 }
 
 /**
+ * Who each invited workspace belongs to, by organization id (spec 133).
+ *
+ * The account's own name first, the workspace name — derived from the same string at signup — as the
+ * fallback. Read at render time rather than copied onto the referral when it is attached: a second
+ * copy of somebody's name is a second thing to keep in step, it would freeze against a rename, and
+ * rows written before this existed would stay nameless. This way they all get names at once.
+ *
+ * Three reads, none of them made for an empty list, and nothing but the name is returned — no address,
+ * no user id. The inviter's own RLS could not reach a profile; this is the server answering a narrow
+ * question on their behalf.
+ */
+async function inviteNames(orgIds: string[]): Promise<Map<string, string>> {
+  const named = new Map<string, string>();
+  if (orgIds.length === 0) return named;
+
+  const orgs =
+    rowsOrAbsent<{ id: string; name: string }>(
+      await db().from("organizations").select("id, name").in("id", orgIds)
+    ) ?? [];
+  for (const org of orgs) if (org.name) named.set(org.id, org.name);
+
+  const members =
+    rowsOrAbsent<{ organization_id: string; user_id: string }>(
+      await db().from("organization_members").select("organization_id, user_id").in("organization_id", orgIds)
+    ) ?? [];
+  if (members.length === 0) return named;
+
+  const profiles =
+    rowsOrAbsent<{ id: string; display_name: string | null }>(
+      await db().from("profiles").select("id, display_name").in("id", members.map((m) => m.user_id))
+    ) ?? [];
+  const byUser = new Map(profiles.map((p) => [p.id, p.display_name]));
+  for (const member of members) {
+    const display = byUser.get(member.user_id);
+    if (display) named.set(member.organization_id, display);
+  }
+
+  return named;
+}
+
+/**
  * Everything the invite card shows, and nothing that changes anything.
  *
  * Deliberately a separate function from `claimPro` rather than a flag on it: one of these two is safe
@@ -305,7 +355,7 @@ export async function referralSummary(
 ): Promise<ReferralSummary | null> {
   const sentQuery = db()
     .from("referrals")
-    .select("attached_at, matured_at, plan_grant_id")
+    .select("attached_at, matured_at, plan_grant_id, referred_organization_id")
     .eq("referrer_organization_id", orgId)
     .order("attached_at", { ascending: true });
 
@@ -318,15 +368,18 @@ export async function referralSummary(
     attached_at: string;
     matured_at: string | null;
     plan_grant_id: string | null;
+    referred_organization_id: string;
   }>(sentResult);
   if (code === null || sent === null || grants === null) return null;
 
   const credited = sent.filter((r) => r.plan_grant_id !== null).length;
+  const names = await inviteNames(sent.map((r) => r.referred_organization_id));
 
   return {
     code,
     invites: sent.map((r) => ({
       attachedAt: r.attached_at,
+      name: names.get(r.referred_organization_id) ?? UNNAMED_INVITE,
       state: r.matured_at ? "generated" : "joined",
       uncredited: r.matured_at !== null && r.plan_grant_id === null
     })),

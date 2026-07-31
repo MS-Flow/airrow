@@ -62,3 +62,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | The verification email comes from Airrow | [113-branded-auth-email.md](113-branded-auth-email.md) | 🔄 In progress |
 | Invite a friend, get a week of Pro | [122-invite-a-friend.md](122-invite-a-friend.md) | ✅ Done |
 | The migration check answers what a push can ask | [130-migration-check-on-push.md](130-migration-check-on-push.md) | 🔄 In progress |
+| The invite list says who, not just what | [133-invite-names.md](133-invite-names.md) | 🔄 In progress |
