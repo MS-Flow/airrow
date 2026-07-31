@@ -20,6 +20,7 @@ import { NextResponse } from "next/server";
  */
 export const maxDuration = 60;
 import { getSession } from "@/lib/auth";
+import { matureReferral } from "@/lib/data/referrals";
 import { getProject, latestJob, latestModelVersion } from "@/lib/data/store";
 import { runGenerationJob } from "@/features/generation/runner";
 
@@ -42,5 +43,12 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
   await runGenerationJob(job.id, mv.model);
   const finished = await latestJob(id);
+
+  // If somebody invited this founder, this is the moment it was worth something (spec 122). Here
+  // rather than inside the runner because the organization is already established here and the runner
+  // only knows a project — and `matureReferral` re-reads the charged ledger itself, so a job that
+  // completed but was memoised still earns nobody a week.
+  if (finished?.status === "completed") await matureReferral(session.org.id);
+
   return NextResponse.json({ started: true, status: finished?.status ?? "unknown" });
 }

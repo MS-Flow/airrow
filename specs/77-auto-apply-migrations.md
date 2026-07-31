@@ -161,6 +161,15 @@ _How each criterion above is proven._
 
 ## Implementation notes
 
+> **Amended by [spec 130](130-migration-check-on-push.md).** The drift check told "this change adds the
+> migration" from "somebody merged one that never applied" by reading `GITHUB_BASE_REF` — which exists
+> only on pull request events. Since `verify` is one required context produced by *both* triggers, every
+> push that carried a migration failed a required check for drift that did not exist, and that blocked
+> PR #129 outright. The base is now derived per event instead: the stated base on a PR, `origin/develop`
+> on a push to any other branch, and `before..HEAD` on a push to `develop`/`main` — the last of which is
+> what keeps the property below intact, since a migration that merged days ago and never applied is
+> still not in that range.
+
 **What shipped** — five files, no application code and no schema change:
 
 1. [scripts/supabase-migration-drift.mjs](../scripts/supabase-migration-drift.mjs) — parses
