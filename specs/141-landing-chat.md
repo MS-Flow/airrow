@@ -83,6 +83,15 @@ lågt takttal är svaret uppe på ett par sekunder ändå, och panelen har en sk
 taket inte hållas, och då svarar chatten inte alls i stället för att svara obegränsat. Det är en regel,
 inte tre, och den gör att en halvkonfigurerad miljö aldrig blir den dyra miljön.
 
+> **Ändrad av [spec 151](151-chat-diagnostics.md).** Regeln gäller fortfarande nyckeln, saltet och
+> migrationen, men **inte längre besökarens adress**. En adress som saknas räknas nu i en delad hink i
+> stället för att vägras, eftersom de två taken bär skyddet ändå. Den ursprungliga formuleringen
+> gjorde att panelen aldrig kunde svara i en webbläsare på localhost — dev-servern sätter ingen
+> `x-forwarded-for` och ingen webbläsare skickar en — och att en deploy bakom en proxy som strippar
+> headern låg i FAQ-läge för alltid utan att säga det. Spec 151 lägger också till att *varför* chatten
+> är tyst loggas, vilket den här specen borde ha gjort från början: en felkonfigurerad deploy fick
+> annars felsökas utifrån genom att mäta svarstider.
+
 **Egen nyckel, eget tak.** Chatten är en publik oautentiserad yta; genereringen är det folk betalar
 för. `AIRROW_CHAT_API_KEY` i en egen Console-workspace med spend limit, **utan fallback** till
 `ANTHROPIC_API_KEY` — en fallback skulle låta en missbruksvåg mot chatten landa på genereringens
