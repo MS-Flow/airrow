@@ -51,7 +51,11 @@ export default function PrivacyPage() {
       <h2>Who processes it</h2>
       <ul>
         <li>
-          <strong>Vercel</strong> hosts the application and serves it over its network.
+          <strong>Vercel</strong> hosts the application and serves it over its network, and provides
+          the cookieless analytics that counts visits to our public pages. It stores nothing on your
+          device and produces aggregate counts only — never a profile, and never anything joined to
+          your account. The <Link href="/cookies">cookie policy</Link> describes exactly what it
+          records.
         </li>
         <li>
           <strong>Supabase</strong> provides the database, authentication and file storage where
@@ -63,8 +67,9 @@ export default function PrivacyPage() {
         </li>
       </ul>
       <p>
-        These are processors acting on our instructions. We add no analytics, advertising or
-        session-recording services.
+        These are processors acting on our instructions. We add no advertising, profiling or
+        session-recording services, and the only analytics is the cookieless visit count described
+        above — nothing that follows you between sites, and nothing that identifies you.
       </p>
       <p>
         <strong>Our own staff.</strong> A small number of Airrow personnel can access project data —
