@@ -13,12 +13,20 @@ import {
 export function UserMenu({
   name,
   email,
-  signOutAction
+  signOutAction,
+  suspended = false
 }: {
   name: string;
   email: string;
   /** Server action — the sign-out itself stays on the server. */
   signOutAction: () => Promise<void>;
+  /**
+   * A suspended account keeps only sign-out (spec 164).
+   *
+   * The sidebar is already stripped to Support for them, and leaving Projects and Settings here
+   * would put the same two dead ends back one click away — both bounce to `/app/suspended`.
+   */
+  suspended?: boolean;
 }) {
   return (
     <Dropdown>
@@ -38,19 +46,23 @@ export function UserMenu({
           <p className="truncate text-2xs text-fg-faint">{email}</p>
         </div>
         <DropdownSeparator />
-        <DropdownItem asChild>
-          <Link href="/app">
-            <LayoutGrid className="size-4" />
-            Projects
-          </Link>
-        </DropdownItem>
-        <DropdownItem asChild>
-          <Link href="/app/settings">
-            <Settings className="size-4" />
-            Settings
-          </Link>
-        </DropdownItem>
-        <DropdownSeparator />
+        {suspended ? null : (
+          <>
+            <DropdownItem asChild>
+              <Link href="/app">
+                <LayoutGrid className="size-4" />
+                Projects
+              </Link>
+            </DropdownItem>
+            <DropdownItem asChild>
+              <Link href="/app/settings">
+                <Settings className="size-4" />
+                Settings
+              </Link>
+            </DropdownItem>
+            <DropdownSeparator />
+          </>
+        )}
         {/* `onSelect` must be prevented: Radix closes the menu on select, which unmounts
             this form before the browser dispatches its submit event — the reason sign-out
             silently did nothing. Keeping the menu open lets the action fire; the redirect

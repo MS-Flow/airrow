@@ -11,7 +11,12 @@ const SEGMENT_LABELS: Record<string, string> = {
   generating: "Generating",
   preview: "Preview",
   continue: "Continue locally",
-  settings: "Settings"
+  settings: "Settings",
+  // Without these two the trail falls back to the raw URL segment, so the breadcrumb read a
+  // lower-case "admin" and "support" while the page heading and the sidebar said Admin and Support.
+  admin: "Admin",
+  support: "Support",
+  suspended: "Account suspended"
 };
 
 /** Derives the trail from the URL; project ids become their name via `projectNames`. */

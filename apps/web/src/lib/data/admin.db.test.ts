@@ -214,6 +214,21 @@ describe.skipIf(!dbUp)("admin console (local Supabase)", () => {
     ).rejects.toThrow(/admin_audit_log_subject_check/);
   });
 
+  it("admin_audit_log: accepts the two Pro actions (spec 164)", async () => {
+    // The action set is closed in **Postgres**, not only in the TypeScript union — so widening
+    // `recordAdminAction` without the migration would have written the grant and then had the row
+    // recording it rejected, leaving Pro handed out with nothing saying who did it.
+    for (const action of ["pro.grant", "pro.revoke"]) {
+      await expect(
+        db.query(
+          `insert into public.admin_audit_log (actor_id, action, subject_type, subject_id)
+           values ($1,$2,'user',$3)`,
+          [ADMIN, action, USER_A]
+        )
+      ).resolves.toMatchObject({ rowCount: 1 });
+    }
+  });
+
   /* ── The statistics surface ────────────────────────────────────────────── */
 
   it("the accounts view is readable by the service role and nobody else", async () => {

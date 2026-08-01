@@ -108,4 +108,8 @@ passes it in.
   Pro can also be **earned**: inviting someone who then generates their first foundation is worth a
   week, capped at three per workspace. That week is a `plan_grants` row, never `organizations.plan` —
   the entitlement is resolved as *the plan or an active grant*, and only `claimAllowance` and the
-  import gate may start one, so a screen that merely reports never spends it. Spec 122.
+  import gate may **start a queued one**, so a screen that merely reports never spends it. Spec 122.
+  Support can also **give** Pro from the admin console for a fixed 30, 90 or 365 days (spec 164): a
+  `plan_grants` row with `source = 'support'`, written already-started so it never queues behind
+  anything, refused when Stripe is already paying, and ended by closing its window rather than deleting
+  it. Still never `organizations.plan` — a write there would be reconciled away by the next webhook.

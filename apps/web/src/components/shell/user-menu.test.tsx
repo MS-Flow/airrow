@@ -19,6 +19,21 @@ describe("UserMenu", () => {
     );
   });
 
+  it("leaves a suspended account nothing but sign-out (spec 164)", async () => {
+    // The sidebar is already stripped to Support; both of these bounce to /app/suspended, so
+    // offering them here would put the same dead ends one click away.
+    const user = userEvent.setup();
+    render(
+      <UserMenu name="Ada Lovelace" email="ada@example.com" signOutAction={vi.fn()} suspended />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Account menu" }));
+
+    expect(screen.queryByRole("menuitem", { name: /projects/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /settings/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
+  });
+
   it("wires the sign-out form to the action", async () => {
     const user = userEvent.setup();
     const signOutAction = vi.fn();

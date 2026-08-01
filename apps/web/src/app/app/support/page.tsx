@@ -14,7 +14,7 @@ import { InlineError, Notice } from "@/components/ui/states";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { submitTicketAction } from "@/features/support/actions";
 import { supportOverview } from "@/features/support/queries";
-import { requireSession } from "@/lib/auth";
+import { requireSessionEvenIfSuspended } from "@/lib/auth";
 import { listProjects } from "@/lib/data/store";
 import { TICKET_DAILY_LIMIT } from "@/lib/data/support";
 import { supportInbox } from "@/lib/email";
@@ -36,7 +36,12 @@ export default async function SupportPage({
   searchParams: Promise<{ sent?: string; error?: string }>;
 }) {
   const { sent, error } = await searchParams;
-  const { user, org } = await requireSession();
+  // The one page a suspension leaves standing (spec 164). The project picker stays: it is the founder's
+  // own workspace, and a ticket that can name the project it is about is the difference between one
+  // reply and three.
+  const {
+    session: { user, org }
+  } = await requireSessionEvenIfSuspended();
   const [overview, projects] = await Promise.all([supportOverview(org.id), listProjects(org.id)]);
   const inbox = supportInbox();
   const canWrite = overview !== null && overview.remainingToday > 0;

@@ -34,7 +34,21 @@ function metaName(meta: unknown, fallback: string): string {
 }
 
 /**
- * The authenticated user and their org, or null.
+ * Where an account stands, as three cases rather than a value-or-absence (spec 164).
+ *
+ * Suspension used to be expressed by `getSession()` answering `null`, which is the same answer it
+ * gives a signed-out visitor — so the only thing the app could do with a suspended founder was send
+ * them to `/login`, a screen that says they are not signed in when they are, and which they could not
+ * get past anyway. Naming the third case is what lets one door stay open.
+ */
+export type SessionRead =
+  | { kind: "none" }
+  /** Signed in, and taken offline. `suspendedAt` is for us; no screen shows it to them. */
+  | { kind: "suspended"; session: SessionContext; suspendedAt: string }
+  | { kind: "active"; session: SessionContext };
+
+/**
+ * The authenticated user, their org, and whether they are suspended.
  *
  * Memoised per request with React `cache()`. Without it a single `/app` navigation paid
  * for this twice — once in the layout and again in the page — and each call is a network
@@ -45,21 +59,22 @@ function metaName(meta: unknown, fallback: string): string {
  * auth server rather than trusting the cookie, and this is the value every RSC and action
  * scopes its data by.
  *
- * **A suspended account has no session here** (spec 150). This is the single place every `/app` page
- * and every server action already passes through, so refusing here is what makes a suspension bite at
- * the next server call rather than whenever the token happens to expire. Supabase Auth is banned in
- * the same admin action, which stops a *new* token being issued; this stops the one they are holding.
+ * **The suspension is read from the database on every request, and that is the whole of the
+ * enforcement** (spec 164). Supabase Auth's ban used to be described as the other half of it; it is
+ * not, and it no longer runs. A ban stops a new sign-in and a token refresh, but an access token
+ * already issued keeps working for its full lifetime — which is how a founder suspended nine seconds
+ * after signing in went on using the product. This check bites at their next server call, and it is
+ * the only one that does.
  */
-export const getSession = cache(async (): Promise<SessionContext | null> => {
+const readSession = cache(async (): Promise<SessionRead> => {
   const supabase = await supabaseServer();
   const {
     data: { user }
   } = await supabase.auth.getUser();
-  if (!user?.email) return null;
+  if (!user?.email) return { kind: "none" };
 
   const [org, flags] = await Promise.all([getOrgForUser(user.id), profileFlags(user.id)]);
-  if (!org) return null;
-  if (flags.suspendedAt) return null;
+  if (!org) return { kind: "none" };
 
   const rec: UserRecord = {
     id: user.id,
@@ -67,14 +82,55 @@ export const getSession = cache(async (): Promise<SessionContext | null> => {
     name: metaName(user.user_metadata, user.email),
     createdAt: user.created_at
   };
-  return { user: rec, org, isAdmin: flags.isAdmin };
+  const session: SessionContext = { user: rec, org, isAdmin: flags.isAdmin };
+  return flags.suspendedAt
+    ? { kind: "suspended", session, suspendedAt: flags.suspendedAt }
+    : { kind: "active", session };
 });
 
-/** For RSC pages/actions that require auth. Redirects when absent. */
+/**
+ * The session, or null — where "suspended" counts as null.
+ *
+ * The contract every existing caller was written against, kept exactly: thirty-odd call sites,
+ * including all three `/api/*` handlers, decide access by whether this returns something. Widening it
+ * to hand back suspended sessions would have quietly re-opened every one of them, so the widening
+ * lives in `requireSessionEvenIfSuspended` instead, where it has to be asked for by name.
+ */
+export const getSession = async (): Promise<SessionContext | null> => {
+  const read = await readSession();
+  return read.kind === "active" ? read.session : null;
+};
+
+/**
+ * For RSC pages/actions that require an account in good standing.
+ *
+ * Two refusals, because they are two different facts: no session goes to `/login`, and a suspended one
+ * goes to `/app/suspended`. Sending the suspended case to `/login` — which is what fell out of
+ * answering `null` for both — tells a founder their password is the problem and leaves them with no
+ * way to ask about the thing that actually happened.
+ */
 export async function requireSession(): Promise<SessionContext> {
-  const session = await getSession();
-  if (!session) redirect("/login");
-  return session;
+  const read = await readSession();
+  if (read.kind === "none") redirect("/login");
+  if (read.kind === "suspended") redirect("/app/suspended");
+  return read.session;
+}
+
+/**
+ * The one door a suspension leaves open: support, and the screen that explains there is one.
+ *
+ * Deliberately verbose at the call site. Everything else in `/app` uses `requireSession`, so a reader
+ * scanning for what a suspended account can still reach finds exactly the two files that name this,
+ * and a third would stand out in review — which is the property the spec's "one allowed route" rests
+ * on.
+ */
+export async function requireSessionEvenIfSuspended(): Promise<{
+  session: SessionContext;
+  suspended: boolean;
+}> {
+  const read = await readSession();
+  if (read.kind === "none") redirect("/login");
+  return { session: read.session, suspended: read.kind === "suspended" };
 }
 
 /**

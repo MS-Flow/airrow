@@ -1,9 +1,12 @@
-// Projects — what people actually built, and where the ones who stopped got to (spec 150).
+// Projects — what people actually built, and where the ones who stopped got to (spec 150), plus what
+// we delivered them (spec 164).
 //
 // The interview is shown question by question rather than as raw jsonb. Those answers are customer IP
 // (§II): they are here because supporting a founder whose generation went wrong is impossible without
 // seeing what it was given, and for the same reason nothing on this path is ever logged. The privacy
-// policy says so, in the change that added this screen.
+// policy says so, in the change that added this screen. The generated files are here for the same
+// reason and under the same rule — and the founder's *own* files are listed as paths only, because
+// their contents were never stored in the first place.
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,8 +15,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } fro
 import { Pager } from "@/features/admin/Pager";
 import { readableAnswers } from "@/features/admin/answers";
 import { requireAdmin } from "@/lib/auth";
-import { adminProject, adminProjects } from "@/lib/data/admin";
-import type { ProjectStatus } from "@/lib/data/store";
+import { adminProject, adminProjectFiles, adminProjects } from "@/lib/data/admin";
+import {
+  getImportSource,
+  listImportFiles,
+  loadArtifact,
+  type ProjectStatus
+} from "@/lib/data/store";
 import { cn, timeAgo } from "@/lib/utils";
 
 const STATUSES: ProjectStatus[] = ["interviewing", "generating", "ready", "failed"];
@@ -37,6 +45,37 @@ function isOrigin(value: string | undefined): value is Origin {
   return value === "imported" || value === "scratch";
 }
 
+/**
+ * The generated files of one job, with their sizes.
+ *
+ * The manifest is the record of what was written (§II — manifest of record), so byte counts are read
+ * from it rather than recomputed; a file the manifest does not list falls back to measuring the string,
+ * which is only reachable for an artifact written before its manifest entry existed.
+ */
+async function generatedFiles(
+  jobId: string
+): Promise<{ path: string; content: string; bytes: number }[] | null> {
+  const artifact = await loadArtifact(jobId);
+  if (!artifact) return null;
+  const sizes = new Map(artifact.manifest.files.map((f) => [f.path, f.bytes]));
+  return artifact.files.map((file) => ({
+    path: file.path,
+    content: file.content,
+    bytes: sizes.get(file.path) ?? new TextEncoder().encode(file.content).length
+  }));
+}
+
+/** The founder's own paths, when the project was imported. Never their content — we do not have it. */
+async function importedPaths(projectId: string): Promise<{ path: string; bytes: number }[]> {
+  const source = await getImportSource(projectId);
+  if (!source) return [];
+  return (await listImportFiles(source.id)).map((f) => ({ path: f.path, bytes: f.bytes }));
+}
+
+function FileSize({ bytes }: { bytes: number }) {
+  return <span className="text-fg-faint">{bytes < 1024 ? `${bytes} B` : `${Math.round(bytes / 1024)} kB`}</span>;
+}
+
 function FilterLink({ href, active, children }: { href: string; active: boolean; children: React.ReactNode }) {
   return (
     <Link
@@ -54,9 +93,15 @@ function FilterLink({ href, active, children }: { href: string; active: boolean;
 export default async function AdminProjectsPage({
   searchParams
 }: {
-  searchParams: Promise<{ status?: string; origin?: string; page?: string; open?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    origin?: string;
+    page?: string;
+    open?: string;
+    file?: string;
+  }>;
 }) {
-  const { status, origin, page: pageParam, open } = await searchParams;
+  const { status, origin, page: pageParam, open, file } = await searchParams;
   const { user: actor } = await requireAdmin();
   const page = Math.max(0, Number(pageParam ?? 0) || 0);
 
@@ -65,13 +110,19 @@ export default async function AdminProjectsPage({
     origin: isOrigin(origin) ? origin : undefined
   };
   const projects = await adminProjects(actor.id, { ...filters, page });
-  // The interview is only read for the one project an operator opened — it is the most sensitive thing
-  // on the page, and fetching every founder's answers to render a list would be indefensible.
-  const detail = open ? await adminProject(actor.id, open, readableAnswers) : null;
+  // The interview and the files are only read for the one project an operator opened — they are the
+  // most sensitive things on the page, and fetching every founder's answers to render a list would be
+  // indefensible.
+  const [detail, artifact] = open
+    ? await Promise.all([
+        adminProject(actor.id, open, readableAnswers),
+        adminProjectFiles(actor.id, open, file ?? null, generatedFiles, importedPaths)
+      ])
+    : [null, null];
 
   const query = (over: Record<string, string | undefined>): string => {
     const search = new URLSearchParams();
-    const merged = { status: filters.status, origin: filters.origin, ...over };
+    const merged = { status: filters.status, origin: filters.origin, open, file, ...over };
     for (const [key, value] of Object.entries(merged)) if (value) search.set(key, value);
     const text = search.toString();
     return text ? `/app/admin/projects?${text}` : "/app/admin/projects";
@@ -106,7 +157,10 @@ export default async function AdminProjectsPage({
             <CardTitle>{detail.name}</CardTitle>
             <Badge tone={STATUS_TONES[detail.status]}>{detail.status}</Badge>
             <Badge tone="neutral">{detail.importKind ? `Imported (${detail.importKind})` : "From scratch"}</Badge>
-            <Link href={query({ open: undefined })} className="ml-auto text-sm text-fg-muted hover:text-fg">
+            <Link
+              href={query({ open: undefined, file: undefined })}
+              className="ml-auto text-sm text-fg-muted hover:text-fg"
+            >
               Close
             </Link>
           </CardHeader>
@@ -144,6 +198,65 @@ export default async function AdminProjectsPage({
                   </div>
                 ))}
               </dl>
+            )}
+
+            <h3 className="mt-6 text-base font-semibold text-fg">What we generated</h3>
+            {artifact === null ? (
+              <p className="mt-2 text-sm text-fg-faint">
+                Nothing has been delivered yet — no generation on this project has completed.
+              </p>
+            ) : (
+              <>
+                <p className="mt-1 text-sm text-fg-faint">
+                  From job {artifact.jobId}
+                  {artifact.generatedAt ? ` · ${timeAgo(artifact.generatedAt)}` : ""} ·{" "}
+                  {artifact.files.length} files
+                </p>
+                <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
+                  <ul className="max-h-96 overflow-y-auto rounded-md border border-border">
+                    {artifact.files.map((entry) => (
+                      <li key={`${entry.origin}-${entry.path}`}>
+                        {entry.origin === "yours" ? (
+                          // The founder's file. Listed so the tree tells the truth about the download,
+                          // never clickable — we hold the path and the size, and nothing else.
+                          <span className="flex items-center justify-between gap-2 px-2.5 py-1.5 font-mono text-xs text-fg-faint">
+                            <span className="truncate">{entry.path}</span>
+                            <FileSize bytes={entry.bytes} />
+                          </span>
+                        ) : (
+                          <Link
+                            href={query({ file: entry.path })}
+                            aria-current={artifact.opened?.path === entry.path ? "true" : undefined}
+                            className={cn(
+                              "flex items-center justify-between gap-2 px-2.5 py-1.5 font-mono text-xs transition-colors",
+                              artifact.opened?.path === entry.path
+                                ? "bg-surface-raised text-fg"
+                                : "text-fg-muted hover:text-fg"
+                            )}
+                          >
+                            <span className="truncate">{entry.path}</span>
+                            <FileSize bytes={entry.bytes} />
+                          </Link>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {artifact.opened ? (
+                    <div className="min-w-0">
+                      <p className="mb-2 font-mono text-xs text-fg-muted">{artifact.opened.path}</p>
+                      {/* Rendered as text, never as HTML. A generated file is untrusted (§III), and an
+                          operator reading what we wrote wants the source anyway — so there is no
+                          markdown pass and no highlighter, and therefore nothing to sanitize. */}
+                      <pre className="max-h-96 overflow-auto rounded-md border border-border bg-surface-raised p-3 text-xs leading-relaxed text-fg">
+                        {artifact.opened.content}
+                      </pre>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-fg-faint">Pick a file to read it.</p>
+                  )}
+                </div>
+              </>
             )}
           </CardBody>
         </Card>
