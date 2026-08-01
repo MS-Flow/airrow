@@ -20,8 +20,6 @@ import { UserMenu } from "@/components/shell/user-menu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
-import { ChatWidget } from "@/features/chat/ChatWidget";
-import { GUEST_INTERVIEW_PATH } from "@/features/interview/guest-route";
 import { SpecDrivenShowcase } from "@/features/landing/SpecDrivenShowcase";
 import {
   DELIVERABLES,
@@ -36,6 +34,7 @@ import {
 } from "@/features/landing/copy";
 import { readFoundation } from "@/features/landing/foundation";
 import { proCtaHref } from "@/features/landing/pro-cta";
+import { startCtaHref } from "@/features/landing/start-cta";
 import { checkAllowance } from "@/features/generation/allowance";
 import { getSession, signOut } from "@/lib/auth";
 import { readTheme } from "@/lib/theme";
@@ -65,8 +64,9 @@ export default async function Landing() {
   const theme = await readTheme();
   // The Examples section shows the canonical scaffold, read from disk on the server.
   const foundation = readFoundation();
-  // Signed out, "get started" is the interview itself — the account comes at generate.
-  const primaryHref = session ? "/app/projects/new" : GUEST_INTERVIEW_PATH;
+  // Signed out, "get started" is the interview itself — the account comes at generate. Shared with
+  // the chat panel's footer, which now renders on every public page and must not pick a different one.
+  const primaryHref = startCtaHref(Boolean(session));
   // The Pro action needs to know what the founder has already used, so it can offer Pro to the
   // person who has met the limit and the free foundation to the person who has not.
   const allowance = session
@@ -270,11 +270,6 @@ export default async function Landing() {
       </main>
 
       <SiteFooter />
-
-      {/* Last in the tree and fixed to the corner, so it overlays the page instead of taking a place
-          in it. The landing page only — someone already on their way into the product does not need
-          to be convinced, and a chat panel on a sign-in screen is in the way (spec 141). */}
-      <ChatWidget ctaHref={primaryHref} />
     </div>
   );
 }

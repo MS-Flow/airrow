@@ -83,6 +83,15 @@ lågt takttal är svaret uppe på ett par sekunder ändå, och panelen har en sk
 taket inte hållas, och då svarar chatten inte alls i stället för att svara obegränsat. Det är en regel,
 inte tre, och den gör att en halvkonfigurerad miljö aldrig blir den dyra miljön.
 
+> **Ändrad av [spec 151](151-chat-diagnostics.md).** Regeln gäller fortfarande nyckeln, saltet och
+> migrationen, men **inte längre besökarens adress**. En adress som saknas räknas nu i en delad hink i
+> stället för att vägras, eftersom de två taken bär skyddet ändå. Den ursprungliga formuleringen
+> gjorde att panelen aldrig kunde svara i en webbläsare på localhost — dev-servern sätter ingen
+> `x-forwarded-for` och ingen webbläsare skickar en — och att en deploy bakom en proxy som strippar
+> headern låg i FAQ-läge för alltid utan att säga det. Spec 151 lägger också till att *varför* chatten
+> är tyst loggas, vilket den här specen borde ha gjort från början: en felkonfigurerad deploy fick
+> annars felsökas utifrån genom att mäta svarstider.
+
 **Egen nyckel, eget tak.** Chatten är en publik oautentiserad yta; genereringen är det folk betalar
 för. `AIRROW_CHAT_API_KEY` i en egen Console-workspace med spend limit, **utan fallback** till
 `ANTHROPIC_API_KEY` — en fallback skulle låta en missbruksvåg mot chatten landa på genereringens
@@ -107,8 +116,10 @@ en yta; den ändrar ingenting om hur foundations skrivs.
 
 _What "done" means. Every line is something a reviewer can check._
 
-- [x] En chattknapp finns på landningssidan (`/`) och **bara** där — inte på `/login`, `/signup` eller
-      legal-sidorna. Den öppnar en panel med 3–4 föreslagna frågor och ett fritextfält, och panelen
+- [x] ~~En chattknapp finns på landningssidan (`/`) och **bara** där — inte på `/login`, `/signup`
+      eller legal-sidorna.~~ **Ändrat av [spec 158](158-archer-everywhere.md):** knappen finns på
+      varje publik sida och monteras från `app/(public)/layout.tsx`; `/app/**` ligger utanför den
+      route-gruppen. Den öppnar en panel med 3–4 föreslagna frågor och ett fritextfält, och panelen
       fungerar på mobil.
 - [x] Boten svarar alltid på engelska, oavsett vilket språk besökaren skriver på.
 - [x] Tråden överlever en sidomladdning (`sessionStorage`, inte cookie, inte `localStorage`), och
@@ -328,8 +339,15 @@ svar som innehåller den slängs. Inget samtalsinnehåll loggas eller lagras (§
 
 - Assistent inne i `/app` för inloggade grundare.
 - RAG över genererade dokument eller `/docs`.
-- Överlämning till människa, e-postinsamling eller leadfångst.
-- Chatten på andra ytor än `/`. Den finns inte på `/login`, `/signup` eller legal-sidorna — någon som
-  redan är på väg in i produkten behöver inte övertalas, och en chatt på en inloggningssida är i vägen.
+- ~~Överlämning till människa, e-postinsamling eller leadfångst.~~ **Ändrat av
+  [spec 158](158-archer-everywhere.md):** e-postinsamling och leadfångst står kvar som ur scope, men
+  överlämningen finns — boten pekar på supportsidan (spec 144), som inte existerade när den här specen
+  skrevs. Den skickar inget ärende åt besökaren; den länkar dit och säger att det kräver inloggning.
+- ~~Chatten på andra ytor än `/`. Den finns inte på `/login`, `/signup` eller legal-sidorna — någon som
+  redan är på väg in i produkten behöver inte övertalas, och en chatt på en inloggningssida är i vägen.~~
+  **Ändrat av [spec 158](158-archer-everywhere.md):** avvägningen visade sig fel. Frågan som avgör om
+  någon skapar ett projekt uppstår sällan medan de står på `/` — den uppstår i prissättningen, i
+  villkoren, eller framför registreringen, och där fanns ingen chatt att ställa den i. Panelen finns
+  nu på varje publik sida. `/app` är fortfarande undantaget, och nu strukturellt.
 - Flerspråkighet. Boten svarar alltid på engelska, samma språk som landningssidan den läser sin
   kunskap ur. En bot som svarar på besökarens språk skulle beskriva produkten i ord ingen granskat.

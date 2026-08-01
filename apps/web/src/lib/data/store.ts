@@ -548,12 +548,51 @@ export async function projectUsage(projectId: string): Promise<ProjectUsage> {
   return { count: usage.length, firstAt: first ?? null };
 }
 
+/**
+ * The two things about an account that are decided outside it: whether it operates Airrow, and
+ * whether it has been taken offline (spec 150).
+ *
+ * Read together because both are asked on the same paths — `getSession` needs the suspension on every
+ * request, and the allowance and the admin gate need the flag. Neither is ever writable by the
+ * account itself: `20260801130000_admin_console.sql` narrowed `authenticated`'s privilege on
+ * `profiles` to the two columns a founder legitimately owns, so `is_admin` cannot be self-granted and
+ * `suspended_at` cannot be self-cleared.
+ *
+ * Tolerant of `suspended_at` being absent, the way `getOrgForUser` is of `organizations.plan`: this
+ * sits on the request path of every signed-in page, and a deployment one migration behind must degrade
+ * to "nobody is suspended" rather than log everybody out.
+ */
+export interface ProfileFlags {
+  isAdmin: boolean;
+  suspendedAt: string | null;
+}
+
+export async function profileFlags(userId: string): Promise<ProfileFlags> {
+  const query = await db()
+    .from("profiles")
+    .select("is_admin, suspended_at")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (query.error) {
+    if (!isMissingColumn(query.error, "profiles.suspended_at")) {
+      throw new Error(`Supabase: ${query.error.message}`);
+    }
+    const fallback = maybe<{ is_admin: boolean }>(
+      await db().from("profiles").select("is_admin").eq("id", userId).maybeSingle()
+    );
+    return { isAdmin: fallback?.is_admin === true, suspendedAt: null };
+  }
+
+  // `as` justified: the select names exactly these two columns, and `maybe` has narrowed away the
+  // error case — but the client types the payload as a generic record.
+  const row = query.data as { is_admin: boolean; suspended_at: string | null } | null;
+  return { isAdmin: row?.is_admin === true, suspendedAt: row?.suspended_at ?? null };
+}
+
 /** True when this account bypasses the free allowance. Set by migration only — never from the app. */
 export async function isAdminUser(userId: string): Promise<boolean> {
-  const row = maybe<{ is_admin: boolean }>(
-    await db().from("profiles").select("is_admin").eq("id", userId).maybeSingle()
-  );
-  return row?.is_admin === true;
+  return (await profileFlags(userId)).isAdmin;
 }
 
 export async function getJob(jobId: string): Promise<JobRecord | null> {

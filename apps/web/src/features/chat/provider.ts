@@ -12,6 +12,7 @@
 // against the chat land on generation's budget, which is the one thing the split exists to prevent.
 import Anthropic from "@anthropic-ai/sdk";
 import type { ChatTurn } from "./contract";
+import { reportChatUnavailable, type ChatUnavailableReason } from "./diagnostics";
 import { buildKnowledge } from "./knowledge";
 import { MAX_THREAD_TURNS } from "./limits";
 
@@ -83,8 +84,23 @@ HOW TO WRITE.
   a nudge, and a nudge after every answer reads as a sales bot.
 - No superlatives and no marketing filler ("revolutionary", "seamless", "cutting-edge").
 
-OUTPUT FORMAT. Reply with a single JSON object and nothing else: {"onTopic": boolean, "answer": string}.
-Set answer to null when onTopic is false.
+MAKING THE CASE. Spec-driven development is why Airrow works, and most visitors have not thought about
+it yet. When they ask what the documents are for, why not just prompt an agent, or what actually
+changes in their week, argue for it — concretely, from WHY SPEC-DRIVEN and THE SPEC LOOP below. Name
+what it costs them not to: an agent that invents requirements it was never given, reopens decisions
+they made last week, and spends its tokens exploring the wrong build. Name what gets easier: the agent
+knows what to build, review becomes "does this match what we agreed" instead of "does this look right",
+and the decisions outlive the context window. Be persuasive by being specific — this is the one place
+conviction belongs, and it still buys no superlatives and no extra sentence on an answer that was
+already finished.
+
+WHEN TO HAND OVER. Set support to true when the knowledge does not answer them, when something sounds
+broken or wrong with their account or billing, or when they ask for a person. The panel turns that into
+the link; you never write a URL yourself. Leave it false otherwise — an answer that worked does not
+need one, and a support link under every reply is the same tic as a pitch under every reply.
+
+OUTPUT FORMAT. Reply with a single JSON object and nothing else:
+{"onTopic": boolean, "answer": string, "support": boolean}. Set answer to null when onTopic is false.
 
 KNOWLEDGE
 ${"{{KNOWLEDGE}}"}`;
@@ -97,11 +113,17 @@ ${"{{KNOWLEDGE}}"}`;
  * as one, while `unavailable` is ours to absorb and drops the panel to the handwritten FAQ.
  */
 export type ChatOutcome =
-  | { status: "answered"; text: string }
+  /** `support` is the model asking the panel to offer the hand-off, never a link it wrote (spec 158). */
+  | { status: "answered"; text: string; support: boolean }
   | { status: "off_topic" }
-  | { status: "unavailable" };
+  /** Carries *why*, for the log and the non-production header — never for the visitor (spec 151). */
+  | { status: "unavailable"; reason: ChatUnavailableReason };
 
-const UNAVAILABLE = { status: "unavailable" } as const;
+/** Report and return in one step, so no path can fail quietly the way spec 141's did. */
+function unavailable(reason: ChatUnavailableReason): ChatOutcome {
+  reportChatUnavailable(reason);
+  return { status: "unavailable", reason };
+}
 
 /**
  * Asked for JSON, the model reliably wraps it in a markdown fence anyway — observed on every live
@@ -131,8 +153,8 @@ export function chatConfigured(): boolean {
  */
 export async function answerQuestion(thread: readonly ChatTurn[]): Promise<ChatOutcome> {
   const apiKey = process.env.AIRROW_CHAT_API_KEY;
-  if (!apiKey) return UNAVAILABLE;
-  if (thread.length === 0 || thread.length > MAX_THREAD_TURNS * 2) return UNAVAILABLE;
+  if (!apiKey) return unavailable("no-api-key");
+  if (thread.length === 0 || thread.length > MAX_THREAD_TURNS * 2) return unavailable("model-contract-violated");
 
   const client = new Anthropic({ apiKey });
 
@@ -151,7 +173,7 @@ export async function answerQuestion(thread: readonly ChatTurn[]): Promise<ChatO
       }))
     });
 
-    if (response.stop_reason === "refusal") return UNAVAILABLE;
+    if (response.stop_reason === "refusal") return unavailable("model-call-failed");
 
     const text = response.content
       .filter((block): block is Anthropic.TextBlock => block.type === "text")
@@ -161,24 +183,26 @@ export async function answerQuestion(thread: readonly ChatTurn[]): Promise<ChatO
     // A leaked prompt means a visitor steered the model off its instructions. Nothing in this
     // response is trustworthy after that — including its own verdict about being on topic, which is
     // why this is unavailability and never an answer the visitor is shown.
-    if (text.includes(CANARY)) return UNAVAILABLE;
+    if (text.includes(CANARY)) return unavailable("model-contract-violated");
 
     const raw: unknown = JSON.parse(stripFence(text));
-    if (typeof raw !== "object" || raw === null) return UNAVAILABLE;
-    const envelope = raw as { onTopic?: unknown; answer?: unknown };
+    if (typeof raw !== "object" || raw === null) return unavailable("model-contract-violated");
+    const envelope = raw as { onTopic?: unknown; answer?: unknown; support?: unknown };
 
     if (envelope.onTopic !== true) return { status: "off_topic" };
 
     const answer = envelope.answer;
-    if (typeof answer !== "string") return UNAVAILABLE;
+    if (typeof answer !== "string") return unavailable("model-contract-violated");
     const trimmed = answer.trim();
-    if (trimmed.length === 0 || trimmed.length > ANSWER_MAX_CHARS) return UNAVAILABLE;
-    if (PROMPT_LEAK_MARKERS.some((re) => re.test(trimmed))) return UNAVAILABLE;
+    if (trimmed.length === 0 || trimmed.length > ANSWER_MAX_CHARS) return unavailable("model-contract-violated");
+    if (PROMPT_LEAK_MARKERS.some((re) => re.test(trimmed))) return unavailable("model-contract-violated");
 
-    return { status: "answered", text: trimmed };
+    // A missing or non-boolean `support` is not worth discarding an otherwise good answer over: the
+    // offer is additive, so the safe reading of "the model did not say" is "do not offer".
+    return { status: "answered", text: trimmed, support: envelope.support === true };
   } catch {
     // Network error, rate limit, malformed JSON, schema drift — all the same outcome, and none of
     // them is the visitor's fault: the panel falls back to the handwritten answers.
-    return UNAVAILABLE;
+    return unavailable("model-call-failed");
   }
 }
