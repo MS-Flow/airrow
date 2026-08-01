@@ -17,7 +17,7 @@ jobs:
     env:
       TZ: UTC
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # Full history, for the migration check at the bottom of this job. It asks
           # `git diff origin/<base>...HEAD` to tell a migration this PR *adds* — expected to be
@@ -27,8 +27,8 @@ jobs:
           # unapplied migration as already merged", and every PR that adds a migration goes red for a
           # drift that does not exist. Seen on PR #124 (spec 122). Amends spec 77.
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4   # version comes from package.json "packageManager"
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 — pnpm version comes from package.json "packageManager"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: pnpm
@@ -99,7 +99,7 @@ jobs:
       # `verify` is a required status check — `scripts/setup-branch-protection.sh` lists the
       # contexts by hand, so a new job would block nothing until an admin re-ran that script.
       # Read-only: no `db push` here. Applying happens in `supabase-migrate.yml` after merge.
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1 (a branch, not a tag)
         with:
           # Unpinned deliberately. A CLI that changes the output format of `migration list`
           # cannot slip past quietly: the script fails when it parses a table into zero rows
