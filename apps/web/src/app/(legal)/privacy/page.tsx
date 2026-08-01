@@ -66,6 +66,15 @@ export default function PrivacyPage() {
         These are processors acting on our instructions. We add no analytics, advertising or
         session-recording services.
       </p>
+      <p>
+        <strong>Our own staff.</strong> A small number of Airrow personnel can access project data —
+        including your interview answers — through an internal administration tool, and only where it
+        is needed to deliver and support the service: answering a support request, investigating a
+        generation that failed, or acting on a problem with an account. Access is restricted to
+        named administrator accounts, actions taken on an account are recorded with who took them and
+        why, and nothing seen this way is written to our logs. We do not read your project data for
+        any other purpose, and we still never store the contents of files you import.
+      </p>
 
       <h2>How it is protected</h2>
       <p>

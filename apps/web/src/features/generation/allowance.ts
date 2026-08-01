@@ -8,6 +8,7 @@
 // none of them knows that plans exist. What is counted lives in `generation_usage` and outlives the
 // projects it refers to — counting live jobs made the limit refundable, and a call already paid for
 // would be forgotten the moment a project was deleted.
+import { consumeCredit, creditsAvailable } from "@/lib/data/credits";
 import { claimPro, grantStanding } from "@/lib/data/referrals";
 import { countGenerations, isAdminUser, projectUsage } from "@/lib/data/store";
 import type { OrgPlan } from "@/lib/data/store";
@@ -27,6 +28,8 @@ export type AllowanceGrant =
   | "pro"
   /** A week of Pro earned by inviting someone who then generated a foundation (spec 122). */
   | "referral"
+  /** A generation support handed back after something went wrong (spec 150). */
+  | "credit"
   /** An account exempt from the limit entirely. */
   | "admin";
 
@@ -90,7 +93,40 @@ export async function claimAllowance(query: AllowanceQuery): Promise<Entitlement
   return decide(query, true);
 }
 
+/**
+ * The answer, with a generation support handed back as the **last** resort (spec 150).
+ *
+ * Credits are consulted only once the ordinary answer is a refusal, which is what makes them cheap to
+ * reason about: a workspace on Pro, inside its free foundation, or with a free repair still open never
+ * reaches this code, so a credit cannot be spent where something free would have done. It also means a
+ * credit granted to a workspace that later buys Pro simply waits — Pro short-circuits far above here —
+ * and is still there if the subscription ends.
+ *
+ * `consumeCredit` returning false is the concurrency case: two generations started at once, one of them
+ * took the last credit. The loser falls back to the refusal it would have had anyway.
+ */
 async function decide(query: AllowanceQuery, spending: boolean): Promise<Entitlement> {
+  const ordinary = await ordinaryDecision(query, spending);
+  if (ordinary.allowed) return ordinary;
+
+  const { orgId, now = new Date() } = query;
+  const available = await creditsAvailable(orgId);
+  if (available === 0) return ordinary;
+  // Report against spend, the same split `claimPro` makes above: `checkAllowance` runs on page
+  // renders, and a founder reading a screen must not spend the credit support gave them.
+  if (spending && !(await consumeCredit(orgId, now))) return ordinary;
+
+  return {
+    allowed: true,
+    plan: ordinary.plan,
+    grant: "credit",
+    used: ordinary.used,
+    remaining: spending ? available - 1 : available,
+    unlimited: false
+  };
+}
+
+async function ordinaryDecision(query: AllowanceQuery, spending: boolean): Promise<Entitlement> {
   const { orgId, plan, userId, projectId, now = new Date() } = query;
 
   const [used, admin] = await Promise.all([
