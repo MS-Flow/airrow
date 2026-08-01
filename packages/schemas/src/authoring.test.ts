@@ -95,9 +95,13 @@ describe("authored slots contract", () => {
 // so the allowlist here is the same idea as the prose one: only what the interview recognises.
 describe("flaggable answers", () => {
   it("covers exactly the answers the founder typed themselves", () => {
-    const freeText = interviewQuestions.filter((q) => q.type === "text").map((q) => q.id);
+    // Every question with a field in it, not only the ones typed `text`: `guided_text` may be seeded
+    // from a direction we wrote, but the founder owns the field from the first keystroke (spec 159).
+    const typed = interviewQuestions
+      .filter((q) => q.type === "text" || q.type === "guided_text" || q.type === "references")
+      .map((q) => q.id);
 
-    expect([...FLAGGABLE_ANSWERS]).toEqual(freeText);
+    expect([...FLAGGABLE_ANSWERS]).toEqual(typed);
   });
 
   it("excludes a picked option — it came from a list we wrote", () => {
@@ -120,5 +124,24 @@ describe("flaggable answers", () => {
 
   it("names each answer once", () => {
     expect(pickFlaggedAnswers(["problem", "problem"])).toEqual(["problem"]);
+  });
+});
+
+/* ── What a rejection may name (spec 159) ──────────────────────────────────── */
+
+describe("the answers a rejection may name", () => {
+  it("covers every question the founder types into, not only the plain text ones", () => {
+    // The regression this exists to stop: `uiDirection` gained starting points, became `guided_text`,
+    // and silently fell out of the list — so the model could no longer point a founder at the answer
+    // that had actually made the interview unusable.
+    expect(FLAGGABLE_ANSWERS).toContain("uiDirection");
+    expect(FLAGGABLE_ANSWERS).toContain("uiReferenceLinks");
+    expect(FLAGGABLE_ANSWERS).toContain("problem");
+  });
+
+  it("never names an answer that came from a list we wrote", () => {
+    for (const picked of ["productType", "tenancy", "capabilities", "database", "hosting"]) {
+      expect(FLAGGABLE_ANSWERS).not.toContain(picked);
+    }
   });
 });

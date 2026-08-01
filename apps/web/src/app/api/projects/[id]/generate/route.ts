@@ -41,7 +41,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
   const mv = await latestModelVersion(id);
   if (!mv) return NextResponse.json({ error: "no_model" }, { status: 409 });
 
-  await runGenerationJob(job.id, mv.model);
+  await runGenerationJob(job.id, mv.model, session.org.id);
   const finished = await latestJob(id);
 
   // If somebody invited this founder, this is the moment it was worth something (spec 122). Here

@@ -15,6 +15,12 @@
 **Short on time?** Read _User story_ and _Acceptance criteria_ — that's the whole point of the change and
 how you'll know it's done. Everything after those is detail for whoever implements and reviews it.
 
+> **Ändrad av [spec 159](159-ui-reference-start.md):** kriteriet "finns **inte** på `/app/**`" gäller
+> inte längre. Archer monteras nu även från `app/app/layout.tsx` och syns på varje inloggad sida. Allt
+> annat i den här specen står kvar — uteslutningen var ett beslut, inte en säkerhetsgräns, och den
+> inloggade grundaren visade sig vara den som oftast har en fråga. Se kriteriet nedan, som är märkt
+> där det står.
+
 ---
 
 ## User story
@@ -101,10 +107,13 @@ _What "done" means. Every line is something a reviewer can check._
       ingenting — den är en `route.ts` som sätter en cookie och skickar vidare till `/signup` (spec
       122). Den ligger i route-gruppen och får layouten; det finns bara ingen sida att visa en panel
       på. Besökaren möter Archer en omdirigering senare.
-- [x] Den finns **inte** på `/app/**`. Root-layouten omsluter även dashboarden, så monteringen måste
-      utesluta `/app` aktivt — inte hoppas att den inte träffar.
-- [x] Widgeten monteras på **ett** ställe. Ingen sida importerar `ChatWidget` för egen del, så nästa
-      publika sida får chatten utan att någon minns att lägga till den.
+- [x] ~~Den finns **inte** på `/app/**`.~~ **Upphävd av [spec 159](159-ui-reference-start.md)** — den
+      finns nu på `/app/**` också, monterad från `app/app/layout.tsx`. Uppfyllt som skrivet när den här
+      specen stängdes; den strukturella egenskapen som gjorde det kontrollerbart (root-layouten
+      monterar ingenting) står kvar.
+- [x] Widgeten monteras bara från en **layout**, aldrig från en sida. Ingen sida importerar
+      `ChatWidget` för egen del, så nästa sida i respektive träd får chatten utan att någon minns att
+      lägga till den. (Var "på **ett** ställe" — spec 159 gjorde det till två, en per layout.)
 - [x] CTA:ns mål avgörs på varje sida på samma sätt som på landningssidan i dag (`primaryHref`,
       härlett ur sessionen), och den logiken finns kvar på exakt ett ställe — inte kopierad per sida.
 - [x] Tråden överlever **navigering mellan sidorna**, inte bara en omladdning: den som frågar på `/`

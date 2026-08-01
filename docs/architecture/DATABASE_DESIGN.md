@@ -139,6 +139,18 @@ project_reviews                             -- the founder's verdict on a founda
   display_name text                         -- the byline they chose, never their address
   published_at timestamptz null             -- ours to set (admin console, spec 150); cleared on withdrawal
 
+ui_references                               -- screenshots attached to the UI question (spec 159)
+  id uuid pk
+  organization_id uuid → organizations
+  project_id uuid → projects on delete cascade
+  storage_path text unique                  -- inside the private `ui-references` bucket
+  media_type text check in ('image/png','image/jpeg','image/webp')
+  bytes integer check (bytes > 0 and bytes <= 2097152)
+  created_by uuid
+  -- The bytes are read server-side by the authoring provider's UI call and described in words; they
+  -- never reach a generated file. The founder sees their own uploads through a short-expiry signed
+  -- URL. Storage has no foreign key, so `deleteProject` removes the objects explicitly.
+
 generation_credits                          -- a generation handed back by support (spec 150)
   id uuid pk
   organization_id uuid → organizations
@@ -187,6 +199,8 @@ The fix is spec 74's, applied to the same shape: `20260801130000_admin_console.s
 The general rule from the plan column now has a second instance and a sharper edge: **a column that decides authorization is never protected by a policy about the row.** RLS answers "whose row is this"; it cannot answer "which columns of their own row may they write".
 
 `generation_credits` and `admin_audit_log` go one step past `stripe_events`: RLS enabled, **no policy, and no grant to `authenticated` at all**. A founder who can insert a credit has granted themselves a generation, and no policy phrased as "your own organization" would stop them — their own organization is precisely the one they would grant it to. The statistics functions and `admin_user_accounts` are the same posture in function form: Postgres grants `execute` to `public` by default, so each one is explicitly revoked and granted to `service_role` alone.
+
+`ui_references` is select-only for `authenticated` for the same reason, with the sharper edge that a row here names a Storage object: an insert from a browser console would skip the type, size and count checks *and* point at bytes nobody validated (spec 159). The bucket itself carries no policy for `authenticated` or `anon` at all, so the only role that reaches an image is `service_role` — the founder sees their own through a signed URL the server mints, which is also why the bucket must never be made public. `ui-references.db.test.ts` covers both the reads and the four denials.
 
 `support_tickets` and `project_reviews` are select-only for `authenticated` for the same family of reasons (spec 144). A ticket inserted from a browser console would skip the rate limit and the session the server action resolves the organization from; and `published_at` sits on a review row that genuinely belongs to the founder, so "may edit my own review" and "may publish my own testimonial" would be the same privilege. Writes go through the service-role path only, and the denial tests in `support.db.test.ts` say so.
 

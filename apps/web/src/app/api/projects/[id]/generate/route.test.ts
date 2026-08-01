@@ -64,7 +64,9 @@ describe("POST /api/projects/[id]/generate", () => {
 
     const res = await POST(new Request("http://x", { method: "POST" }), ctx);
 
-    expect(runGenerationJob).toHaveBeenCalledWith("job1", {});
+    // The organization travels with the job: the runner only knows a project, and the founder's UI
+    // references are org-scoped like every other read (spec 159).
+    expect(runGenerationJob).toHaveBeenCalledWith("job1", {}, "org1");
     await expect(res.json()).resolves.toMatchObject({ started: true, status: "completed" });
   });
 

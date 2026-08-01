@@ -1,7 +1,14 @@
 // Zod validation at the app boundary (Constraint 7). Types + question data re-exported.
 
 import { z } from "zod";
-import { ANSWER_MAX_CHARS, interviewQuestions } from "./questions.ts";
+import {
+  ANSWER_MAX_CHARS,
+  MAX_UI_REFERENCE_IMAGE_BYTES,
+  MAX_UI_REFERENCE_LINKS,
+  UI_REFERENCE_MEDIA_TYPES,
+  interviewQuestions,
+  splitReferenceLinks
+} from "./questions.ts";
 
 export * from "./types.ts";
 export * from "./questions.ts";
@@ -17,7 +24,8 @@ export const productTypeSchema = z.enum([
   "api",
   "internal_tool",
   "browser_extension",
-  "hobby"
+  "hobby",
+  "other"
 ]);
 
 export const featureIdSchema = z.enum([
@@ -33,34 +41,73 @@ export const featureIdSchema = z.enum([
   "realtime",
   "email",
   "admin",
-  "audit_logs"
+  "audit_logs",
+  "other"
 ]);
 
 /** Caps live with the questions (`ANSWER_MAX_CHARS`) so the textarea and this schema can't drift. */
 const textAnswer = (max: number) => z.string().trim().min(1).max(max);
 
+/**
+ * Products the founder pointed at, as one string of whitespace-separated entries.
+ *
+ * Capped in count as well as length because the count is what reaches the model, and validated for
+ * shape because a "link" holding a paragraph is not a link. Deliberately permissive about the form —
+ * `linear.app` and `https://linear.app/method` are both what someone types — since nothing resolves
+ * these (spec 159): they are read as names, so the only real requirement is that each one *is* a name
+ * rather than a sentence.
+ */
+const referenceLinksAnswer = z
+  .string()
+  .trim()
+  .max(ANSWER_MAX_CHARS.uiReferenceLinks)
+  .refine((s) => splitReferenceLinks(s).length <= MAX_UI_REFERENCE_LINKS, {
+    message: `at most ${MAX_UI_REFERENCE_LINKS} links`
+  })
+  .refine((s) => splitReferenceLinks(s).every((link) => /^[\w.:/-]+\.[a-z]{2,}(\/\S*)?$/i.test(link)), {
+    message: "each entry must look like a site address"
+  });
+
+/**
+ * One uploaded reference image, validated where the bytes arrive (spec 159).
+ *
+ * The media type is checked against the allowlist rather than trusted from the browser, and the size
+ * against the same ceiling the bucket enforces — belt and braces, because this is the one place in
+ * Airrow where a founder hands us a binary.
+ */
+export const uiReferenceUploadSchema = z.object({
+  mediaType: z.enum(UI_REFERENCE_MEDIA_TYPES),
+  bytes: z.number().int().positive().max(MAX_UI_REFERENCE_IMAGE_BYTES)
+});
+
 export const interviewAnswersSchema = z
   .object({
     productType: productTypeSchema,
+    productTypeOther: textAnswer(ANSWER_MAX_CHARS.productTypeOther),
     problem: textAnswer(ANSWER_MAX_CHARS.problem),
     vision: textAnswer(ANSWER_MAX_CHARS.vision),
     mvpFocus: textAnswer(ANSWER_MAX_CHARS.mvpFocus),
     audience: z.enum(["b2b", "b2c", "both", "internal"]),
     coreEntities: textAnswer(ANSWER_MAX_CHARS.coreEntities),
     uiDirection: textAnswer(ANSWER_MAX_CHARS.uiDirection),
+    uiReferenceLinks: referenceLinksAnswer,
     nonGoals: textAnswer(ANSWER_MAX_CHARS.nonGoals),
-    tenancy: z.enum(["single_user", "organizations", "marketplace", "internal"]),
+    tenancy: z.enum(["single_user", "organizations", "marketplace", "internal", "other"]),
+    tenancyOther: textAnswer(ANSWER_MAX_CHARS.tenancyOther),
     authModel: z.array(z.enum(["email_password", "magic_link", "social", "sso", "public"])).min(1).max(5),
     roles: z.enum(["simple", "granular"]),
-    capabilities: z.array(featureIdSchema).min(0).max(13),
+    capabilities: z.array(featureIdSchema).min(0).max(14),
+    capabilitiesOther: textAnswer(ANSWER_MAX_CHARS.capabilitiesOther),
     aiUsage: z.enum(["llm_calls", "rag", "agents", "ml_models", "none"]),
     integrations: textAnswer(ANSWER_MAX_CHARS.integrations),
     dataSensitivity: z.enum(["standard", "pii", "regulated"]),
     scale: z.enum(["validate", "growth", "high_scale"]),
     framework: z.enum(["nextjs", "vite", "custom"]),
     frameworkOther: textAnswer(ANSWER_MAX_CHARS.frameworkOther),
-    database: z.enum(["supabase", "postgres"]),
-    hosting: z.enum(["vercel", "azure", "self_host"]),
+    database: z.enum(["supabase", "postgres", "other"]),
+    databaseOther: textAnswer(ANSWER_MAX_CHARS.databaseOther),
+    hosting: z.enum(["vercel", "azure", "self_host", "other"]),
+    hostingOther: textAnswer(ANSWER_MAX_CHARS.hostingOther),
     repoProvider: z.enum(["github", "azure_devops"]),
     team: z.enum(["solo", "small_team", "startup", "agency"])
   })
