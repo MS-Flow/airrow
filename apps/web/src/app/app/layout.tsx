@@ -9,7 +9,6 @@ import { CommandPalette, type CommandItem } from "@/components/ui/command-palett
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toast";
 import { navItems, SUSPENDED_ITEMS } from "@/components/shell/nav-items";
-import { navItems } from "@/components/shell/nav-items";
 import { ChatWidget } from "@/features/chat/ChatWidget";
 import { startCtaHref } from "@/features/landing/start-cta";
 import { ClaimGuestDraft } from "@/features/interview/ClaimGuestDraft";
@@ -98,10 +97,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {/* Archer, the same panel the public pages carry — mounted here so the signed-in founder is
             not the one person who cannot ask (spec 159, which lifts spec 158's deliberate exclusion).
             The second and last mount point: one per layout, so a page still gets him by existing
-            rather than by importing him. `startCtaHref(true)` because `requireSession()` above means
-            everyone reading this is signed in. */}
+            rather than by importing him. `startCtaHref(true)` because the session gate above means
+            everyone reading this is signed in — including a suspended account, which keeps him on
+            purpose: "why can I not get in" is exactly the question he exists to route to a person. */}
         <ChatWidget ctaHref={startCtaHref(true)} />
-        <ClaimGuestDraft />
       </Toaster>
     </TooltipProvider>
   );
