@@ -9,9 +9,11 @@ This foundation ships the documents, the rules and the workflow. It does not shi
 what this command is for. Run it once, in a fresh clone. Read
 @.claude/spec-kit/constitution.md first; everything below is subject to it.
 
-**Re-runnable by design.** Check before every step and skip what is already there. A founder who runs
-this twice, or runs it after writing code, must lose nothing. When a step's output already exists,
-say so and move on — never overwrite, never scaffold on top.
+**Re-runnable until it succeeds.** Check before every step and skip what is already there. A founder
+who runs this twice, or runs it after writing code, must lose nothing. When a step's output already
+exists, say so and move on — never overwrite, never scaffold on top. Once section 4 has passed in
+full, this command has nothing left to do and removes itself (section 5) — so a second run only ever
+happens because the first one did not finish.
 
 **It stops at this machine.** No creating a remote repository, no provisioning a database, no
 deploying, no writing secrets anywhere. Those need a human with an account and are step 2 of
@@ -58,5 +60,18 @@ Report what you did, what you skipped because it already existed, and the result
 one of them fails, say which and why rather than working around it. A green bar that was reached by
 weakening a check is worth less than a red one that is honest.
 
+## 5. Remove this command
+
+**Only if all five commands above actually ran and passed.** If any of them failed, if you skipped
+one, or if anything in section 3 was left as a `[NEEDS CLARIFICATION]` note, stop here and leave this
+file exactly where it is — the founder will want to run it again once that is resolved, and a command
+that deleted itself after half a job is the one failure mode this step must never have.
+
+Otherwise, delete `.claude/commands/start.md` — this file. It scaffolds a stack into an empty
+repository, and that has now happened; a command that can only be run once, offering itself forever,
+is a trap for whoever opens this project next. Everything from here goes through the spec loop, and
+`/createspec` is where that starts.
+
 Then point the founder at step 2 of [START_HERE.md](../../START_HERE.md): the accounts and services
-only they can create.
+only they can create — and tell them plainly that this command has removed itself, so nothing about
+the project looks quietly different next time they look.

@@ -340,14 +340,21 @@ export function pickValidToolchain(raw: unknown): AuthoredToolchain {
  */
 
 /**
- * The answers a rejection may name: the free-text ones.
+ * The answers a rejection may name: the ones the founder typed into.
  *
  * A picked option cannot be "not a software product" — it came from a list we wrote — so only what the
  * founder typed is ever flagged. Derived from the interview rather than listed again, so a text
  * question added tomorrow is flaggable the day it ships.
+ *
+ * `guided_text` and `references` count as typed: the first may be *seeded* from a direction we wrote,
+ * but the founder owns the field from the first keystroke, and the second is a field of their own
+ * words beside an upload. Deriving this from `type === "text"` alone silently dropped `uiDirection`
+ * the day it gained its starting points (spec 159).
  */
+const TYPED_QUESTION_TYPES: ReadonlySet<string> = new Set(["text", "guided_text", "references"]);
+
 export const FLAGGABLE_ANSWERS: readonly AnswerId[] = interviewQuestions
-  .filter((q) => q.type === "text")
+  .filter((q) => TYPED_QUESTION_TYPES.has(q.type))
   .map((q) => q.id);
 
 const FLAGGABLE_ANSWER_SET: ReadonlySet<string> = new Set(FLAGGABLE_ANSWERS);

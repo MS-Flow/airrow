@@ -347,3 +347,143 @@ describe("the generated stack is stated consistently", () => {
     expect(start.indexOf("/start")).toBeLessThan(start.indexOf("/createspec"));
   });
 });
+
+/* ── The UI brief, and the answers that had no box (spec 159) ──────────────── */
+
+const UI_DOC = "docs/architecture/UI_ARCHITECTURE.md";
+
+describe("UI_ARCHITECTURE.md is a brief a screen can be built from", () => {
+  it("renders every section, with nothing left unresolved", () => {
+    const brief = render().byPath.get(UI_DOC) ?? "";
+    for (const heading of [
+      "## Design direction",
+      "## References",
+      "## Screens & navigation",
+      "## Layout, spacing & type",
+      "## Colour",
+      "## Components",
+      "## Interaction & motion",
+      "## States",
+      "## Design language"
+    ]) {
+      expect(brief, `the brief is missing "${heading}"`).toContain(heading);
+    }
+    expect(brief).not.toMatch(/\{\{[A-Z_]+\}\}/);
+    // Prose and headings only — the same rule the authoring contract enforces on the model.
+    expect(brief).not.toContain("```");
+  });
+
+  it("is useful with no design answer at all — that is the common case, not the edge", () => {
+    const brief = render().byPath.get(UI_DOC) ?? "";
+    expect(brief).toContain("No design direction was described");
+    expect(brief).toContain("attached no references");
+    // The sections that never needed an answer must still say something worth reading.
+    expect(brief).toMatch(/Empty is a designed screen/);
+    expect(brief).toMatch(/spacing scale/);
+  });
+
+  it("carries one design direction — the founder's, however they arrived at it", () => {
+    // The interview merged the picker into the field, so there is exactly one answer to render and
+    // nothing downstream has to reconcile a pick with the words beside it (spec 159).
+    const brief =
+      render({
+        uiDirection: "Dense and operational: tables over cards. The inbox is where someone lives."
+      }).byPath.get(UI_DOC) ?? "";
+    expect(brief).toContain(
+      "In the founder's own words: Dense and operational: tables over cards."
+    );
+    expect(brief).not.toContain("Closest of the starting directions");
+  });
+
+  it("names what the founder pointed at, and the one rule about it", () => {
+    const brief =
+      render({ uiReferenceLinks: "linear.app stripe.com" }).byPath.get(UI_DOC) ?? "";
+    expect(brief).toContain("linear.app, stripe.com");
+    expect(brief).toMatch(/never as something to copy/);
+    expect(brief).toMatch(/Do not reproduce anyone's logo/);
+  });
+
+  it("says how many screenshots it read, since nothing else can", () => {
+    const model = resolveProjectModel({ ...input, referenceImageCount: 2 });
+    const { files } = renderScaffold(TEMPLATE, model);
+    const brief = files.find((f) => f.path === UI_DOC)?.content ?? "";
+    expect(brief).toContain("2 screenshots were attached");
+  });
+});
+
+describe("an answer that fitted no box still reaches the output", () => {
+  it("describes the product the founder described, not the nearest option", () => {
+    const text = allText(
+      render({ productType: "other", productTypeOther: "A turn-based strategy game for two players." })
+        .files
+    );
+    expect(text).toContain("A turn-based strategy game for two players.");
+    // The generic label must not be what a document ends up calling it.
+    expect(text).not.toContain("is a software product for");
+  });
+
+  it("carries a described isolation model into the data documents", () => {
+    const text = allText(
+      render({
+        tenancy: "other",
+        tenancyOther: "Each clinic is a tenant, but a record can be shared for a referral."
+      }).files
+    );
+    expect(text).toContain("Each clinic is a tenant");
+  });
+
+  it("gives a described capability its own spec brief, like every other one", () => {
+    const text = allText(
+      render({
+        capabilities: ["other"],
+        capabilitiesOther: "Offline sync — the field app keeps working with no signal."
+      }).files
+    );
+    expect(text).toContain("Offline sync");
+    expect(text).toContain("The capability you described");
+  });
+
+  it("asks for the description rather than inventing one when it is missing", () => {
+    const text = allText(render({ capabilities: ["other"] }).files);
+    expect(text).toContain("[NEEDS CLARIFICATION: you selected a capability of your own");
+  });
+});
+
+describe("a database and a deploy target the founder named", () => {
+  it("writes the setup guide for their database rather than assuming Postgres of it", () => {
+    const text = allText(
+      render({ database: "other", databaseOther: "MongoDB Atlas with migrate-mongo" }).files
+    );
+    expect(text).toContain("MongoDB Atlas with migrate-mongo");
+    // The two things that would be wrong to assume of a database nobody here has seen.
+    expect(text).not.toContain("`DATABASE_URL`");
+    expect(text).toContain("that database's own migration tool");
+  });
+
+  it("names their deploy target, and says plainly that the workflow is a placeholder", () => {
+    const text = allText(render({ hosting: "other", hostingOther: "Fly.io" }).files);
+    expect(text).toContain("Fly.io");
+    expect(text).toContain("nothing here has seen Fly.io");
+    // The self-hosting section would be a different, wrong story about their infrastructure.
+    expect(text).not.toContain("## 2. Your own server");
+  });
+
+  it("still says something sensible when the field was left empty", () => {
+    const text = allText(render({ hosting: "other", database: "other" }).files);
+    expect(text).toContain("your own deploy target");
+    expect(text).toContain("the database you described");
+  });
+});
+
+describe("what the product is not doing", () => {
+  it("is no longer asked for, and the document says so rather than inventing one", () => {
+    const claude = render().byPath.get("CLAUDE.md") ?? "";
+    expect(claude).toContain("Not yet decided");
+  });
+
+  it("is still carried when something else derived it — an import, or an older answer", () => {
+    const claude =
+      render({ nonGoals: "No accounting. No native app in year one." }).byPath.get("CLAUDE.md") ?? "";
+    expect(claude).toContain("No accounting. No native app in year one.");
+  });
+});

@@ -24,12 +24,12 @@ import {
   databaseLabel,
   featureLabel,
   frameworkLabel,
-  hostingLabel,
+  hostingName,
   isCustomStack,
-  productTypeLabel,
+  productTypeName,
   repoLabel,
   shipsCleanup,
-  tenancyLabel,
+  tenancyName,
   usesAzureRepos,
   usesSupabase
 } from "./model.ts";
@@ -346,7 +346,7 @@ function ciSetupStepsAzure(model: ProjectModel, stackName: string, inferred: Inf
 
 /** Deploy steps for the chosen host. Targets we cannot wire get an explicit, honest placeholder. */
 function deploySteps(model: ProjectModel): string {
-  const host = hostingLabel[model.hosting];
+  const host = hostingName(model);
   // Azure is a real target, not a gap: a founder who picked it gets steps that run, guarded on the
   // credential the way the Vercel path is. Self-hosting is genuinely unknowable — it is their server.
   if (model.hosting === "azure") {
@@ -723,10 +723,18 @@ function startMinimum(model: ProjectModel): string {
   const styling = isCustomStack(model)
     ? "Style it the way this stack styles things — plainly, using what section 1 set up. Add no UI library that was not already there."
     : "Style it with Tailwind, using the shadcn/ui primitives section 1 installed. That is this project's design system, and using it is not a feature.";
+  // What the founder pointed at, if anything. The brief describes the references in words — nothing
+  // here has ever seen an image — so this is a pointer to the section, not a second copy of it.
+  const references =
+    model.uiReferenceLinks.length > 0 || model.uiReferenceImageCount > 0
+      ? "The founder showed us what they had in mind, and the brief's references section says what it said. Read it as direction — the layout, the density, the tone — never as something to copy: no logo, no brand name, no borrowed wording. This product is not theirs and must not look like it is."
+      : "The founder attached no visual references, so the brief's own direction is the whole of it. Follow it, and where it was thin, finish the screen to this project's design system rather than inventing a look nobody asked for.";
   return [
     "Read `docs/architecture/UI_ARCHITECTURE.md` before writing anything. It is the build brief for",
-    "what you are about to make — the screens, the navigation, the design language — written for this",
-    `project. The core action it should perform: **${what}**`,
+    "what you are about to make — the screens, the navigation, the layout, the states, the design",
+    `language — written for this project. The core action it should perform: **${what}**`,
+    "",
+    references,
     "",
     "**Build that action for real — not a placeholder screen.** A founder opening this for the first",
     "time should recognise their product and see the beginning of the real thing, not a generator's",
@@ -761,17 +769,44 @@ function startMinimum(model: ProjectModel): string {
     "**Still a ceiling, not a starting budget.** No second feature, no capability the founder picked for",
     "later, no database beyond what a spec calls for. The founder should open the page, recognise their",
     "product doing its one real thing, and see plainly where `/createspec` picks up. Everything past",
-    "this goes through the spec loop — that is what the rest of this foundation is for."
+    "this goes through the spec loop — that is what the rest of this foundation is for.",
+    "",
+    "### Finish it",
+    "",
+    "**A screen that works is half the job.** The bar is a first version the founder is glad to show",
+    "someone, and the difference is almost never features — it is that the spacing is consistent, the",
+    "type has a hierarchy, the empty state says something useful, and nothing shifts or flashes while",
+    "it loads. `UI_ARCHITECTURE.md` has a section on each of those; they are not decoration, and they",
+    "are not a second pass to do later. Build them the first time.",
+    "",
+    "**Before you report done, walk the screen yourself and answer these honestly:**",
+    "",
+    "- With no data at all, does it look designed, or does it look broken?",
+    "- While it loads, does anything jump, flash, or go blank?",
+    "- If the action fails, does the person reading know what failed and what to do?",
+    "- Is every spacing value and every colour from the scale in `UI_ARCHITECTURE.md`, or did some",
+    "  get typed in by hand?",
+    "- Can the core action be completed with the keyboard alone, with focus visible the whole way?",
+    "- Read the words on screen: are they this product's words, or the generator's?",
+    "",
+    "Fix what those find before you say it is finished. If something cannot be fixed without a",
+    "decision the founder has not made, leave a `[NEEDS CLARIFICATION]` note and say so in your report",
+    "rather than choosing for them."
   ].join("\n");
 }
 
 /**
- * Deterministic fallback for `UI_ARCHITECTURE.md`'s design-direction section — used when the
- * founder's own words are thin, or the document was not authored. Never invents taste; says instead
- * which choices are this foundation's own rather than the founder's.
+ * Where this brief's design direction came from, said plainly.
+ *
+ * One answer to read, whether the founder wrote it from nothing or started from one of the
+ * directions the question offers and edited it — the interview merged those into a single field
+ * precisely so nothing downstream has to reconcile two versions of the same taste (spec 159).
+ *
+ * The founder should never find taste attributed to them that they did not express, which is what
+ * the empty case is careful about: it says whose choice the default is.
  */
 function uiDirectionSummary(model: ProjectModel): string {
-  if (model.uiDirection) return model.uiDirection;
+  if (model.uiDirection) return `In the founder's own words: ${model.uiDirection}`;
   const defaultLook = isCustomStack(model)
     ? `the plain, idiomatic look of ${frameworkLabel(model)} — no UI library assumed`
     : "Tailwind + shadcn/ui, dark-mode first";
@@ -782,26 +817,97 @@ function uiDirectionSummary(model: ProjectModel): string {
   );
 }
 
-/** Deterministic fallback for the screens/navigation section — names what it can, marks what it can't. */
+/**
+ * The references the founder pointed at, and the one rule about them that is not negotiable.
+ *
+ * The rule is stated in the document rather than only in the prompt, because the document is what an
+ * assistant reads six months from now when nobody remembers the prompt: a reference is direction to
+ * interpret — density, hierarchy, tone, palette — never an asset to reproduce. Copying a named
+ * product's design one-to-one is reproducing their trade dress (spec 159).
+ */
+function uiReferences(model: ProjectModel): string {
+  const links = model.uiReferenceLinks;
+  const images = model.uiReferenceImageCount;
+  if (links.length === 0 && images === 0) {
+    return "The founder attached no references. Everything below comes from their words and from this foundation's own design system.";
+  }
+
+  const named = links.length > 0 ? `Products the founder pointed at: ${links.join(", ")}.` : null;
+  const shots =
+    images > 0
+      ? `${images} screenshot${images === 1 ? "" : "s"} were attached and read when this brief was written; ${images === 1 ? "it is" : "they are"} described here rather than kept, so this section is the whole of what they said.`
+      : null;
+
+  return [
+    [named, shots].filter((s): s is string => s !== null).join(" "),
+    "Read these as direction, never as something to copy: the layout, the density, the tone and the palette are what to learn from. Do not reproduce anyone's logo, brand name, wording or artwork — this product is not theirs and must not look like it is."
+  ].join("\n\n");
+}
+
+/** The screens the answers actually imply — named where they can be, marked where they cannot. */
 function uiScreens(model: ProjectModel): string {
   const focus = model.mvpFocus || model.description;
   const entities = model.coreEntities
-    ? `built around ${model.coreEntities}`
-    : "built around the core objects named in `docs/VISION.md`";
-  return (
-    `The first screen performs the product's core action: ${focus}\n\n` +
-    `Navigation and any further screens are ${entities}. ` +
-    "[NEEDS CLARIFICATION: name the screens beyond the first one, and how someone moves between them — " +
-    "the interview did not describe this.]"
-  );
+    ? `The core objects are ${model.coreEntities} — each one a founder works with needs somewhere to be listed and somewhere to be seen on its own.`
+    : "[NEEDS CLARIFICATION: the interview named no core objects, so the screens beyond the first cannot be derived — name them here before building past the first screen.]";
+  const signIn = model.derived.needsAuth
+    ? "This product has accounts, so it also has a sign-in surface: the screens, and nothing behind them until the founder's first spec builds it."
+    : "This product has no accounts, so there is no sign-in surface and no account menu.";
+  return [
+    `**The first screen** performs the product's core action: ${focus}`,
+    entities,
+    signIn,
+    "Navigation is whatever the shortest path to that core action needs and no more. A screen nobody has a reason to open is a screen that should not be built yet."
+  ].join("\n\n");
 }
 
-/** Deterministic fallback for the states section — the one part that never needs an interview answer. */
+/** Layout and spacing — the part a screen cannot be finished without, and the interview never asks. */
+function uiLayout(model: ProjectModel): string {
+  const shell = model.derived.isWeb
+    ? "A persistent shell — navigation on the left or across the top, the working area filling the rest — with content width-capped so a wide display centres rather than stretches."
+    : "A native shell: the platform's own navigation pattern, its own back behaviour, and its own safe areas respected.";
+  return [
+    shell,
+    "One spacing scale, used everywhere. Related things sit closer together than unrelated ones, and the gap between sections is visibly larger than the gap inside one. Alignment is a grid, not a judgement per screen.",
+    "One type scale, three or four sizes at most: a page title, a section heading, body, and a smaller size for supporting text. Weight and colour carry hierarchy before size does."
+  ].join("\n\n");
+}
+
+/** Colour, in the terms a build needs rather than as a palette nobody picked. */
+function uiColor(model: ProjectModel): string {
+  if (isCustomStack(model)) {
+    return "Neutrals carry the interface; one accent carries action. Status colours mean exactly one thing each — success, warning, danger — and are never used decoratively. Define them once, in whatever this stack's convention for design tokens is, and never write a raw colour value in a component.";
+  }
+  return "Neutrals carry the interface; one accent carries action. Status colours mean exactly one thing each. Every value is a Tailwind design token defined once — a hardcoded hex in a component is a bug, because it is the one thing that cannot be changed later in one place. Dark mode is not an afterthought: both themes are defined at the same time.";
+}
+
+/** The component inventory — what to build once instead of five times. */
+function uiComponents(model: ProjectModel): string {
+  const base = isCustomStack(model)
+    ? `Build on whatever component convention ${frameworkLabel(model)} projects use. Add no UI library that is not already there.`
+    : "Build on the shadcn/ui primitives this project installs — extend them rather than forking them, and never write a second button.";
+  return [
+    base,
+    "The inventory this product needs is small and worth naming before writing any of it: the shell, one list surface, one detail surface, the form controls the core action needs, and the three state components below. Everything else is a variation on one of those until proven otherwise."
+  ].join("\n\n");
+}
+
+/** Interaction and motion — the difference between finished and merely complete. */
+function uiInteraction(): string {
+  return [
+    "Every action says what happened: a button that submits shows it is working, and the result is visible without hunting for it. Nothing silently succeeds.",
+    "Motion is short and purposeful — something entering, something leaving, something changing state. No animation on load for its own sake, and nothing that delays a person who knows where they are going.",
+    "Keyboard and focus are part of the design, not an audit item: every interactive element is reachable, focus is visible, and the primary action of a screen can be reached without a mouse."
+  ].join("\n\n");
+}
+
+/** States — the one section that never needs an interview answer, and the one most often skipped. */
 function uiStates(): string {
-  return (
-    "Loading, error, and empty are real components on every screen that fetches data — never a " +
-    "conditional buried in JSX, and never a blank flash while something loads."
-  );
+  return [
+    "Loading, error, and empty are real components on every screen that fetches data — never a conditional buried in JSX, and never a blank flash while something loads.",
+    "**Empty is a designed screen, not an absence.** It says what would be here, and offers the action that puts something here. It is the first screen most founders' first user ever sees.",
+    "**Error says what failed and what to do next.** A stack trace, a spinner that never stops, and a silent no-op are all the same bug wearing different clothes."
+  ].join("\n\n");
 }
 
 /** Deterministic fallback for the design-language section — stack-correct either way. */
@@ -855,12 +961,19 @@ function supabaseSetupSection(model: ProjectModel): string {
 
 function postgresSetupSection(model: ProjectModel): string {
   const imported = shipsCleanup(model);
+  // A database the founder named is not assumed to be Postgres, so it is not told it has a
+  // `DATABASE_URL` or a `psql` — what it is told is what is true of every database: a credential
+  // that stays server-side, migrations that are committed, and the things it does not give you for
+  // free (spec 159).
+  const named = model.stack.database === "other";
   return [
     "## 1. Database",
     "",
-    `1. ${imported ? "If you do not already have one, provision" : "Provision"} a **${databaseLabel(model)}** instance and note its connection string.`,
-    `2. Put \`DATABASE_URL\` in ${envFileNoun(model)} — server-only, never sent to the browser.`,
-    "3. **Apply the migrations** with whatever this stack's migration tool is — every schema change is a committed migration, never a hand-edit.",
+    `1. ${imported ? "If you do not already have one, provision" : "Provision"} ${named ? `**${databaseLabel(model)}**` : `a **${databaseLabel(model)}** instance`} and note how this project connects to it.`,
+    named
+      ? `2. Put that connection detail in ${envFileNoun(model)} — server-only, never sent to the browser, whatever that database calls it.`
+      : `2. Put \`DATABASE_URL\` in ${envFileNoun(model)} — server-only, never sent to the browser.`,
+    `3. **Apply the migrations** with ${named ? "that database's own migration tool" : "whatever this stack's migration tool is"} — every schema change is a committed migration, never a hand-edit.`,
     "4. **Auth, storage and realtime updates are yours to build** — this database gives you none of them out of the box. Spec each one like any other capability, through `/createspec`."
   ].join("\n");
 }
@@ -884,6 +997,18 @@ function hostingSetupSection(model: ProjectModel): string {
       "2. Download its publish profile and put it in CI secrets as `AZURE_WEBAPP_PUBLISH_PROFILE`; set `AZURE_WEBAPP_NAME` as a variable.",
       "3. Configure the app's own environment variables (Configuration → Application settings) with the same values as your environment file.",
       "4. The generated deploy workflow ships as a placeholder for Azure — finish it against your App Service before relying on it."
+    ].join("\n");
+  }
+  if (model.hosting === "other") {
+    // Named, not known. The steps say what is true of every target — an environment, the variables,
+    // a workflow nobody here could wire — and name theirs rather than describing a server they may
+    // not have (spec 159).
+    return [
+      `## 2. ${hostingName(model)}`,
+      "",
+      `1. Set up the ${hostingName(model)} environment this project deploys to, the way that target expects — one per environment if it works that way.`,
+      "2. Set its environment variables to match your environment file. Nothing reads your local one.",
+      `3. The generated deploy workflow ships as a placeholder: nothing here has seen ${hostingName(model)}, so the steps that reach it are yours to write. Finish them before relying on the workflow.`
     ].join("\n");
   }
   return [
@@ -1077,7 +1202,7 @@ export function deriveScaffoldValues(
   // renders the stack uses it. Falls back to the raw answer when nothing was authored — still
   // theirs, still honest, just untidy.
   const stackName = stackNameFor(model, authored);
-  const hosting = hostingLabel[model.hosting];
+  const hosting = hostingName(model);
   // TypeScript, Tailwind and shadcn/ui are the golden path's fixed choices — asserting them over a
   // founder who told us they are on Django would make the first line of their docs a falsehood.
   const frontend = isCustomStack(model) ? "" : "TypeScript · Tailwind + shadcn/ui · ";
@@ -1089,7 +1214,7 @@ export function deriveScaffoldValues(
     PROJECT_SLUG: model.slug,
     PROJECT_TAGLINE: model.mvpFocus || "",
     PROJECT_DESCRIPTION: model.description,
-    DOMAIN_OVERVIEW: `${model.name} is ${aOrAn(productTypeLabel[model.productType])} for ${audienceLabel[model.audience]}. ${model.description}`,
+    DOMAIN_OVERVIEW: `${model.name} is ${aOrAn(productTypeName(model))} for ${audienceLabel[model.audience]}. ${model.description}`,
     VISION: model.vision,
     MVP_FOCUS: model.mvpFocus,
     PROBLEM: model.problem,
@@ -1111,7 +1236,12 @@ export function deriveScaffoldValues(
     START_BOOTSTRAP: startBootstrap(model, stackName, inferred),
     START_MINIMUM: startMinimum(model),
     UI_DIRECTION_SUMMARY: uiDirectionSummary(model),
+    UI_REFERENCES: uiReferences(model),
     UI_SCREENS: uiScreens(model),
+    UI_LAYOUT: uiLayout(model),
+    UI_COLOR: uiColor(model),
+    UI_COMPONENTS: uiComponents(model),
+    UI_INTERACTION: uiInteraction(),
     UI_STATES: uiStates(),
     UI_DESIGN_LANGUAGE: uiDesignLanguage(model),
     INFRASTRUCTURE_SETUP: infrastructureSetup(model),
@@ -1171,7 +1301,7 @@ export function deriveScaffoldValues(
       model.hosting === "vercel"
         ? "Golden-path hosting."
         : `Chosen in the interview — the DEV deploy workflow ships as a placeholder for ${hosting}.`),
-    dec("TENANCY_MODEL", tenancyLabel[model.tenancy], "interview", "Data isolation model chosen in the interview — drives the access-control invariant."),
+    dec("TENANCY_MODEL", tenancyName(model), "interview", "Data isolation model chosen in the interview — drives the access-control invariant."),
     dec("AUTH_MODEL", model.authModel.map((a) => authMethodLabel[a]).join(", "), "interview", "Sign-in methods chosen in the interview."),
     dec("ROLES", roles, model.roles === "none" ? "default" : "interview", "Derived from the tenancy and roles answers."),
     dec("CAPABILITY_SCOPE", model.features.join(", ") || "(none)", "interview", "Capabilities selected for year one, plus the identity features implied by tenancy/auth."),
@@ -1289,11 +1419,17 @@ function capabilitySpecBrief(feature: FeatureId, model: ProjectModel): string {
       return "The internal-only surface, who may reach it, and every action it can take. Cover the audit trail for privileged actions.";
     case "audit_logs":
       return "An append-only record of actor, action, entity, and timestamp. Cover retention, who may read it, and the absence of update/delete paths.";
+    case "other":
+      // The founder's own words, and never anything beyond them: nothing here knows what they
+      // described, so the brief says what any first spec must and leaves the substance to them.
+      return model.capabilitiesOther
+        ? `${model.capabilitiesOther} Spec it the way you would any capability: what it does, who may reach it, what happens when it fails, and the denial test that proves the boundary holds.`
+        : "[NEEDS CLARIFICATION: you selected a capability of your own but did not describe it — say what it does before speccing it.]";
   }
 }
 
 function tenancyModel(model: ProjectModel): string {
-  const base = `Data is organized as ${tenancyLabel[model.tenancy]}.`;
+  const base = `Data is organized as ${tenancyName(model)}.`;
   if (model.derived.multiTenant) {
     return `${base} Every table carries \`organization_id\`, access control is enforced in the database, and every new table ships with a denial test proving a non-member cannot read it.`;
   }
@@ -1437,7 +1573,10 @@ function deployTargetSetup(model: ProjectModel): string {
   // "Create the Azure project" would sit two steps below "create an Azure DevOps project" and mean
   // something entirely different. Name the service.
   if (model.hosting === "azure") return "Create the **Azure App Service** you will deploy to";
-  return `Create the ${hostingLabel[model.hosting]} project you will deploy to`;
+  // A named target is set up in whatever way it is set up — nothing here knows, and "create the
+  // Fly.io project" would be a guess at a verb (spec 159).
+  if (model.hosting === "other") return `Set up the ${hostingName(model)} target you will deploy to`;
+  return `Create the ${hostingName(model)} project you will deploy to`;
 }
 
 function firstSpecHint(model: ProjectModel): string {
