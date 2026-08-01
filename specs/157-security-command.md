@@ -7,7 +7,7 @@
 
 |                |                                                                                                                                                                        |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Status**     | 🔄 In progress                                                                                                                                                          |
+| **Status**     | ✅ Done                                                                                                                                                                  |
 | **Issue**      | #157 — "/security: ett kommando som letar sårbarheter, fixar det osynliga och skriver en gitignorerad SECURITY_AUDIT.md"                                                 |
 | **Branch**     | `157-security-command` (from `feature/interview-generator`)                                                                                                              |
 | **Feature**    | Interview & generation                                                                                                                                                   |
@@ -82,6 +82,15 @@ Fyra avgränsningar som gör kommandot förutsägbart:
 **Not touched:** `/start` och `/cleanup` och deras ursprungslogik; CI-säkerheten från spec 33;
 Airrows serversida — `/security` kör hos foundern, aldrig hos oss.
 
+### Fixarna från den första körningen ligger på samma branch
+
+Kommandot kördes skarpt i det här repot innan specen stängdes (det är så den manuella verifieringen
+görs), hittade fyra saker, och de tre som krävde godkännande fick det. Att lägga dem här i stället för
+i en egen spec är ett medvetet val — vi ville inte ha ett känt entitlement-hål liggande medan en
+andra spec-loop snurrade. Det gör den här branchen till två sammanhängande delar snarare än en:
+**kommandot**, och **det kommandot hittade i oss**. Fixarna står som egna acceptanskriterier och egna
+rader i _Exact changes_ nedan, så en granskare kan bocka av dem var för sig.
+
 ---
 
 ## Acceptance criteria
@@ -142,6 +151,19 @@ _What "done" means. Every line is something a reviewer can check._
       `template/.claude/spec-kit/constitution.md`) säger vad `/security` får och inte får, i samma
       andetag som `/start` och `/cleanup`. Samma ändring som koden, per §IV.
 - [x] `pnpm engine:smoke` och engine-testerna täcker att kommandot skeppas i båda ursprungen.
+
+**Fynden från den första körningen, åtgärdade på samma branch** (se _Design decision → Fixarna_):
+
+- [x] `authenticated` kan inte längre skriva allowance-ledgern: en migration revokar
+      `insert, update, delete` på `generation_usage` och `generation_jobs`, `select` behålls, och fyra
+      denial-tester täcker delete, insert, `generation_jobs`-statusen och att läsningen fortfarande
+      fungerar. Verifierat mot lokal Supabase före och efter — `delete` ger nu `permission denied`.
+- [x] `dompurify` uppgraderad 3.2.3 → 3.4.12 (minor, inom major 3). `pnpm audit --prod` går från 19
+      advisories till 0, lockfile-diffen rör bara det paketet, och preview-sviten är grön.
+- [x] `X-Content-Type-Options: nosniff` och `Referrer-Policy: strict-origin-when-cross-origin` sätts på
+      varje path. **Ingen CSP** — den kräver nonce i middleware och en egen spec.
+- [x] Alla åtta action-usages i workflowsen pinnade till commit-SHA med versionen som kommentar.
+      Beteendet är oförändrat; bara rörligheten är borta.
 - [x] Typecheck passes; lint adds no new issues; tests green (note known pre-existing failures).
 
 ### Verification
@@ -240,6 +262,24 @@ _The plan, for whoever implements it. Every change grounded in current code; exp
    **`template/.claude/spec-kit/constitution.md:31`** — samma regel i den genererade konstitutionen,
    direkt efter `{{COMMAND_RULE}}`.
 
+**Fixarna från den första körningen** (samma branch, egna kriterier ovan):
+
+10. **`supabase/migrations/20260801140000_lock_generation_ledger.sql`** — ny. `revoke insert, update,
+    delete on public.generation_usage, public.generation_jobs from authenticated`; `select` behålls,
+    så RLS-policyerna gör kvar sitt jobb. Idempotent — `revoke` på en rättighet som aldrig getts är en
+    no-op. Roten var `20260725100000_schema.sql:199` och `20260727160000_generation_allowance.sql:94`,
+    två blanket-grants som gavs "för när riktig auth landar" och aldrig snävades in när den gjorde det.
+11. **`apps/web/src/lib/data/schema.rls.test.ts:280`** — fyra denial-tester för ledgern (delete,
+    insert, `generation_jobs`-statusen, och att läsningen fortfarande fungerar) plus två för
+    `admin_emails`, som var enda tabellen i schemat utan.
+12. **`apps/web/package.json:35`** + `pnpm-lock.yaml` — `dompurify` 3.2.3 → 3.4.12. Sanitizern som
+    skyddar previewn (`features/preview/PreviewBrowser.tsx:250`, `:304`) låg 19 advisories efter, alla
+    under CI:s high/critical-gate och därför osynliga för spec 33:s audit-steg.
+13. **`apps/web/next.config.ts:16`** — `headers()` med `X-Content-Type-Options: nosniff` och
+    `Referrer-Policy: strict-origin-when-cross-origin` på `/:path*`.
+14. **`.github/workflows/ci.yml:20,30,31,102`**, **`supabase-migrate.yml:32,35,38`**,
+    **`branch-policy.yml:34`** — SHA-pinning av alla åtta action-usages.
+
 **No change needed:** `commandPath()`/`FIRST_RUN_COMMANDS` — `/security` är inget alternativ till
 `/start` eller `/cleanup`, så paret rörs inte.
 
@@ -249,7 +289,15 @@ _The plan, for whoever implements it. Every change grounded in current code; exp
 
 _Any database change. Most specs have none — say so plainly._
 
-**No schema changes.**
+**Inga schemaändringar — men en migration.** `20260801140000_lock_generation_ledger.sql` ändrar inga
+tabeller, kolumner eller policyer; den tar bort tre rättigheter (`insert, update, delete`) från
+`authenticated` på `generation_usage` och `generation_jobs`. Rättigheter är schema i konstitutionens
+mening (§II: migrationer är enda vägen, aldrig handredigering i dashboarden), så den går samma väg som
+allt annat: idempotent, replaybar från noll, committad i `supabase/migrations`, och med sina
+denial-tester i samma ändring.
+
+**Den måste nå de deployade databaserna** för att vara verklig. Tills `supabase db push` /
+`supabase-migrate`-workflowen kört mot dev och produktion är ledgern fortfarande skrivbar där.
 
 ---
 
@@ -260,6 +308,11 @@ _Two lines at most: what this opens up and who may reach it — or "nothing secu
 Kommandot körs hos foundern och når ingenting av vårt — men rapporten det skriver är en lista över
 olagade sårbarheter, och därför gitignorerad så den aldrig hamnar i ett publikt repo. Kommandot får
 aldrig skicka kod, fynd eller secrets någonstans, och aldrig skanna eller anfalla ett körande system.
+
+**Branchen stänger också ett hål i oss:** vilken inloggad founder som helst kunde nolla sin egen
+allowance-ledger direkt mot PostgREST och generera obegränsat gratis på generationsbudgeten. Revoken
+tar bort det, `select` är kvar, och fyra denial-tester gör att en framtida migration inte kan ge
+tillbaka rättigheten obemärkt.
 
 ---
 

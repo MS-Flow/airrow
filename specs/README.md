@@ -69,4 +69,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | The invite list says who, not just what | [133-invite-names.md](133-invite-names.md) | 🔄 In progress |
 | A way to reach us, and a way to say what it was worth | [144-support-review.md](144-support-review.md) | ✅ Done |
 | A chat on the landing page that answers, and leads on | [141-landing-chat.md](141-landing-chat.md) | ✅ Done |
-| `/security` — find the holes, fix the invisible ones, write down the rest | [157-security-command.md](157-security-command.md) | 🔄 In progress |
+| `/security` — find the holes, fix the invisible ones, write down the rest | [157-security-command.md](157-security-command.md) | ✅ Done |
