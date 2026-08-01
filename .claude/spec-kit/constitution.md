@@ -29,7 +29,11 @@ Every feature, screen, and generated file is judged against these.
   Presentation may go further than function — `/start` may finish the screen to the design language
   already in the repo where the founder's own direction was thin — but schema, persistence and any
   real auth service stay out; those are the founder's first spec. Everything past `mvpFocus` goes
-  through the spec loop. A foundation generated for a project that **already exists** ships `/cleanup`
+  through the spec loop. **`/start` is re-runnable until it succeeds, and removes itself once it
+  has** — only after its own verification bar has actually passed, so an interrupted or failing run
+  always leaves the founder the command that would finish the job
+  ([spec 159](../../specs/159-ui-reference-start.md), which records the previous "re-runnable by
+  design" wording). A foundation generated for a project that **already exists** ships `/cleanup`
   in its place: run the same way, it reads the codebase that is there and rewrites the foundation's
   documents to describe it. Its ceiling is narrower — it changes no code and deletes nothing. A
   foundation ships exactly one of the two, decided by where the project came from. Airrow's servers
@@ -95,7 +99,9 @@ Every feature, screen, and generated file is judged against these.
   committed in `supabase/migrations`. Never hand-edit the schema in the Supabase dashboard.
 - **Customer IP is protected.** Interview answers and artifacts are encrypted at rest, reached only
   via RLS-scoped paths, and served from Storage via short-expiry signed URLs. Deleting a project
-  cascades to its interviews, models, jobs, artifacts, and Storage objects. Logs carry IDs and
+  cascades to its interviews, models, jobs, artifacts, **the UI reference images the founder
+  attached**, and Storage objects — the last of those explicitly, since Storage has no foreign key to
+  cascade along ([spec 159](../../specs/159-ui-reference-start.md)). Logs carry IDs and
   metadata only — never answer content or generated document bodies.
 - **Manifest of record.** Generation records per file (source, template id + version, prompt version,
   model, inputs hash) in Postgres — do not bypass it. Full schema: `DATABASE_DESIGN.md`.

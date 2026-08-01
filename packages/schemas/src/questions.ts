@@ -3,12 +3,19 @@
 
 import type { Framework, InterviewAnswers, ProductType } from "./types.ts";
 
-export const INTERVIEW_SCHEMA_VERSION = "2";
+export const INTERVIEW_SCHEMA_VERSION = "4";
 
 export interface QuestionOption {
   value: string;
   label: string;
   description?: string;
+  /**
+   * For a `guided_text` question: the words this option writes into the field when it is picked
+   * (spec 159). The founder then edits or extends them, and what they end up with is the answer —
+   * which is why the prefill is written as something a founder could plausibly have typed, not as a
+   * label. An option with no prefill is the "start from nothing" one.
+   */
+  prefill?: string;
   /**
    * The golden path for this question, when it is the same one for everybody. Where the answer
    * depends on an earlier one, use `Question.suggest` instead — never both.
@@ -40,7 +47,19 @@ export interface Question {
   id: keyof InterviewAnswers;
   title: string;
   help?: string;
-  type: "single" | "multi" | "text";
+  /**
+   * Two types beyond the original three, both added by spec 159.
+   *
+   * `guided_text` is one free-text answer with starting points above it: picking one writes its words
+   * into the field, where the founder edits or extends them. It is not a choice *and* a text answer —
+   * it is a text answer the founder does not have to start from nothing, which is why there is one
+   * answer at the end of it and not two.
+   *
+   * `references` is a text answer with a screen of its own: the founder's links live in the answer,
+   * and the images they upload beside it live in the database — bytes never belong in an answer
+   * object that is rewritten on every keystroke and replayed into a guest's `localStorage`.
+   */
+  type: "single" | "multi" | "text" | "guided_text" | "references";
   options?: QuestionOption[];
   placeholder?: string;
   required: boolean;
@@ -65,10 +84,47 @@ export const ANSWER_MAX_CHARS = {
   mvpFocus: 300,
   coreEntities: 600,
   uiDirection: 500,
+  uiReferenceLinks: 300,
+  // No longer asked (spec 159 removed the question), but still the ceiling on the field: an answer
+  // saved before it went, or one an import analysis derived, is still validated against it.
   nonGoals: 400,
   frameworkOther: 300,
+  productTypeOther: 200,
+  tenancyOther: 300,
+  capabilitiesOther: 300,
+  databaseOther: 200,
+  hostingOther: 200,
   integrations: 300
 } as const;
+
+/** How many products the founder may point at. Five is more than anyone needs to make a point. */
+export const MAX_UI_REFERENCE_LINKS = 5;
+
+/**
+ * How many screenshots one project may carry, and how large each may be.
+ *
+ * Four because a design direction that takes five screenshots to convey is not a direction; 2 MB
+ * because a full-page screenshot fits in it and an unoptimised export does not. Both are checked
+ * server-side — the field's own limits are a courtesy, not the boundary.
+ */
+export const MAX_UI_REFERENCE_IMAGES = 4;
+export const MAX_UI_REFERENCE_IMAGE_BYTES = 2 * 1024 * 1024;
+
+/** What an attached reference may be. Three formats every screenshot tool produces. */
+export const UI_REFERENCE_MEDIA_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+
+/**
+ * The founder's reference links, split the one way every reader of them splits.
+ *
+ * Here rather than beside the Zod schema that validates them, so the engine can use it without
+ * taking a dependency on Zod — `questions.ts` is pure data and pure functions by design.
+ */
+export function splitReferenceLinks(raw: string): string[] {
+  return raw
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
 
 /** The stack a product type points at before the founder says otherwise. */
 export interface StandardStack {
@@ -115,7 +171,11 @@ export const STANDARD_STACK: Record<ProductType, StandardStack> = {
     framework: "custom",
     describe:
       "Vite with React and TypeScript, CRXJS for the extension manifest and build, npm for packages, Vitest for tests"
-  }
+  },
+  // A product none of the eight covered: nothing here knows what it is normally built in, so the
+  // recommendation is the question that asks — `custom` puts the founder in front of the stack field
+  // rather than in front of a web app they never asked for (spec 159).
+  other: { framework: "custom" }
 };
 
 /** One `Suggestion.value` map per field of the table above — derived, so the two cannot drift. */
@@ -143,8 +203,26 @@ export const interviewQuestions: Question[] = [
       { value: "api", label: "API / developer tool", description: "A product other developers build on" },
       { value: "internal_tool", label: "Internal tool", description: "Software for your own company or team" },
       { value: "browser_extension", label: "Browser extension", description: "Lives inside the browser" },
-      { value: "hobby", label: "Side project / for fun", description: "A passion project or experiment — not (yet) a business" }
+      { value: "hobby", label: "Side project / for fun", description: "A passion project or experiment — not (yet) a business" },
+      {
+        value: "other",
+        label: "Something else — describe it",
+        description: "A game, a CLI tool, firmware, a desktop app. Your documents are written for what you name."
+      }
     ]
+  },
+  {
+    // The escape hatch, built exactly like `frameworkOther`: an option that admits the list was
+    // incomplete, and a field that makes the admission useful. Eight types covered the products we
+    // had seen; the ninth answer used to be whichever of them was least wrong (spec 159).
+    id: "productTypeOther",
+    title: "What are you building?",
+    help: "A sentence is enough. Everything generated for you is written for this rather than for the nearest option on the last screen.",
+    type: "text",
+    required: true,
+    showIf: [{ questionId: "productType", in: ["other"] }],
+    maxChars: ANSWER_MAX_CHARS.productTypeOther,
+    placeholder: "e.g. A turn-based strategy game for two players, running in the browser."
   },
   {
     // Asked first among the written answers, and asked separately from the vision: without it every
@@ -191,27 +269,76 @@ export const interviewQuestions: Question[] = [
     // running `/start`, for whom this is a build brief — so the help text pushes toward something
     // specific enough to act on, not merely a mood board. Never a hard requirement: a thin or empty
     // answer still produces a usable, if less specific, `UI_ARCHITECTURE.md`.
+    // One question where there were two (spec 159, revised). Asking for a design brief and then
+    // asking which of five directions was closest made the founder answer the same question twice,
+    // and left the engine holding two answers that could disagree. The starting points now write
+    // themselves into this field instead: pick one and it is your sentence, to edit or extend or
+    // delete. What comes out is one answer, in the founder's own words, whether or not they started
+    // from ours.
     id: "uiDirection",
     title: "How should it look and feel?",
     help: "Layout, tone, the screens that matter most, how someone moves through it. This becomes docs/architecture/UI_ARCHITECTURE.md — the design brief your AI assistant builds the first version from. Change it any time; it's a starting point, not a lock-in.",
-    type: "text",
+    type: "guided_text",
     required: false,
     maxChars: ANSWER_MAX_CHARS.uiDirection,
     placeholder:
-      "e.g. Calm and uncluttered, like Linear — a sidebar of properties, a single detail view per listing, dense tables over cards. Dark mode first. The applications inbox is the screen a property manager lives in."
+      "e.g. Calm and uncluttered — a sidebar of properties, a single detail view per listing, dense tables over cards. Dark mode first. The applications inbox is the screen a property manager lives in.",
+    options: [
+      {
+        value: "calm_focused",
+        label: "Calm & focused",
+        description: "Generous space, few colours, one clear action per screen. Reads quiet and expensive.",
+        prefill:
+          "Calm and focused: generous whitespace, a restrained palette of one accent against neutrals, and one clear action per screen. Type is quiet and consistent, borders do the separating rather than shadows, and nothing moves unless something changed."
+      },
+      {
+        value: "dense_operational",
+        label: "Dense & operational",
+        description: "Tables over cards, keyboard-first, a lot of information at once. For people who live in it all day.",
+        prefill:
+          "Dense and operational: tables over cards, tight row heights, and as much of the working set on screen at once as stays readable. Keyboard paths for anything done more than twice, and colour reserved for status rather than decoration."
+      },
+      {
+        value: "bright_editorial",
+        label: "Bright & editorial",
+        description: "Large type, strong headings, plenty of contrast. The screen reads like a well-set page.",
+        prefill:
+          "Bright and editorial: large headings, strong vertical rhythm, and high contrast between sections. Generous line length for reading, images given room, and a clear typographic hierarchy doing the work navigation would otherwise do."
+      },
+      {
+        value: "warm_consumer",
+        label: "Warm & consumer",
+        description: "Rounded shapes, soft colour, friendly copy. For someone who did not come here to work.",
+        prefill:
+          "Warm and consumer: rounded shapes, soft colour, and copy that speaks plainly. Larger touch targets than a desktop tool needs, colour where a work tool would leave blank space, and a light default theme."
+      },
+      {
+        value: "stark_technical",
+        label: "Stark & technical",
+        description: "Monospace accents, high contrast, no decoration. For a developer audience.",
+        prefill:
+          "Stark and technical: high contrast, monospace for anything a developer would copy, and no decoration that is not carrying information. Dense by default, dark-mode first, and precise about states."
+      },
+      {
+        // No prefill, and that is the option: an empty field, and a brief written from nothing but
+        // what the founder types into it.
+        value: "describe_myself",
+        label: "None of these — my own words",
+        description: "The brief is written from what you write, and from nothing else."
+      }
+    ]
   },
   {
-    // Written into the generated CLAUDE.md, where it is the only thing standing between a coding
-    // agent and a week of work nobody asked for. Optional, because a founder who has none yet
-    // should not be made to invent them.
-    id: "nonGoals",
-    title: "What is this explicitly not doing?",
-    help: "The things you keep being tempted by and are deliberately leaving out. Your AI assistants will respect these.",
-    type: "text",
+    // One screen, two kinds of reference (spec 159). The links are this answer; the images the
+    // founder uploads beside them are rows in `ui_references`, because bytes have no business in an
+    // answer object. Optional in the real sense — `firstUnanswered` skips it when it is empty.
+    id: "uiReferenceLinks",
+    title: "Anything you can show us?",
+    help: `Products whose look you like, and screenshots of them — read as direction, never as something to copy. At most ${MAX_UI_REFERENCE_LINKS} links and ${MAX_UI_REFERENCE_IMAGES} images.`,
+    type: "references",
     required: false,
-    maxChars: ANSWER_MAX_CHARS.nonGoals,
-    placeholder:
-      "e.g. No accounting or rent collection — those stay in the tools people already pay for. No native mobile app in year one."
+    maxChars: ANSWER_MAX_CHARS.uiReferenceLinks,
+    placeholder: "linear.app  stripe.com/dashboard"
   },
   {
     id: "tenancy",
@@ -223,8 +350,27 @@ export const interviewQuestions: Question[] = [
       { value: "single_user", label: "Per user", description: "Each person sees only their own data" },
       { value: "organizations", label: "Teams / organizations", description: "Multi-tenant workspaces; members share data" },
       { value: "marketplace", label: "Two-sided marketplace", description: "Buyers and sellers with separate access" },
-      { value: "internal", label: "Single internal org", description: "One company; everyone is in the same tenant" }
+      { value: "internal", label: "Single internal org", description: "One company; everyone is in the same tenant" },
+      {
+        value: "other",
+        label: "Something else — describe it",
+        description: "An isolation model none of these describes. Your data documents are written from what you write."
+      }
     ]
+  },
+  {
+    // Not folded into `tenancy`'s options as prose: this answer decides the row-level security
+    // strategy, and a described model has to be read as the founder wrote it rather than mapped onto
+    // the nearest of four. Nothing derives `organization_id` from it — see `Tenancy` (spec 159).
+    id: "tenancyOther",
+    title: "How is your data organized and isolated?",
+    help: "Who can see whose data, and what the boundary is. This is the hardest thing to change later, so be concrete.",
+    type: "text",
+    required: true,
+    showIf: [{ questionId: "tenancy", in: ["other"] }],
+    maxChars: ANSWER_MAX_CHARS.tenancyOther,
+    placeholder:
+      "e.g. Each clinic is a tenant, but a patient record can be shared with a second clinic for a referral, for a fixed period."
   },
   {
     id: "authModel",
@@ -256,8 +402,23 @@ export const interviewQuestions: Question[] = [
       { value: "analytics", label: "Analytics", description: "Product usage insight" },
       { value: "realtime", label: "Realtime", description: "Live updates, collaboration" },
       { value: "admin", label: "Admin panel", description: "Internal operations UI" },
-      { value: "audit_logs", label: "Audit logs", description: "Who did what, when" }
+      { value: "audit_logs", label: "Audit logs", description: "Who did what, when" },
+      {
+        value: "other",
+        label: "Something else — describe it",
+        description: "The capability this product needs that no box above covers"
+      }
     ]
+  },
+  {
+    id: "capabilitiesOther",
+    title: "What else does it need to do?",
+    help: "The capability none of the boxes covered. It gets its own section in your roadmap and its own first spec, like every other one you picked.",
+    type: "text",
+    required: true,
+    showIf: [{ questionId: "capabilities", in: ["other"] }],
+    maxChars: ANSWER_MAX_CHARS.capabilitiesOther,
+    placeholder: "e.g. Offline sync — the field app has to keep working with no signal and reconcile later."
   },
   {
     id: "aiUsage",
@@ -352,8 +513,23 @@ export const interviewQuestions: Question[] = [
         value: "postgres",
         label: "Self-hosted Postgres",
         description: "Your own Postgres. Same schema and migrations, but auth and file storage are yours to build — your setup steps say so."
+      },
+      {
+        value: "other",
+        label: "Something else — describe it",
+        description: "MySQL, SQLite, Mongo, Firebase, DynamoDB. Your setup steps and data documents are written for what you name."
       }
     ]
+  },
+  {
+    id: "databaseOther",
+    title: "Which database?",
+    help: "Name it, and where it runs — managed or your own. Your setup steps, your data documents and the migration advice in them are written for this.",
+    type: "text",
+    required: true,
+    showIf: [{ questionId: "database", in: ["other"] }],
+    maxChars: ANSWER_MAX_CHARS.databaseOther,
+    placeholder: "e.g. MongoDB Atlas, with Mongoose for the schema and migrate-mongo for migrations."
   },
   {
     id: "hosting",
@@ -377,8 +553,23 @@ export const interviewQuestions: Question[] = [
         value: "self_host",
         label: "Self-host",
         description: "Your own servers or containers. The deploy workflow ships as a placeholder you complete."
+      },
+      {
+        value: "other",
+        label: "Something else — describe it",
+        description: "Fly, Railway, Netlify, Cloudflare, AWS, an app store. The deploy workflow ships as a placeholder named for what you say."
       }
     ]
+  },
+  {
+    id: "hostingOther",
+    title: "Where will you deploy?",
+    help: "Name the target. Your deploy steps and the setup guide are written for it — and the generated workflow ships as a placeholder you finish, since nothing here can wire a target it has not seen.",
+    type: "text",
+    required: true,
+    showIf: [{ questionId: "hosting", in: ["other"] }],
+    maxChars: ANSWER_MAX_CHARS.hostingOther,
+    placeholder: "e.g. Fly.io, one app per environment, deployed with flyctl from CI."
   },
   {
     id: "repoProvider",
@@ -458,9 +649,19 @@ export function pruneHiddenAnswers(answers: InterviewAnswers): InterviewAnswers 
   return pruned;
 }
 
-/** First visible question with no answer; null when complete. */
+/**
+ * First visible **required** question with no answer; null when the interview may be submitted.
+ *
+ * `required` is honoured here as of spec 159, and that is a fix rather than a refinement: this
+ * function decides both where a resumed interview lands and whether the submit button is enabled, so
+ * ignoring `required` made every optional question mandatory in the interface while
+ * `validateCompleteAnswers` — the actual gate — had always let them pass. `coreEntities` said "Skip
+ * it if you're not sure yet" and could not be skipped. An optional question is still shown, in its
+ * place in the order; it simply no longer blocks the way past it.
+ */
 export function firstUnanswered(answers: InterviewAnswers): Question | null {
   for (const q of visibleQuestions(answers)) {
+    if (!q.required) continue;
     const v = answers[q.id];
     if (v === undefined || (Array.isArray(v) && v.length === 0) || (typeof v === "string" && v.trim() === "")) {
       return q;

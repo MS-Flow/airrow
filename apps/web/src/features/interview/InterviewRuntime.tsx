@@ -26,6 +26,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { InlineError, Notice, UpgradeNotice } from "@/components/ui/states";
 import { rejectionSummary } from "@/features/generation/rejection";
 import { cn } from "@/lib/utils";
+import { UiReferences, type ReferenceUploads } from "./UiReferences";
 
 /**
  * Persistence and submission are injected rather than imported, so the signed-in and
@@ -56,6 +57,12 @@ interface Props {
    * rather than from where they came from.
    */
   rejectedAnswers?: readonly AnswerId[] | null;
+  /**
+   * How screenshots are attached, when they can be at all (spec 159). Injected like `persist` and
+   * `submit`, and `undefined` on the guest path — where there is no project to hang an upload off,
+   * and no unauthenticated write path to invent for one.
+   */
+  uploads?: ReferenceUploads;
 }
 
 function answerLabel(q: Question, answers: InterviewAnswers): string {
@@ -64,7 +71,10 @@ function answerLabel(q: Question, answers: InterviewAnswers): string {
   if (Array.isArray(v)) {
     return v.map((x) => q.options?.find((o) => o.value === x)?.label ?? x).join(", ");
   }
-  if (q.type === "text") return String(v);
+  // The references row counts what it can: the images live in the database, not in `answers`, so the
+  // only honest summary here is of the links (spec 159).
+  if (q.type === "references") return String(v).trim() || "Nothing attached";
+  if (q.type === "text" || q.type === "guided_text") return String(v);
   return q.options?.find((o) => o.value === String(v))?.label ?? String(v);
 }
 
@@ -77,7 +87,8 @@ export function InterviewRuntime({
   submitLabel,
   pendingLabel,
   back,
-  rejectedAnswers = null
+  rejectedAnswers = null,
+  uploads
 }: Props) {
   const router = useRouter();
   // A resumed interview is seeded the same way a live one is, so where the founder left off is
@@ -241,6 +252,7 @@ export function InterviewRuntime({
   if (!current) return null;
 
   const value = answers[current.id];
+  const hasText = typeof value === "string" && value.trim() !== "";
 
   /* ── Question screen ─────────────────────────────────────────────────── */
   return (
@@ -356,6 +368,55 @@ export function InterviewRuntime({
           </>
         ) : null}
 
+        {/* A text answer with starting points above it (spec 159). Picking one writes its words into
+            the field; the founder then edits them, and what they end up with is the answer. Which
+            option is "selected" is derived from the text rather than stored, because after the first
+            keystroke there is no honest second answer to store. */}
+        {current.type === "guided_text" && current.options ? (
+          <>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {current.options.map((o) => {
+                const text = typeof value === "string" ? value : "";
+                const selected = o.prefill ? text.startsWith(o.prefill) : text === "";
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    onClick={() => setAnswer(current.id, o.prefill ?? "")}
+                    className={cn(
+                      "cursor-pointer rounded-lg border px-4 py-3 text-left transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                      selected
+                        ? "border-accent bg-accent-soft"
+                        : "border-border bg-surface hover:border-border-strong hover:shadow-e2"
+                    )}
+                  >
+                    <span className="block text-base font-medium text-fg">{o.label}</span>
+                    {o.description ? (
+                      <span className="mt-0.5 block text-sm leading-snug text-fg-muted">
+                        {o.description}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+            <Textarea
+              rows={4}
+              className="mt-4"
+              value={typeof value === "string" ? value : ""}
+              placeholder={current.placeholder}
+              maxLength={current.maxChars}
+              onChange={(e) => setAnswer(current.id, e.target.value)}
+            />
+            <div className="mt-5 flex items-center justify-between max-sm:justify-end">
+              <span className="text-sm text-fg-faint max-sm:hidden">
+                {hasText ? "Edit it however you like — these are your words now." : "Pick one to start from, or just write your own."}
+              </span>
+              <Button onClick={advance}>{hasText ? "Continue" : "Skip"}</Button>
+            </div>
+          </>
+        ) : null}
+
         {current.type === "text" ? (
           <>
             <Textarea
@@ -377,9 +438,29 @@ export function InterviewRuntime({
             <div className="mt-5 flex items-center justify-between max-sm:justify-end">
               {/* Hidden on a phone: it points at a keyboard shortcut there is no keyboard for. */}
               <span className="font-mono text-2xs text-fg-faint max-sm:hidden">⌘↵ to continue</span>
-              <Button onClick={advance} disabled={typeof value !== "string" || !value.trim()}>
-                Continue
+              {/* An optional question that cannot be passed is a required one wearing a friendlier
+                  help text. The button says which it is (spec 159). */}
+              <Button onClick={advance} disabled={current.required && !hasText}>
+                {!current.required && !hasText ? "Skip" : "Continue"}
               </Button>
+            </div>
+          </>
+        ) : null}
+
+        {current.type === "references" ? (
+          <>
+            <UiReferences
+              links={typeof value === "string" ? value : ""}
+              onLinksChange={(next) => setAnswer(current.id, next)}
+              maxChars={current.maxChars}
+              placeholder={current.placeholder}
+              uploads={uploads}
+            />
+            <div className="mt-6 flex justify-end">
+              {/* Never disabled: every part of this screen is optional, and the images are not in
+                  `answers` at all — a founder who attached two screenshots and no link has answered
+                  it, and a button that argued otherwise would be wrong. */}
+              <Button onClick={advance}>{hasText ? "Continue" : "Continue without one"}</Button>
             </div>
           </>
         ) : null}

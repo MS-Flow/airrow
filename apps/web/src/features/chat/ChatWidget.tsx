@@ -9,8 +9,14 @@
 // third is why every failure lands in `fallback`, which is a real state with handwritten answers in
 // it rather than an error.
 //
-// Mounted once, from `app/(public)/layout.tsx`. It is deliberately not imported by any page: the next
-// public page should get Archer by existing, not by someone remembering to add him.
+// Mounted from the two layouts and nowhere else — `app/(public)/layout.tsx` and `app/app/layout.tsx`
+// (spec 159). It is deliberately not imported by any page: the next page in either tree should get
+// Archer by existing, not by someone remembering to add him.
+//
+// `z-30` is chosen for the shell it now also lives in: above both sticky headers (`z-20`), below the
+// app's mobile navigation drawer and the preview's file tree (`z-40`) and below every dialog, toast
+// and tooltip (`z-50`). A corner panel that floats over the drawer someone just opened is the one
+// way this could break a page it does not own.
 import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -145,7 +151,7 @@ export function ChatWidget({ ctaHref }: { ctaHref: string }) {
     return (
       <Button
         variant="secondary"
-        className="fixed bottom-5 right-5 z-40 shadow-e1"
+        className="fixed bottom-5 right-5 z-30 shadow-e1"
         onClick={() => setOpen(true)}
       >
         <MessageCircle className="size-4" />
@@ -158,7 +164,7 @@ export function ChatWidget({ ctaHref }: { ctaHref: string }) {
     <div
       role="dialog"
       aria-label={CHAT.title}
-      className="fixed inset-x-3 bottom-3 z-40 flex max-h-[80dvh] flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-e1 sm:inset-x-auto sm:right-5 sm:bottom-5 sm:w-96"
+      className="fixed inset-x-3 bottom-3 z-30 flex max-h-[80dvh] flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-e1 sm:inset-x-auto sm:right-5 sm:bottom-5 sm:w-96"
     >
       <header className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
         <div className="flex items-center gap-3">

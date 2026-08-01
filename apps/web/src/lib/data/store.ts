@@ -22,6 +22,7 @@ import type {
   ProjectModel
 } from "@airrow/schemas";
 import { db, rows, maybe, single } from "./supabase";
+import { removeProjectUiReferences } from "./ui-references";
 
 export type ProjectStatus = "interviewing" | "generating" | "ready" | "failed";
 
@@ -378,6 +379,11 @@ export async function setProjectStatus(projectId: string, status: ProjectStatus)
 
 /** Delete a project; interviews/models/jobs/artifacts/deliveries cascade via FK. */
 export async function deleteProject(orgId: string, projectId: string): Promise<void> {
+  // Storage first, and before the rows that say where the objects are: the `ui_references` rows go
+  // with the project by foreign key, and once they are gone nothing knows which objects belonged to
+  // it. Deleting a project has to reach its Storage objects too (§II).
+  await removeProjectUiReferences(orgId, projectId);
+
   const res = await db()
     .from("projects")
     .delete()

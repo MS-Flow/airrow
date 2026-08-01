@@ -8,8 +8,23 @@ works from before it writes a single screen. Keep it current; a stale brief here
 ## Design direction
 {{UI_DIRECTION_SUMMARY}}
 
+## References
+{{UI_REFERENCES}}
+
 ## Screens & navigation
 {{UI_SCREENS}}
+
+## Layout, spacing & type
+{{UI_LAYOUT}}
+
+## Colour
+{{UI_COLOR}}
+
+## Components
+{{UI_COMPONENTS}}
+
+## Interaction & motion
+{{UI_INTERACTION}}
 
 ## States
 {{UI_STATES}}

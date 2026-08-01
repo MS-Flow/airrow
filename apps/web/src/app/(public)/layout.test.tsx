@@ -1,9 +1,10 @@
-// The one place Archer is mounted (spec 158).
+// Where Archer is mounted for a signed-out visitor (spec 158), and the structure that keeps the
+// mounts countable (spec 159).
 //
-// Two properties, and the second is the one that is easy to lose: the panel renders on the public
-// pages, and it renders on *only* those. Spec 141 got the exclusion for free by hanging the widget
-// off a single page; a shared mount has to earn it, which is what the route group and the last two
-// tests here are for.
+// Spec 158's second property — that the panel renders on the public pages and *only* those — was
+// deliberately dropped by spec 159: the signed-in founder was the one person who could not ask. What
+// survives it is the property that made the exclusion checkable in the first place, and is the one
+// worth keeping: Archer is mounted from layouts, never from a page, so nobody has to remember him.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it, expect, vi } from "vitest";
@@ -60,22 +61,25 @@ describe("the public layout", () => {
     );
   });
 
-  it("is the only mount point, so no page can grow a second one", () => {
-    const mounts = appFiles().filter(
-      (file) => !file.endsWith(".test.tsx") && mountsTheWidget(file)
-    );
+  it("is mounted from the two layouts and nowhere else", () => {
+    const mounts = appFiles()
+      .filter((file) => !file.endsWith(".test.tsx") && mountsTheWidget(file))
+      .sort();
 
-    expect(mounts).toHaveLength(1);
-    expect(mounts[0]).toMatch(/\(public\)[\\/]layout\.tsx$/);
+    // Exactly two, and both of them layouts: a page that mounted its own panel would give someone
+    // two Archers on one screen, and a page that forgot would be the only screen without him.
+    expect(mounts).toHaveLength(2);
+    expect(mounts.every((file) => file.endsWith("layout.tsx"))).toBe(true);
   });
 
-  it("keeps the panel out of the signed-in app entirely", () => {
-    // `app/app/**` sits outside this route group, which is what makes the exclusion structural
-    // rather than a runtime check. This asserts nobody has worked around the structure.
+  it("reaches the signed-in app too, from its layout", () => {
+    // Spec 159: `app/app/**` is a separate tree with a separate layout, so covering it is a mount of
+    // its own rather than something the public group could ever have done for it.
     const inTheApp = appFiles().filter(
       (file) => /[\\/]app[\\/]app[\\/]/.test(file) && mountsTheWidget(file)
     );
 
-    expect(inTheApp).toEqual([]);
+    expect(inTheApp).toHaveLength(1);
+    expect(inTheApp[0]).toMatch(/app[\\/]app[\\/]layout\.tsx$/);
   });
 });

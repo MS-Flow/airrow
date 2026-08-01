@@ -4,6 +4,11 @@
 import type { AnswerId, InterviewAnswers } from "@airrow/schemas";
 import { InterviewRuntime } from "./InterviewRuntime";
 import { saveAnswersAction, submitInterviewAction } from "./actions";
+import {
+  listReferencesAction,
+  removeReferenceAction,
+  uploadReferenceAction
+} from "./references-action";
 
 export function AuthedInterview({
   projectId,
@@ -27,6 +32,13 @@ export function AuthedInterview({
       rejectedAnswers={rejectedAnswers}
       persist={(answers) => void saveAnswersAction(projectId, answers)}
       submit={(answers) => submitInterviewAction(projectId, answers)}
+      // Screenshots hang off a real project, which is exactly what the signed-in path has and the
+      // guest path does not (spec 159).
+      uploads={{
+        list: () => listReferencesAction(projectId),
+        upload: (form) => uploadReferenceAction(projectId, form),
+        remove: (referenceId) => removeReferenceAction(projectId, referenceId)
+      }}
       submitLabel={regenerating ? "Regenerate foundation" : "Generate foundation"}
       pendingLabel="Starting generation…"
       back={
