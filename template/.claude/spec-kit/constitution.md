@@ -28,6 +28,12 @@ Canonical sources: [`CLAUDE.md`](../../CLAUDE.md) ·
   source of truth and code is reviewed *against* it. One feature at a time. When code and spec
   disagree, stop and **fix the spec first**.
 {{COMMAND_RULE}}
+- **`/security` closes what nobody can see, and reports the rest.** It reviews the whole repository
+  for vulnerabilities and may change code — but only where nothing about how {{PROJECT_NAME}} looks
+  or behaves changes with it. Everything else it proposes and waits for a yes. It installs nothing,
+  sends nothing anywhere, attacks nothing, and rewrites no history. Its report,
+  `SECURITY_AUDIT.md`, is a list of the holes still open and stays out of version control. What it
+  may not fix that way is a spec, like everything else.
 - Branch `NNN-kort` (issue number + short name, **no** `issue/` prefix) is cut from its
   `feature/<name>`. **PR direction is strict and never skipped:** issue branch → its `feature/<name>`
   → `develop` → `main`. An issue branch is **never** PR'd to `main` or `develop`.

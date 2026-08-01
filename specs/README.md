@@ -17,6 +17,7 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | `/analyze` | Cross-check spec ↔ code ↔ constitution; if all passes, close the spec out |
 | `/push` | Commit pending changes + push the current branch (never main/develop, never force) |
 | `/pr-check` | Pre-PR merge-safety check against the target branch |
+| `/security` | Review the whole repository for vulnerabilities, fix the invisible ones, write the gitignored `SECURITY_AUDIT.md` |
 
 ## File naming
 `specs/NNN-kort.md` — the GitHub issue number plus a short kebab-case name, matching the branch.
@@ -68,6 +69,7 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | The invite list says who, not just what | [133-invite-names.md](133-invite-names.md) | 🔄 In progress |
 | A way to reach us, and a way to say what it was worth | [144-support-review.md](144-support-review.md) | ✅ Done |
 | A chat on the landing page that answers, and leads on | [141-landing-chat.md](141-landing-chat.md) | ✅ Done |
+| `/security` — find the holes, fix the invisible ones, write down the rest | [157-security-command.md](157-security-command.md) | ✅ Done |
 | The chat says why it is quiet, and answers without a proxy | [151-chat-diagnostics.md](151-chat-diagnostics.md) | ✅ Done |
 | Archer: on every public page, with a name and a way to a person | [158-archer-everywhere.md](158-archer-everywhere.md) | ✅ Done |
 | Measuring visits without asking for anything | [153-cookie-consent.md](153-cookie-consent.md) | ✅ Done |

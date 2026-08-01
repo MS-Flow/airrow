@@ -78,6 +78,10 @@ function validate(files: GeneratedFile[], model: ProjectModel): void {
     "specs/README.md",
     ".claude/spec-kit/constitution.md",
     ".claude/spec-kit/spec-template.md",
+    // Every foundation reviews itself for vulnerabilities, whatever it was generated from (spec 157).
+    // Unlike the first-run command below there is no alternative to pair it with: a project that
+    // began from nothing and one that arrived with years of code both have holes to find.
+    ".claude/commands/security.md",
     // The one first-run command this project's origin calls for — `/start` for a project beginning
     // from nothing, `/cleanup` for one that already has code (spec 91). Without it the foundation is
     // documents describing a command that does not exist (spec 66).

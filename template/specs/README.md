@@ -17,6 +17,7 @@ constitution + template in [`.claude/spec-kit/`](../.claude/spec-kit/):
 | `/analyze` | Cross-check spec ↔ code ↔ constitution; if all passes, close the spec out |
 | `/push` | Commit pending changes + push (never main/develop, never force) |
 | `/pr-check` | Pre-PR merge-safety check against the target branch |
+| `/security` | Review the whole repository for vulnerabilities, fix the invisible ones, write `SECURITY_AUDIT.md` |
 
 ## What to spec first
 These are the capabilities chosen in the interview. Each one is a spec waiting to be written — run
