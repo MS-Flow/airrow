@@ -23,6 +23,7 @@ import {
   setProjectStatus,
   updateJob
 } from "@/lib/data/store";
+import { loadUiReferenceImages } from "@/lib/data/ui-references";
 import { loadTemplate } from "@/lib/template/load";
 import { AUTHORING_MODEL, PROMPT_VERSION, authorFoundation } from "./author";
 import { inputsHash, reviveAuthored } from "./memo";
@@ -99,7 +100,17 @@ async function rejectAnswers(
   await setProjectStatus(projectId, previous ? "ready" : "interviewing");
 }
 
-export async function runGenerationJob(jobId: string, model: ProjectModel): Promise<void> {
+/**
+ * `orgId` is passed in rather than looked up: the caller has already established the organization
+ * from the session, and the runner only knows a project — the same reason `matureReferral` is called
+ * from the route rather than here. It scopes the reference lookup, which is org-scoped like every
+ * other DataStore read (spec 159).
+ */
+export async function runGenerationJob(
+  jobId: string,
+  model: ProjectModel,
+  orgId: string
+): Promise<void> {
   const job = await getJob(jobId);
   if (!job) return;
   const done: JobStage[] = [];
@@ -114,7 +125,12 @@ export async function runGenerationJob(jobId: string, model: ProjectModel): Prom
     // Nothing that shapes the prose has changed, so there is nothing to pay for: reuse the previous
     // run's payload rather than spending another ~45s call and another slice of the founder's
     // allowance. Founders regenerate constantly while tuning one answer.
-    const hash = inputsHash(model, PROMPT_VERSION, AUTHORING_MODEL);
+    // What the founder attached, if anything. Loaded before the hash, because it is part of what the
+    // model will be looking at and therefore part of what "nothing changed" means (spec 159). Never
+    // throws: an unreachable object costs this generation its references, never the generation.
+    const references = await loadUiReferenceImages(orgId, job.projectId);
+
+    const hash = inputsHash(model, PROMPT_VERSION, AUTHORING_MODEL, references);
     const reused = reviveAuthored(
       await findAuthoredByInputs(job.projectId, hash, PROMPT_VERSION, AUTHORING_MODEL)
     );
@@ -125,7 +141,7 @@ export async function runGenerationJob(jobId: string, model: ProjectModel): Prom
     // the job: the model read the answers and found no software product in them (spec 128).
     const outcome = reused
       ? ({ status: "authored", foundation: reused } as const)
-      : await withHeartbeat(jobId, authorFoundation(model));
+      : await withHeartbeat(jobId, authorFoundation(model, references));
 
     if (outcome.status === "rejected") {
       await rejectAnswers(jobId, job.projectId, outcome.answers);

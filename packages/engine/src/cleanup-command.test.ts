@@ -273,3 +273,15 @@ describe("the documents match the command the founder actually has", () => {
     expect(ci).not.toContain("run /start");
   });
 });
+
+/* ── /cleanup does not learn /start's new trick (spec 159) ─────────────────── */
+
+describe("/cleanup still deletes nothing", () => {
+  it("does not remove itself, whatever /start now does", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(cleanup).not.toMatch(/delete .*cleanup\.md/i);
+    expect(cleanup).not.toMatch(/remove this command/i);
+    // Its own ceiling, restated: the command that changes no code cannot start by changing a file.
+    expect(prose(cleanup)).toMatch(/deletes nothing|delete nothing|never deletes/i);
+  });
+});

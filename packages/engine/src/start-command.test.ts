@@ -382,3 +382,53 @@ describe("CI does not go red on a repo that has not run /start", () => {
     expect(ci).toContain("::warning::");
   });
 });
+
+/* ── Finishing the job, and standing down (spec 159) ───────────────────────── */
+
+describe("/start finishes what it builds", () => {
+  it("states a visual bar and a self-check, not just what to build", () => {
+    const start = render(nextjs).start;
+    expect(start).toContain("Finish it");
+    // The six questions are the whole point of the section: an assistant that answers them honestly
+    // ships a screen a founder can show someone.
+    expect(start).toMatch(/With no data at all/);
+    expect(start).toMatch(/does anything jump, flash, or go blank/);
+    expect(start).toMatch(/keyboard alone/);
+  });
+
+  it("keeps the spec 123 ceiling exactly where it was", () => {
+    const start = render(nextjs).start;
+    expect(start).toContain("The ceiling is `mvpFocus`, built well");
+    expect(start).toContain("must trace back to something the founder wrote");
+    expect(start).toContain("**No schema, no persistence.**");
+    expect(start).toContain("surface, never service");
+  });
+
+  it("names the references when there are any, and says what they are not for", () => {
+    const withRefs = render({ ...nextjs, uiReferenceLinks: "linear.app stripe.com" }).start;
+    expect(withRefs).toContain("references section");
+    expect(withRefs).toMatch(/never as something to copy/);
+    expect(withRefs).toMatch(/no logo, no brand name/);
+
+    const without = render(nextjs).start;
+    expect(without).toContain("attached no visual references");
+  });
+
+  it("removes itself only after the verification bar has actually passed", () => {
+    const start = render(nextjs).start;
+    expect(start).toContain("## 5. Remove this command");
+    expect(start).toContain(".claude/commands/start.md");
+    // The failure mode this must never have: a half-finished project with no way to finish it.
+    expect(start).toMatch(/Only if all five commands above actually ran and passed/);
+    expect(start).toMatch(/leave this\s+file exactly where it is/);
+    expect(start).toContain("Re-runnable until it succeeds");
+  });
+
+  it("says the same things whichever stack it was rendered for", () => {
+    for (const answers of [nextjs, vite, custom]) {
+      const start = render(answers).start;
+      expect(start).toContain("## 5. Remove this command");
+      expect(start).toContain("Finish it");
+    }
+  });
+});

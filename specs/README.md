@@ -75,3 +75,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Measuring visits without asking for anything | [153-cookie-consent.md](153-cookie-consent.md) | ✅ Done |
 | The operator's console: who they are, what they built, where they stopped | [150-admin-console.md](150-admin-console.md) | ✅ Done |
 | The console can act: a suspension that bites, a plan you can read, Pro you can hand out | [164-admin-suspend-and-pro.md](164-admin-suspend-and-pro.md) | ✅ Done |
+| References the founder can point at, and a `/start` that finishes the job | [159-ui-reference-start.md](159-ui-reference-start.md) | 🔄 In progress |

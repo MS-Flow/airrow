@@ -9,6 +9,9 @@ import { CommandPalette, type CommandItem } from "@/components/ui/command-palett
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toast";
 import { navItems, SUSPENDED_ITEMS } from "@/components/shell/nav-items";
+import { navItems } from "@/components/shell/nav-items";
+import { ChatWidget } from "@/features/chat/ChatWidget";
+import { startCtaHref } from "@/features/landing/start-cta";
 import { ClaimGuestDraft } from "@/features/interview/ClaimGuestDraft";
 import { requireSessionEvenIfSuspended, signOut } from "@/lib/auth";
 import { readTheme } from "@/lib/theme";
@@ -92,6 +95,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {/* Claiming a draft creates a project, which is a write — so it does not run for an account
             that is not allowed to make any. The draft keeps until the suspension is lifted. */}
         {suspended ? null : <ClaimGuestDraft />}
+        {/* Archer, the same panel the public pages carry — mounted here so the signed-in founder is
+            not the one person who cannot ask (spec 159, which lifts spec 158's deliberate exclusion).
+            The second and last mount point: one per layout, so a page still gets him by existing
+            rather than by importing him. `startCtaHref(true)` because `requireSession()` above means
+            everyone reading this is signed in. */}
+        <ChatWidget ctaHref={startCtaHref(true)} />
+        <ClaimGuestDraft />
       </Toaster>
     </TooltipProvider>
   );

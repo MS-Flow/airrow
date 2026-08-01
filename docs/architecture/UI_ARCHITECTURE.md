@@ -140,12 +140,15 @@ a visitor with nothing generated goes to their free foundation, and one who has 
 straight to `/app/upgrade`. Sending everyone to `/app/projects/new` handed the only visitor who had met
 the limit the one screen that cannot lift it.
 
-The public pages carry one overlay of their own: **Archer**, a chat panel fixed to the corner, that
-answers questions about what Airrow builds and what it costs (`features/chat/`, specs 141 and 158).
-It is mounted once, in `app/(public)/layout.tsx`, so every public page has it — `/`, `/login`,
-`/signup`, `/start` and the legal pages — and `/app/**` has it on no page at all,
-because that tree sits outside the route group rather than behind a check. No page imports the widget
-itself; the next public page gets Archer by existing. It answers in English whatever language it is
+Every screen carries one overlay: **Archer**, a chat panel fixed to the corner, that answers questions
+about what Airrow builds and what it costs (`features/chat/`, specs 141, 158 and 159). It is mounted
+from the two layouts — `app/(public)/layout.tsx` and `app/app/layout.tsx` — and from nowhere else, so
+the public pages and the signed-in app both have it everywhere: `/`, `/login`, `/signup`, `/start`,
+the legal pages, and every `/app/**` screen. Spec 158 deliberately kept it out of `/app`; spec 159
+lifted that, because the founder inside the product is the person most likely to have a question. No
+page imports the widget itself; the next page in either tree gets Archer by existing. It sits at
+`z-30`: above the sticky headers, below the mobile navigation drawer and every dialog and toast, so it
+never covers something someone just opened. It answers in English whatever language it is
 asked in, keeps its thread in `sessionStorage` so a reload does not lose it, and sets no cookie.
 Every state that is not an answer — the day's limit, the visitor's own, an unreachable model, an
 unconfigured deployment — falls back to the same four handwritten questions and the call to action,

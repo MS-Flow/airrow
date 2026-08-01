@@ -1,12 +1,14 @@
-// Everything a signed-out visitor can reach, and the one place the chat panel is mounted (spec 158).
+// Everything a signed-out visitor can reach, and where the chat panel is mounted for them (spec 158).
 //
 // The route group is the point. Spec 141 hung the widget off the landing page, so it existed on `/`
 // and nowhere else — including the pages where the question actually occurs to someone: the pricing
 // section they just left, the terms they clicked through to, the sign-up form they are hesitating in
-// front of. Mounting it here puts Archer on every public page and, just as deliberately, on no
-// private one: `app/app/**` is outside this group, so the exclusion is structural rather than a
-// runtime check someone has to remember to keep true. A route group changes no URL — `/`, `/login`
-// and `/terms` are exactly where they were.
+// front of. Mounting it here puts Archer on every public page. A route group changes no URL — `/`,
+// `/login` and `/terms` are exactly where they were.
+//
+// It is no longer the *only* mount: spec 159 mounts the same panel from `app/app/layout.tsx` as well,
+// so a signed-in founder can ask too. One mount per layout tree is still the rule — no page imports
+// the widget itself.
 import { ChatWidget } from "@/features/chat/ChatWidget";
 import { startCtaHref } from "@/features/landing/start-cta";
 import { getSession } from "@/lib/auth";
