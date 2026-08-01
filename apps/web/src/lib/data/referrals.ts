@@ -8,8 +8,13 @@
 // The entitlement this produces is deliberately *not* `organizations.plan`. That column is Stripe's
 // (specs 99, 100); a grant is a second, independent answer to "is this organization Pro", and the two
 // are combined only where an entitlement is decided.
+//
+// Every read goes through `rowsOrAbsent`, which answers null while the database is behind this spec's
+// migration. That tolerance matters more here than elsewhere: Settings, the import screen and the
+// delivery screen all read these tables, and an unmigrated deployment should cost a card rather than
+// the screen around it.
 import crypto from "node:crypto";
-import { db, rows, single } from "./supabase";
+import { db, rows, rowsOrAbsent, single } from "./supabase";
 import { countGenerations } from "./store";
 
 /** How long one invitation is worth. */
@@ -27,39 +32,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Postgres unique violation — the outcome we *want* from the idempotence constraints below. */
 const UNIQUE_VIOLATION = "23505";
-
-type SupabaseError = { message: string; code?: string };
-
-/**
- * Tables this code knows about and the database does not — a deployment running ahead of its
- * migrations.
- *
- * The same failure `isMissingColumn` handles in `store.ts`, one level coarser, and it is here for the
- * same reason: that helper exists because a database behind one migration used to take down the
- * project list and the interview screen, which are the screens whose only job is to *tell* a founder
- * where they stand. Referrals reach further — Settings, the import screen and the delivery screen all
- * read them — so an unmigrated database would have broken more, not less.
- *
- * PostgREST answers `PGRST205` from its schema cache; Postgres itself reports `42P01`. Either way the
- * honest answer is that nobody has any invitations yet, which is exactly what an empty read means.
- */
-function isMissingTable(error: SupabaseError): boolean {
-  return error.code === "PGRST205" || error.code === "42P01";
-}
-
-/**
- * `rows`, with one extra outcome: **null** when the tables are not there yet.
- *
- * Distinct from `[]` on purpose — "this workspace has no invitations" and "this deployment has no
- * invitations feature" look the same to a query and read very differently on a screen.
- */
-function rowsOrAbsent<T>(res: { data: T[] | null; error: SupabaseError | null }): T[] | null {
-  if (res.error) {
-    if (isMissingTable(res.error)) return null;
-    throw new Error(`Supabase: ${res.error.message}`);
-  }
-  return res.data ?? [];
-}
 
 /** Where an invited workspace has got to, for the inviter's own list. */
 export interface InviteStanding {
