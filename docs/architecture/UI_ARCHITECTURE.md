@@ -110,7 +110,19 @@ failure teaches founders to dismiss both. Below ~24px the mark drops the gradien
 /app/support                       Write to us — a ticket that reaches a real inbox (spec 144)
 /app/upgrade                       What Pro gives, and the way to buy it (specs 99, 100)
 /app/upgrade/return                Where Checkout returns: reconciles with Stripe, then Settings (spec 100)
+/app/admin                         Operator console — users (spec 150). Admin only; 404s everyone else
+/app/admin/projects                Every project, its origin, and its interview read back question by question
+/app/admin/tickets                 Every support ticket; open ↔ closed (finishes spec 144's status column)
+/app/admin/reviews                 The publication queue — the only screen that sets published_at
+/app/admin/stats                   Signups, activation, where founders stop, invites, Pro — all from Postgres
 ```
+
+The admin routes are the one place the nav is not the same for everyone: `navItems({ isAdmin })` builds
+one list that feeds both the sidebar and the ⌘K palette, so the entry cannot appear in one and not the
+other. **Hiding it is presentation, not authorization** — the layout calls `requireAdmin()`, every admin
+server action calls it again, and `lib/data/admin.ts` checks a third time at the point it crosses the
+tenancy boundary. A non-admin who guesses the URL gets `notFound()` rather than a redirect, because a
+redirect would confirm the route exists.
 
 The paywall sits at **generate**, never earlier: a founder out of free foundations can still create a
 project and answer every question, and meets `/app/upgrade` at the button that would cost a Claude

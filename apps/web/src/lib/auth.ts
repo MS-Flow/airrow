@@ -5,14 +5,22 @@
 // GitHub is the second way in (spec 67) — the same accounts, reached with an OAuth identity that
 // asks for no scopes at all.
 import { cache } from "react";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { supabaseServer } from "@/lib/data/supabase-server";
-import { getOrgForUser, setDisplayName, type OrgRecord, type UserRecord } from "@/lib/data/store";
+import {
+  getOrgForUser,
+  profileFlags,
+  setDisplayName,
+  type OrgRecord,
+  type UserRecord
+} from "@/lib/data/store";
 
 export interface SessionContext {
   user: UserRecord;
   org: OrgRecord;
+  /** True when this account operates Airrow (spec 150). Decides the admin nav entry and nothing else. */
+  isAdmin: boolean;
 }
 
 /** Narrow the untrusted user_metadata bag to a display name. */
@@ -36,6 +44,11 @@ function metaName(meta: unknown, fallback: string): string {
  * `getUser()` (not `getSession()`) stays deliberate: it revalidates the token with the
  * auth server rather than trusting the cookie, and this is the value every RSC and action
  * scopes its data by.
+ *
+ * **A suspended account has no session here** (spec 150). This is the single place every `/app` page
+ * and every server action already passes through, so refusing here is what makes a suspension bite at
+ * the next server call rather than whenever the token happens to expire. Supabase Auth is banned in
+ * the same admin action, which stops a *new* token being issued; this stops the one they are holding.
  */
 export const getSession = cache(async (): Promise<SessionContext | null> => {
   const supabase = await supabaseServer();
@@ -44,8 +57,9 @@ export const getSession = cache(async (): Promise<SessionContext | null> => {
   } = await supabase.auth.getUser();
   if (!user?.email) return null;
 
-  const org = await getOrgForUser(user.id);
+  const [org, flags] = await Promise.all([getOrgForUser(user.id), profileFlags(user.id)]);
   if (!org) return null;
+  if (flags.suspendedAt) return null;
 
   const rec: UserRecord = {
     id: user.id,
@@ -53,13 +67,31 @@ export const getSession = cache(async (): Promise<SessionContext | null> => {
     name: metaName(user.user_metadata, user.email),
     createdAt: user.created_at
   };
-  return { user: rec, org };
+  return { user: rec, org, isAdmin: flags.isAdmin };
 });
 
 /** For RSC pages/actions that require auth. Redirects when absent. */
 export async function requireSession(): Promise<SessionContext> {
   const session = await getSession();
   if (!session) redirect("/login");
+  return session;
+}
+
+/**
+ * For the admin console and every action behind it (spec 150).
+ *
+ * `notFound()` rather than a redirect, deliberately: a redirect to `/app` tells a signed-in founder
+ * that `/app/admin` is a real route they are not allowed on, and the existence of an operator console
+ * is not something they need to learn from a probe. A 404 says the same thing to them as to a typo.
+ *
+ * Called by the admin layout *and* independently by every admin server action, because a page that is
+ * gated while its actions are not is not gated — a server action is a POST endpoint, reachable without
+ * ever rendering the page that normally posts to it. `lib/data/admin.ts` then checks a third time, at
+ * the point the tenancy boundary is actually crossed.
+ */
+export async function requireAdmin(): Promise<SessionContext> {
+  const session = await requireSession();
+  if (!session.isAdmin) notFound();
   return session;
 }
 

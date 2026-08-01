@@ -9,9 +9,13 @@ export default function CookiesPage() {
       <h1>Cookie policy</h1>
       <p>
         {LEGAL.serviceName} uses only the cookies the service needs to function. There are no
-        analytics, advertising or tracking cookies, nothing is shared with third parties for
-        profiling, and that is why you are not asked to accept a banner: strictly necessary
-        cookies do not require consent.
+        advertising or tracking cookies, and nothing is shared with third parties for profiling.
+      </p>
+      <p>
+        We do measure how many people visit the site, and we do it without cookies — see{" "}
+        <a href="#analytics">how we count visits</a> below. That is why there is still no banner
+        asking you to accept anything: strictly necessary cookies do not require consent, and
+        measurement that stores nothing on your device does not either.
       </p>
 
       <h2>What is set</h2>
@@ -46,6 +50,29 @@ export default function CookiesPage() {
           </tr>
         </tbody>
       </table>
+
+      <h2 id="analytics">How we count visits</h2>
+      <p>
+        We use <strong>Vercel Web Analytics</strong>, which is cookieless. It sets no cookie, writes
+        nothing to your browser&apos;s storage, and reads nothing that is already there. It records
+        that a page was viewed — the page, the referring site, and coarse details like country,
+        browser and device type — and aggregates it. It does not build a profile of you, does not
+        follow you to other sites, and is never joined to an account, a workspace or a project.
+      </p>
+      <p>
+        This is why you are not asked to consent to it. The rule that makes consent banners necessary
+        is about storing or reading information on your device; measurement that does neither does not
+        trigger it. We rely on our legitimate interest in knowing whether people can find the service
+        at all, and we have chosen a tool that buys that answer at the lowest cost to you.
+      </p>
+      <p>
+        It runs only on the public pages. Nothing you do while signed in to your workspace is
+        measured this way.
+      </p>
+      <p>
+        If you would rather not be counted at all, any content blocker will stop the script, and the
+        site works exactly the same without it.
+      </p>
 
       <h2>Browser storage</h2>
       <p>
