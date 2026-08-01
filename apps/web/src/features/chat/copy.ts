@@ -6,11 +6,21 @@
 // panel *says* on its own behalf, in the states where no model was involved at all.
 import { MAX_MESSAGE_CHARS, VISITOR_DAILY_ANSWER_LIMIT } from "./limits";
 
+/**
+ * The bot's name (spec 158). Exported on its own because two places need the same string for
+ * different jobs: the panel prints it, and `knowledge.ts` puts it in the system prompt so "who are
+ * you?" is answered with the name on the header rather than a description of the software.
+ */
+export const ARCHER = "Archer";
+
 export const CHAT = {
-  /** The closed state. Short enough to sit in a corner without competing with the hero. */
+  /** The closed state. A name nobody has met yet is not an invitation, so the button still says
+      what it is for; the name belongs inside, where it has a face next to it. */
   launcher: "Ask about Airrow",
-  title: "Ask about Airrow",
-  subtitle: "Answers about what it builds, what you get and what it costs.",
+  title: ARCHER,
+  subtitle: "Airrow's assistant. Answers about what it builds, what you get and what it costs.",
+  /** The avatar is decorative beside the name in the header, and identifying beside an answer. */
+  avatarAlt: `${ARCHER}, Airrow's assistant`,
   placeholder: "Ask a question",
   send: "Send",
   close: "Close",
@@ -35,5 +45,10 @@ export const CHAT = {
   /** The thread has run out of turns. */
   threadFull:
     "That is as far as this thread goes. Start a project and the interview will ask better questions than I can.",
-  tooLong: `Keep it under ${MAX_MESSAGE_CHARS} characters.`
+  tooLong: `Keep it under ${MAX_MESSAGE_CHARS} characters.`,
+  /* The hand-off to a human (spec 158). The login step is said *before* the link, never discovered
+     after it: support lives inside the app, so an anonymous visitor who clicks lands on the sign-in
+     screen, and being sent there without warning reads as the link being broken. */
+  supportNote: "Need a person? Sign in and the support page will reach us.",
+  supportAction: "Sign in for support"
 } as const;

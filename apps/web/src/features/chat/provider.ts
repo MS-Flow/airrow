@@ -84,8 +84,23 @@ HOW TO WRITE.
   a nudge, and a nudge after every answer reads as a sales bot.
 - No superlatives and no marketing filler ("revolutionary", "seamless", "cutting-edge").
 
-OUTPUT FORMAT. Reply with a single JSON object and nothing else: {"onTopic": boolean, "answer": string}.
-Set answer to null when onTopic is false.
+MAKING THE CASE. Spec-driven development is why Airrow works, and most visitors have not thought about
+it yet. When they ask what the documents are for, why not just prompt an agent, or what actually
+changes in their week, argue for it — concretely, from WHY SPEC-DRIVEN and THE SPEC LOOP below. Name
+what it costs them not to: an agent that invents requirements it was never given, reopens decisions
+they made last week, and spends its tokens exploring the wrong build. Name what gets easier: the agent
+knows what to build, review becomes "does this match what we agreed" instead of "does this look right",
+and the decisions outlive the context window. Be persuasive by being specific — this is the one place
+conviction belongs, and it still buys no superlatives and no extra sentence on an answer that was
+already finished.
+
+WHEN TO HAND OVER. Set support to true when the knowledge does not answer them, when something sounds
+broken or wrong with their account or billing, or when they ask for a person. The panel turns that into
+the link; you never write a URL yourself. Leave it false otherwise — an answer that worked does not
+need one, and a support link under every reply is the same tic as a pitch under every reply.
+
+OUTPUT FORMAT. Reply with a single JSON object and nothing else:
+{"onTopic": boolean, "answer": string, "support": boolean}. Set answer to null when onTopic is false.
 
 KNOWLEDGE
 ${"{{KNOWLEDGE}}"}`;
@@ -98,7 +113,8 @@ ${"{{KNOWLEDGE}}"}`;
  * as one, while `unavailable` is ours to absorb and drops the panel to the handwritten FAQ.
  */
 export type ChatOutcome =
-  | { status: "answered"; text: string }
+  /** `support` is the model asking the panel to offer the hand-off, never a link it wrote (spec 158). */
+  | { status: "answered"; text: string; support: boolean }
   | { status: "off_topic" }
   /** Carries *why*, for the log and the non-production header — never for the visitor (spec 151). */
   | { status: "unavailable"; reason: ChatUnavailableReason };
@@ -171,7 +187,7 @@ export async function answerQuestion(thread: readonly ChatTurn[]): Promise<ChatO
 
     const raw: unknown = JSON.parse(stripFence(text));
     if (typeof raw !== "object" || raw === null) return unavailable("model-contract-violated");
-    const envelope = raw as { onTopic?: unknown; answer?: unknown };
+    const envelope = raw as { onTopic?: unknown; answer?: unknown; support?: unknown };
 
     if (envelope.onTopic !== true) return { status: "off_topic" };
 
@@ -181,7 +197,9 @@ export async function answerQuestion(thread: readonly ChatTurn[]): Promise<ChatO
     if (trimmed.length === 0 || trimmed.length > ANSWER_MAX_CHARS) return unavailable("model-contract-violated");
     if (PROMPT_LEAK_MARKERS.some((re) => re.test(trimmed))) return unavailable("model-contract-violated");
 
-    return { status: "answered", text: trimmed };
+    // A missing or non-boolean `support` is not worth discarding an otherwise good answer over: the
+    // offer is additive, so the safe reading of "the model did not say" is "do not offer".
+    return { status: "answered", text: trimmed, support: envelope.support === true };
   } catch {
     // Network error, rate limit, malformed JSON, schema drift — all the same outcome, and none of
     // them is the visitor's fault: the panel falls back to the handwritten answers.

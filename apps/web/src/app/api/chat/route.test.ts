@@ -38,14 +38,31 @@ describe("POST /api/chat", () => {
   });
 
   it("answers a well-formed question", async () => {
-    answerQuestion.mockResolvedValue({ status: "answered", text: "Free for one foundation." });
+    answerQuestion.mockResolvedValue({
+      status: "answered",
+      text: "Free for one foundation.",
+      support: false
+    });
 
     const response = await post(oneQuestion);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       status: "answered",
-      text: "Free for one foundation."
+      text: "Free for one foundation.",
+      support: false
+    });
+  });
+
+  it("carries the hand-off to a person through to the panel", async () => {
+    // The route forwards the flag and never a URL: where the visitor is sent is decided in the
+    // panel, so nothing the model produced can point it somewhere else (spec 158).
+    answerQuestion.mockResolvedValue({ status: "answered", text: "Ask support.", support: true });
+
+    await expect((await post(oneQuestion)).json()).resolves.toEqual({
+      status: "answered",
+      text: "Ask support.",
+      support: true
     });
   });
 

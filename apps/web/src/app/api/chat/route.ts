@@ -93,5 +93,5 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   if (outcome.status === "off_topic") return reply({ status: "off_topic" });
-  return reply({ status: "answered", text: outcome.text });
+  return reply({ status: "answered", text: outcome.text, support: outcome.support });
 }
