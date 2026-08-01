@@ -18,6 +18,7 @@ import {
   saveReview
 } from "@/lib/data/support";
 import { sendMail, type MailResult } from "@/lib/email";
+import { SUPPORT_PATH } from "./route";
 
 /** One line per message, carrying ids and a delivery status — never a word of what was written (§II). */
 function logDelivery(kind: string, id: string, result: MailResult): void {
@@ -33,9 +34,9 @@ export async function submitTicketAction(formData: FormData): Promise<void> {
     body: formData.get("body"),
     projectId: formData.get("projectId") ?? ""
   });
-  if (!parsed.success) redirect("/app/support?error=invalid");
+  if (!parsed.success) redirect(`${SUPPORT_PATH}?error=invalid`);
 
-  if ((await countRecentTickets(org.id)) >= TICKET_DAILY_LIMIT) redirect("/app/support?error=limit");
+  if ((await countRecentTickets(org.id)) >= TICKET_DAILY_LIMIT) redirect(`${SUPPORT_PATH}?error=limit`);
 
   // A project id is only accepted once it is shown to be this workspace's own. It arrives from a form
   // and is the one field a founder could point anywhere (§II: never trust a client-supplied id).
@@ -68,7 +69,7 @@ export async function submitTicketAction(formData: FormData): Promise<void> {
     })
   );
 
-  redirect(`/app/support?sent=${ticket.id}`);
+  redirect(`${SUPPORT_PATH}?sent=${ticket.id}`);
 }
 
 export async function submitReviewAction(formData: FormData): Promise<void> {

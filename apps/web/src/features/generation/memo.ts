@@ -9,7 +9,8 @@ import {
   pickValidDocuments,
   pickValidSlots,
   pickValidToolchain,
-  type ProjectModel
+  type ProjectModel,
+  type UiReferenceImage
 } from "@airrow/schemas";
 import type { AuthoredFoundation } from "./author";
 
@@ -21,10 +22,25 @@ import type { AuthoredFoundation } from "./author";
  * remembering to add each new one, and forgetting would silently serve stale prose for changed
  * answers — a much worse failure than an unnecessary cache miss. `JSON.stringify` is stable here
  * because the model is built field-by-field in `resolveProjectModel`, not assembled from a map.
+ *
+ * The reference images are the one input that is *not* in the model — their bytes live in the app's
+ * database, and the engine takes strings (spec 159). So they are hashed alongside it: attaching a
+ * screenshot changes what the model is looking at, and a founder who attaches one and regenerates
+ * must get a brief written from it rather than the prose written before they did.
  */
-export function inputsHash(model: ProjectModel, promptVersion: string, authoringModel: string): string {
+export function inputsHash(
+  model: ProjectModel,
+  promptVersion: string,
+  authoringModel: string,
+  references: readonly UiReferenceImage[] = []
+): string {
+  // Digested rather than included: a hash of a base64 megabyte is the same answer for a fraction of
+  // the work, and this runs on every generation.
+  const referenceDigests = references.map((image) =>
+    createHash("sha256").update(image.mediaType).update(image.base64).digest("hex")
+  );
   return createHash("sha256")
-    .update(JSON.stringify({ model, promptVersion, authoringModel }))
+    .update(JSON.stringify({ model, promptVersion, authoringModel, referenceDigests }))
     .digest("hex");
 }
 

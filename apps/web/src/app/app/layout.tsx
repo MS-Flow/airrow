@@ -8,7 +8,9 @@ import { UserMenu } from "@/components/shell/user-menu";
 import { CommandPalette, type CommandItem } from "@/components/ui/command-palette";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toast";
-import { NAV_ITEMS } from "@/components/shell/nav-items";
+import { navItems } from "@/components/shell/nav-items";
+import { ChatWidget } from "@/features/chat/ChatWidget";
+import { startCtaHref } from "@/features/landing/start-cta";
 import { ClaimGuestDraft } from "@/features/interview/ClaimGuestDraft";
 import { requireSession, signOut } from "@/lib/auth";
 import { readTheme } from "@/lib/theme";
@@ -21,14 +23,17 @@ async function signOutAction() {
 }
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, org } = await requireSession();
+  const { user, org, isAdmin } = await requireSession();
   const projects = await listProjects(org.id);
   const theme = await readTheme();
 
   const projectNames = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+  // Resolved once and handed to both consumers, so the admin entry cannot appear in one and not the
+  // other — the whole reason this is a function of the session rather than two lists (spec 150).
+  const nav = navItems({ isAdmin });
 
   const commands: CommandItem[] = [
-    ...NAV_ITEMS.map((n) => ({ id: `nav-${n.href}`, label: n.label, href: n.href, group: "Go to" })),
+    ...nav.map((n) => ({ id: `nav-${n.href}`, label: n.label, href: n.href, group: "Go to" })),
     { id: "action-new", label: "New project", href: "/app/projects/new", hint: "create", group: "Actions" },
     {
       id: "action-import",
@@ -50,7 +55,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <TooltipProvider delayDuration={200}>
       <Toaster>
         <RailProvider>
-          <Sidebar />
+          <Sidebar items={nav} />
           {/* The column starts where the rail ends, so the top bar and the preview's file
               tree move with it. Centred page content opts back out to the viewport via
               `.viewport-column`, which is why it never shifts. `--rail` animates itself, so
@@ -68,6 +73,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <ChatSlot />
         </RailProvider>
         <CommandPalette items={commands} />
+        {/* Archer, the same panel the public pages carry — mounted here so the signed-in founder is
+            not the one person who cannot ask (spec 159, which lifts spec 158's deliberate exclusion).
+            The second and last mount point: one per layout, so a page still gets him by existing
+            rather than by importing him. `startCtaHref(true)` because `requireSession()` above means
+            everyone reading this is signed in. */}
+        <ChatWidget ctaHref={startCtaHref(true)} />
         <ClaimGuestDraft />
       </Toaster>
     </TooltipProvider>

@@ -16,6 +16,18 @@ advisories block a release; §Security: secrets never reach code, logs or genera
 The two repo settings are applied by `scripts/setup-security-scanning.sh`, run by an admin. They are
 free because this repository is public — if it ever goes private they need a paid plan.
 
+**What runs when you ask: `/security`** (spec 157). It reads the whole repository, fixes what changes
+nothing a user can see, asks before anything else, and writes the gitignored `SECURITY_AUDIT.md`. It
+is the half CI cannot do — CI gates high/critical *production advisories*, and everything below that
+line, plus every hole in our own code, only exists if somebody looks. Run it before a launch, and
+whenever something new is exposed to the internet. A re-run re-verifies every entry in the last report
+before looking for anything new.
+
+**Actions are pinned to commit SHAs**, with the version as a trailing comment
+(`actions/checkout@11d5960… # v4`). A tag can be repointed by whoever owns the action, and these
+workflows hold the Supabase and Vercel secrets. Pinning froze the versions already in use; upgrading
+them is a separate decision, and all four are behind their latest majors.
+
 ## The audit baseline
 
 `.security/audit-baseline.json` lists advisories we have **accepted**. The check fails only on
@@ -29,7 +41,11 @@ where a reviewer sees every line.
 **The file is meant to shrink.** When an upgrade removes an advisory, the check prints a warning naming
 the now-redundant rows. It does not fail — punishing a successful upgrade would be backwards.
 
-> Most of the initial baseline is `next`. A single Next.js upgrade clears twelve of the sixteen rows.
+> **As of 2026-08-01 all sixteen rows are stale:** `pnpm audit --prod` matches none of them, so CI is
+> printing that warning on every run. The baseline has done its job and should be emptied — a file
+> nobody trims stops being read, and a warning nobody acts on stops being seen. Noticed by the first
+> `/security` run (spec 157); left as its own change, because removing an accepted risk is a decision,
+> not housekeeping.
 
 ### Accepting an advisory
 

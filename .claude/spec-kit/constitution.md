@@ -29,15 +29,26 @@ Every feature, screen, and generated file is judged against these.
   Presentation may go further than function — `/start` may finish the screen to the design language
   already in the repo where the founder's own direction was thin — but schema, persistence and any
   real auth service stay out; those are the founder's first spec. Everything past `mvpFocus` goes
-  through the spec loop. A foundation generated for a project that **already exists** ships `/cleanup`
+  through the spec loop. **`/start` is re-runnable until it succeeds, and removes itself once it
+  has** — only after its own verification bar has actually passed, so an interrupted or failing run
+  always leaves the founder the command that would finish the job
+  ([spec 159](../../specs/159-ui-reference-start.md), which records the previous "re-runnable by
+  design" wording). A foundation generated for a project that **already exists** ships `/cleanup`
   in its place: run the same way, it reads the codebase that is there and rewrites the foundation's
   documents to describe it. Its ceiling is narrower — it changes no code and deletes nothing. A
   foundation ships exactly one of the two, decided by where the project came from. Airrow's servers
   still never write application code, and ZIP delivery is still a complete foundation on its own.
+  **`/security` ships with every foundation, whatever its origin, and is the third command that may
+  touch code** — narrowly: it reviews the whole repository for vulnerabilities and fixes only what
+  changes nothing a user can see, proposing everything else and waiting for the founder's yes. It
+  installs nothing, sends nothing anywhere, attacks nothing, and rewrites no history; its report,
+  `SECURITY_AUDIT.md`, lists the holes still open and stays out of version control. Airrow runs it on
+  nobody's behalf — like the other two, it runs on the founder's machine, when they ask.
   (Amended by [spec 66](../../specs/66-start-command.md), which records the previous wording, extended
-  by [spec 91](../../specs/91-cleanup-command.md), and amended again by
+  by [spec 91](../../specs/91-cleanup-command.md), amended again by
   [spec 123](../../specs/123-foundation-starts-strong.md) — which records the "bare minimum that runs"
-  wording spec 66 introduced.)
+  wording spec 66 introduced — and extended by
+  [spec 157](../../specs/157-security-command.md), which added `/security`.)
 - **The output is the product.** Generated repos must read like a senior CTO wrote them for *this*
   project — never like a filled-in template. Generic output is a top-severity bug.
 - **Adaptive, never bureaucratic.** The interview asks only questions whose answers change the output.
@@ -95,7 +106,9 @@ Every feature, screen, and generated file is judged against these.
   committed in `supabase/migrations`. Never hand-edit the schema in the Supabase dashboard.
 - **Customer IP is protected.** Interview answers and artifacts are encrypted at rest, reached only
   via RLS-scoped paths, and served from Storage via short-expiry signed URLs. Deleting a project
-  cascades to its interviews, models, jobs, artifacts, and Storage objects. Logs carry IDs and
+  cascades to its interviews, models, jobs, artifacts, **the UI reference images the founder
+  attached**, and Storage objects — the last of those explicitly, since Storage has no foreign key to
+  cascade along ([spec 159](../../specs/159-ui-reference-start.md)). Logs carry IDs and
   metadata only — never answer content or generated document bodies.
 - **Manifest of record.** Generation records per file (source, template id + version, prompt version,
   model, inputs hash) in Postgres — do not bypass it. Full schema: `DATABASE_DESIGN.md`.

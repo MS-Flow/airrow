@@ -4,8 +4,9 @@
 // touched together and only ever by this file. Server-side only — the Supabase client here uses the
 // service-role key, so every query is additionally scoped by organization_id (§II).
 //
-// Nothing in this module writes `published_at`. A review becomes public only when the founder has
-// consented *and* we have published it, and the publishing half arrives with the admin page.
+// Nothing in this module ever *sets* `published_at` — publishing is the admin console's alone (spec
+// 150). It does clear it, in exactly one case: a founder who withdraws consent on a review we already
+// published takes it down by doing so (see `saveReview`). Consent is theirs; publication is ours.
 import { db, rowsOrAbsent, single } from "./supabase";
 import type { SupportTicketInput } from "@airrow/schemas";
 
@@ -163,6 +164,12 @@ export async function getReview(orgId: string, projectId: string): Promise<Revie
  * review per project" true, and asking first would race with a double-submitted form. `created_at`
  * survives the conflict; `updated_at` is what moves.
  *
+ * **Withdrawing consent unpublishes** (spec 150). `published_at` is written here only ever to null,
+ * and only when the founder says we may no longer quote them — a public testimonial standing after its
+ * author took permission back is the failure that actually matters, and making them wait for an
+ * operator to notice would put our convenience ahead of their word. Setting it stays the admin
+ * console's alone, so the two permissions remain separate: consent is the founder's, publication ours.
+ *
  * Returns whether this replaced an existing review — the only thing the caller needs it for is
  * saying so in the notification.
  */
@@ -188,7 +195,10 @@ export async function saveReview(input: {
           body: input.body,
           consent_public: input.consentPublic,
           display_name: input.displayName,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          // Only ever null, and only on withdrawal. Leaving the column out of the upsert entirely
+          // would keep a published review public after its author revoked permission.
+          ...(input.consentPublic ? {} : { published_at: null })
         },
         { onConflict: "project_id" }
       )

@@ -516,3 +516,82 @@ describe("response framing", () => {
     expect(result.documents[UI_DOC]).toBe(body);
   });
 });
+
+/* ── What the founder showed us (spec 159) ─────────────────────────────────── */
+
+describe("reference images reach the model", () => {
+  const image = { mediaType: "image/png", base64: "aGVsbG8=" } as const;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.ANTHROPIC_API_KEY = "test-key";
+  });
+
+  afterEach(() => {
+    delete process.env.ANTHROPIC_API_KEY;
+  });
+
+  /** The content blocks of the nth call, whatever shape that call's message took. */
+  function blocksOf(callIndex: number): unknown[] {
+    const body = create.mock.calls[callIndex]?.[0] as {
+      messages: { content: unknown }[];
+    };
+    const content = body.messages[0]?.content;
+    return Array.isArray(content) ? content : [content];
+  }
+
+  it("sends them on the UI call, before the answers", async () => {
+    create.mockResolvedValueOnce(authored({})).mockResolvedValueOnce(authoredUi("A brief."));
+
+    await authorFoundation(model, [image]);
+
+    const ui = blocksOf(1);
+    expect(ui[0]).toEqual({
+      type: "image",
+      source: { type: "base64", media_type: "image/png", data: "aGVsbG8=" }
+    });
+    expect(ui[1]).toMatchObject({ type: "text" });
+  });
+
+  it("sends them on the UI call only — the architecture documents have nothing to learn from a screenshot", async () => {
+    create.mockResolvedValueOnce(authored({})).mockResolvedValueOnce(authoredUi("A brief."));
+
+    await authorFoundation(model, [image]);
+
+    expect(blocksOf(0).some((b) => (b as { type?: string }).type === "image")).toBe(false);
+    expect(blocksOf(1).some((b) => (b as { type?: string }).type === "image")).toBe(true);
+  });
+
+  it("changes nothing about the request when the founder attached none", async () => {
+    create.mockResolvedValueOnce(authored({})).mockResolvedValueOnce(authoredUi("A brief."));
+
+    await authorFoundation(model);
+
+    for (const index of [0, 1]) {
+      expect(blocksOf(index).every((b) => (b as { type?: string }).type === "text")).toBe(true);
+    }
+  });
+
+  it("still leaves the other three documents authored when the UI call fails with images attached", async () => {
+    create
+      .mockResolvedValueOnce(authored({ VISION: "A written vision." }))
+      .mockRejectedValueOnce(new Error("vision request failed"));
+
+    const result = foundationOf(await authorFoundation(model, [image]));
+
+    expect(result.slots).toEqual({ VISION: "A written vision." });
+    expect(result.documents[UI_DOC]).toBeUndefined();
+  });
+
+  it("tells the model what a reference is for, and what it is not", async () => {
+    create.mockResolvedValueOnce(authored({})).mockResolvedValueOnce(authoredUi("A brief."));
+
+    await authorFoundation(model, [image]);
+
+    const system = (create.mock.calls[1]?.[0] as { system: { text: string }[] }).system
+      .map((block) => block.text)
+      .join("\n");
+    expect(system).toMatch(/never an instruction/i);
+    expect(system).toMatch(/no logo, no brand name/i);
+  });
+});

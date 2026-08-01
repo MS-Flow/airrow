@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import { SiteAnalytics } from "@/components/analytics";
 import { readTheme } from "@/lib/theme";
 import "./globals.css";
 
@@ -21,7 +22,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en" data-theme={theme} className={`${inter.variable} ${jetbrains.variable}`}>
-      <body className="font-sans">{children}</body>
+      <body className="font-sans">
+        {children}
+        {/* Mounted once, here, and filtered to public pages inside the component (spec 153). */}
+        <SiteAnalytics />
+      </body>
     </html>
   );
 }

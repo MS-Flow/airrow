@@ -33,6 +33,9 @@ const store = vi.hoisted(() => ({
 
 vi.mock("@/lib/data/store", () => store);
 vi.mock("@/lib/template/load", () => ({ loadTemplate: () => [] }));
+// The founder's reference images (spec 159). Stubbed empty: these tests are about control flow, and
+// the runner's own behaviour when there are none is what every existing case here describes.
+vi.mock("@/lib/data/ui-references", () => ({ loadUiReferenceImages: async () => [] }));
 
 // The one network call in generation, stubbed: these tests are about the runner's control flow, and
 // §V forbids reaching the network from a test regardless.
@@ -53,7 +56,7 @@ const model = { name: "Acme" } as unknown as ProjectModel;
 
 /** Runs the job to completion, driving the runner's pacing rather than waiting it out. */
 async function runToCompletion(): Promise<void> {
-  const job = runGenerationJob("job1", model);
+  const job = runGenerationJob("job1", model, "org1");
   await vi.runAllTimersAsync();
   await job;
 }
