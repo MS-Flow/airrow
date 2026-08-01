@@ -48,7 +48,11 @@ export type ChatRequest = z.infer<typeof chatRequestSchema>;
  * panel that had to read both a status code and a body to tell those apart would get it wrong.
  */
 export type ChatReply =
-  | { status: "answered"; text: string }
+  /**
+   * `support` asks the panel to show its own hand-off row (spec 158). A flag and not a URL: the link
+   * is written into the panel, so nothing the model produces can decide where a visitor is sent.
+   */
+  | { status: "answered"; text: string; support: boolean }
   | { status: "off_topic" }
   | { status: "thread_full" }
   /** Which ceiling was hit. The panel says different things about the visitor's and the day's. */

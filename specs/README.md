@@ -69,3 +69,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | A way to reach us, and a way to say what it was worth | [144-support-review.md](144-support-review.md) | ✅ Done |
 | A chat on the landing page that answers, and leads on | [141-landing-chat.md](141-landing-chat.md) | ✅ Done |
 | The chat says why it is quiet, and answers without a proxy | [151-chat-diagnostics.md](151-chat-diagnostics.md) | ✅ Done |
+| Archer: on every public page, with a name and a way to a person | [158-archer-everywhere.md](158-archer-everywhere.md) | ✅ Done |

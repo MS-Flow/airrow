@@ -65,14 +65,45 @@ describe("the landing chat provider", () => {
 
     await expect(answerQuestion(ask())).resolves.toEqual({
       status: "answered",
-      text: "A repository, written for your product."
+      text: "A repository, written for your product.",
+      support: false
     });
   });
 
   it("reads JSON the model wrapped in a fence anyway", async () => {
     create.mockResolvedValue(reply('```json\n{"onTopic":true,"answer":"Five minutes."}\n```'));
 
-    await expect(answerQuestion(ask())).resolves.toEqual({ status: "answered", text: "Five minutes." });
+    await expect(answerQuestion(ask())).resolves.toEqual({
+      status: "answered",
+      text: "Five minutes.",
+      support: false
+    });
+  });
+
+  it("passes on the model's request to hand over to a person", async () => {
+    create.mockResolvedValue(
+      reply(JSON.stringify({ onTopic: true, answer: "That one needs a person.", support: true }))
+    );
+
+    await expect(answerQuestion(ask("can I talk to someone?"))).resolves.toEqual({
+      status: "answered",
+      text: "That one needs a person.",
+      support: true
+    });
+  });
+
+  it("treats a missing or malformed hand-off flag as no hand-off, not as a broken answer", async () => {
+    // The offer is additive, so the safe reading of "the model did not say" is "do not offer" —
+    // discarding a good answer over a field it forgot would be the worse failure (spec 158).
+    create.mockResolvedValue(
+      reply(JSON.stringify({ onTopic: true, answer: "Five minutes.", support: "yes please" }))
+    );
+
+    await expect(answerQuestion(ask())).resolves.toEqual({
+      status: "answered",
+      text: "Five minutes.",
+      support: false
+    });
   });
 
   it("reports a question about anything else as off topic rather than answering it", async () => {
