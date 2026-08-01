@@ -9,7 +9,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { projectReviewSchema, supportTicketSchema } from "@airrow/schemas";
-import { requireSession } from "@/lib/auth";
+import { requireSession, requireSessionEvenIfSuspended } from "@/lib/auth";
 import { getProject } from "@/lib/data/store";
 import {
   TICKET_DAILY_LIMIT,
@@ -27,7 +27,13 @@ function logDelivery(kind: string, id: string, result: MailResult): void {
 }
 
 export async function submitTicketAction(formData: FormData): Promise<void> {
-  const { user, org } = await requireSession();
+  // The one write a suspended account may still make (spec 164) — asking to stop being suspended is
+  // not something a suspension gets to prevent. Everything that follows is unchanged, including the
+  // daily ceiling: a suspended founder is rate-limited exactly like anyone else, and the two refusals
+  // stay separate messages.
+  const {
+    session: { user, org }
+  } = await requireSessionEvenIfSuspended();
   const parsed = supportTicketSchema.safeParse({
     category: formData.get("category"),
     subject: formData.get("subject"),

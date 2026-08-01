@@ -29,7 +29,7 @@ vi.mock("next/navigation", () => ({
   notFound: () => notFound()
 }));
 
-import { getSession, requireAdmin, requireSession } from "./auth";
+import { getSession, requireAdmin, requireSession, requireSessionEvenIfSuspended } from "./auth";
 
 const ORG = { id: "org1", name: "Workspace", kind: "personal", createdBy: "u1", plan: "free" };
 
@@ -64,16 +64,49 @@ describe("the session gate", () => {
     await expect(getSession()).resolves.toBeNull();
   });
 
-  it("sends a suspended account back to sign-in rather than rendering the app", async () => {
+  it("sends a suspended account to the screen that explains it, not to sign-in", async () => {
+    // Spec 164. `/login` was the old answer and it was a lie in both directions: it tells someone
+    // signed in that they are not, and it is a door they cannot get through to ask why.
     signedInAs({ isAdmin: false, suspendedAt: "2026-07-31T00:00:00.000Z" });
 
     await expect(requireSession()).rejects.toBe(REDIRECT);
-    expect(redirect).toHaveBeenCalledWith("/login");
+    expect(redirect).toHaveBeenCalledWith("/app/suspended");
   });
 
   it("lets a reactivated account straight back in", async () => {
     signedInAs({ isAdmin: false, suspendedAt: null });
     await expect(getSession()).resolves.toMatchObject({ user: { id: "u1" } });
+  });
+});
+
+describe("the one door a suspension leaves open (spec 164)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    redirect.mockImplementation(() => {
+      throw REDIRECT;
+    });
+  });
+
+  it("hands support a suspended session, flagged as suspended", async () => {
+    signedInAs({ isAdmin: false, suspendedAt: "2026-07-31T00:00:00.000Z" });
+
+    await expect(requireSessionEvenIfSuspended()).resolves.toMatchObject({
+      suspended: true,
+      session: { user: { id: "u1" } }
+    });
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("reports an account in good standing as not suspended", async () => {
+    signedInAs({ isAdmin: false, suspendedAt: null });
+    await expect(requireSessionEvenIfSuspended()).resolves.toMatchObject({ suspended: false });
+  });
+
+  it("still refuses a signed-out visitor — it widens suspension, not authentication", async () => {
+    getUser.mockResolvedValue({ data: { user: null } });
+
+    await expect(requireSessionEvenIfSuspended()).rejects.toBe(REDIRECT);
+    expect(redirect).toHaveBeenCalledWith("/login");
   });
 });
 
@@ -105,10 +138,13 @@ describe("requireAdmin", () => {
   });
 
   it("refuses a suspended admin before it ever asks whether they are an admin", async () => {
-    // Suspension outranks the flag: the session is gone, so this is a sign-in redirect and not a 404.
+    // Suspension outranks the flag, so this is the suspension screen rather than a 404. It should not
+    // be reachable — an admin cannot be suspended from the console (spec 164) — but the console is not
+    // the only way a row can end up that way, and the order still has to be right.
     signedInAs({ isAdmin: true, suspendedAt: "2026-07-31T00:00:00.000Z" });
 
     await expect(requireAdmin()).rejects.toBe(REDIRECT);
+    expect(redirect).toHaveBeenCalledWith("/app/suspended");
     expect(notFound).not.toHaveBeenCalled();
   });
 

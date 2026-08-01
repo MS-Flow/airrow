@@ -7,7 +7,7 @@ import { render, screen } from "@testing-library/react";
 const pathname = vi.hoisted(() => ({ current: "/app/projects/p1" }));
 vi.mock("next/navigation", () => ({ usePathname: () => pathname.current }));
 
-import { TopBar } from "./top-bar";
+import { buildCrumbs, TopBar } from "./top-bar";
 
 function renderBar() {
   return render(
@@ -36,5 +36,18 @@ describe("TopBar at phone width", () => {
     const crumb = screen.getByText("A project with a deliberately long name");
     expect(crumb).toHaveClass("truncate");
     expect(screen.getByRole("navigation", { name: "Breadcrumb" })).toHaveClass("min-w-0");
+  });
+});
+
+describe("the trail names every screen (spec 164)", () => {
+  it.each([
+    ["/app/admin", "Admin"],
+    ["/app/support", "Support"],
+    ["/app/suspended", "Account suspended"],
+    ["/app/settings", "Settings"]
+  ])("%s reads as %s", (path, label) => {
+    // A segment with no entry in `SEGMENT_LABELS` falls through to the raw URL, which is how the
+    // breadcrumb came to say a lower-case "admin" while the heading and the sidebar said Admin.
+    expect(buildCrumbs(path, {})).toEqual([{ label }]);
   });
 });

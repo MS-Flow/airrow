@@ -8,9 +8,9 @@ import { UserMenu } from "@/components/shell/user-menu";
 import { CommandPalette, type CommandItem } from "@/components/ui/command-palette";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toast";
-import { navItems } from "@/components/shell/nav-items";
+import { navItems, SUSPENDED_ITEMS } from "@/components/shell/nav-items";
 import { ClaimGuestDraft } from "@/features/interview/ClaimGuestDraft";
-import { requireSession, signOut } from "@/lib/auth";
+import { requireSessionEvenIfSuspended, signOut } from "@/lib/auth";
 import { readTheme } from "@/lib/theme";
 import { listProjects } from "@/lib/data/store";
 
@@ -21,33 +21,46 @@ async function signOutAction() {
 }
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, org, isAdmin } = await requireSession();
-  const projects = await listProjects(org.id);
+  // The layout tolerates a suspension so the two routes that survive one have a shell to render in;
+  // every page under it still calls `requireSession` and still bounces (spec 164). What changes here
+  // is only what gets *drawn* — a suspended founder handed the full sidebar would be looking at six
+  // links that all lead to the same refusal, plus a command palette listing projects they cannot open.
+  const { session, suspended } = await requireSessionEvenIfSuspended();
+  const { user, org, isAdmin } = session;
+  const projects = suspended ? [] : await listProjects(org.id);
   const theme = await readTheme();
 
   const projectNames = Object.fromEntries(projects.map((p) => [p.id, p.name]));
   // Resolved once and handed to both consumers, so the admin entry cannot appear in one and not the
   // other — the whole reason this is a function of the session rather than two lists (spec 150).
-  const nav = navItems({ isAdmin });
+  const nav = suspended ? SUSPENDED_ITEMS : navItems({ isAdmin });
 
-  const commands: CommandItem[] = [
-    ...nav.map((n) => ({ id: `nav-${n.href}`, label: n.label, href: n.href, group: "Go to" })),
-    { id: "action-new", label: "New project", href: "/app/projects/new", hint: "create", group: "Actions" },
-    {
-      id: "action-import",
-      label: "Import an existing project",
-      href: "/app/projects/import",
-      hint: "import",
-      group: "Actions"
-    },
-    ...projects.map((p) => ({
-      id: `project-${p.id}`,
-      label: p.name,
-      href: `/app/projects/${p.id}`,
-      hint: p.status,
-      group: "Projects"
-    }))
-  ];
+  const commands: CommandItem[] = suspended
+    ? []
+    : [
+        ...nav.map((n) => ({ id: `nav-${n.href}`, label: n.label, href: n.href, group: "Go to" })),
+        {
+          id: "action-new",
+          label: "New project",
+          href: "/app/projects/new",
+          hint: "create",
+          group: "Actions"
+        },
+        {
+          id: "action-import",
+          label: "Import an existing project",
+          href: "/app/projects/import",
+          hint: "import",
+          group: "Actions"
+        },
+        ...projects.map((p) => ({
+          id: `project-${p.id}`,
+          label: p.name,
+          href: `/app/projects/${p.id}`,
+          hint: p.status,
+          group: "Projects"
+        }))
+      ];
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -63,7 +76,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               projectNames={projectNames}
               themeSwitch={<ThemeSwitch current={theme} />}
               userMenu={
-                <UserMenu name={user.name} email={user.email} signOutAction={signOutAction} />
+                <UserMenu
+                  name={user.name}
+                  email={user.email}
+                  signOutAction={signOutAction}
+                  suspended={suspended}
+                />
               }
             />
             <main className="flex-1">{children}</main>
@@ -71,7 +89,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <ChatSlot />
         </RailProvider>
         <CommandPalette items={commands} />
-        <ClaimGuestDraft />
+        {/* Claiming a draft creates a project, which is a write — so it does not run for an account
+            that is not allowed to make any. The draft keeps until the suspension is lifted. */}
+        {suspended ? null : <ClaimGuestDraft />}
       </Toaster>
     </TooltipProvider>
   );

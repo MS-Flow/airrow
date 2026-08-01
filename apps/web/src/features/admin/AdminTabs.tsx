@@ -23,7 +23,10 @@ export function AdminTabs() {
   const pathname = usePathname();
 
   return (
-    <nav className="mt-6 flex items-center gap-1 overflow-x-auto border-b border-border">
+    // Wrapping rather than scrolling (spec 164): `overflow-x-auto` put a horizontal scrollbar across
+    // the tab names on every desktop that renders one, to scroll a row that is a few pixels too wide.
+    // Five short labels wrap onto a second line on a phone and cost nothing anywhere else.
+    <nav className="mt-6 flex flex-wrap items-center gap-1 border-b border-border">
       {TABS.map((tab) => {
         // Users lives at the bare route, so it can only match exactly — a `startsWith` would light it
         // up on every other tab as well.
