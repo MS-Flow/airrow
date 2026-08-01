@@ -24,6 +24,9 @@ eliminate it. Prefer clarity over cleverness: a reader should understand intent 
 
 The spec lifecycle is automated via slash commands (`/createspec → /clarify → /implement → /analyze`,
 plus `/pr-check` before a PR) governed by `.claude/spec-kit/constitution.md`. See `specs/README.md`.
+`/security` sits outside that loop: it reviews the whole repository for vulnerabilities, fixes only
+what changes nothing a user can see, asks before anything else, and writes `SECURITY_AUDIT.md` —
+gitignored, because it lists the holes that are still open (spec 157).
 
 ## After implementing anything
 Update the corresponding spec in `/specs` to reflect what was actually built — check off acceptance

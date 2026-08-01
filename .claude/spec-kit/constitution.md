@@ -34,10 +34,17 @@ Every feature, screen, and generated file is judged against these.
   documents to describe it. Its ceiling is narrower — it changes no code and deletes nothing. A
   foundation ships exactly one of the two, decided by where the project came from. Airrow's servers
   still never write application code, and ZIP delivery is still a complete foundation on its own.
+  **`/security` ships with every foundation, whatever its origin, and is the third command that may
+  touch code** — narrowly: it reviews the whole repository for vulnerabilities and fixes only what
+  changes nothing a user can see, proposing everything else and waiting for the founder's yes. It
+  installs nothing, sends nothing anywhere, attacks nothing, and rewrites no history; its report,
+  `SECURITY_AUDIT.md`, lists the holes still open and stays out of version control. Airrow runs it on
+  nobody's behalf — like the other two, it runs on the founder's machine, when they ask.
   (Amended by [spec 66](../../specs/66-start-command.md), which records the previous wording, extended
-  by [spec 91](../../specs/91-cleanup-command.md), and amended again by
+  by [spec 91](../../specs/91-cleanup-command.md), amended again by
   [spec 123](../../specs/123-foundation-starts-strong.md) — which records the "bare minimum that runs"
-  wording spec 66 introduced.)
+  wording spec 66 introduced — and extended by
+  [spec 157](../../specs/157-security-command.md), which added `/security`.)
 - **The output is the product.** Generated repos must read like a senior CTO wrote them for *this*
   project — never like a filled-in template. Generic output is a top-severity bug.
 - **Adaptive, never bureaucratic.** The interview asks only questions whose answers change the output.
