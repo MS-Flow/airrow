@@ -3,11 +3,19 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, LifeBuoy, Menu, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
+import {
+  LayoutGrid,
+  LifeBuoy,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings,
+  ShieldCheck
+} from "lucide-react";
 import { AirrowLogo } from "@/components/brand/logo";
 import { AirrowMark } from "@/components/brand/mark";
 import { Tooltip } from "@/components/ui/tooltip";
-import { NAV_ITEMS, type NavItem } from "./nav-items";
+import { type NavItem } from "./nav-items";
 import { useRail } from "./rail";
 import { useOverlay } from "@/lib/use-overlay";
 import { cn } from "@/lib/utils";
@@ -15,7 +23,8 @@ import { cn } from "@/lib/utils";
 const icons = {
   projects: LayoutGrid,
   settings: Settings,
-  support: LifeBuoy
+  support: LifeBuoy,
+  admin: ShieldCheck
 } as const;
 
 function isActive(pathname: string, href: string): boolean {
@@ -65,8 +74,12 @@ function NavLink({
  * mobile breakpoint it becomes a drawer opened from the top bar. Its width is published
  * as `--rail` by `RailProvider`, so the shell can decide what follows it and what stays
  * put.
+ *
+ * `items` is a prop rather than an import (spec 150): one entry depends on the session, and the
+ * layout is the server component that knows. Passing the resolved list keeps the sidebar and the
+ * command palette reading the same one.
  */
-export function Sidebar() {
+export function Sidebar({ items }: { items: NavItem[] }) {
   const { collapsed, toggle } = useRail();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const closeDrawer = React.useCallback(() => setDrawerOpen(false), []);
@@ -138,7 +151,7 @@ export function Sidebar() {
         </div>
 
         <nav className="flex-1 space-y-1 px-3 pt-2">
-          {NAV_ITEMS.map((item) => (
+          {items.map((item) => (
             <NavLink key={item.href} item={item} collapsed={collapsed} onNavigate={closeDrawer} />
           ))}
         </nav>
