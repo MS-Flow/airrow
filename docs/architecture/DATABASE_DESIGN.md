@@ -137,7 +137,31 @@ project_reviews                             -- the founder's verdict on a founda
   body text
   consent_public boolean                    -- the founder's permission
   display_name text                         -- the byline they chose, never their address
-  published_at timestamptz null             -- ours; nothing in the app ever writes it
+  published_at timestamptz null             -- ours to set (admin console, spec 150); cleared on withdrawal
+
+generation_credits                          -- a generation handed back by support (spec 150)
+  id uuid pk
+  organization_id uuid → organizations
+  reason text                               -- free text: the reasons are not a taxonomy we can predict
+  granted_by uuid → profiles on delete set null   -- the founder keeps it if the grantor leaves
+  granted_at timestamptz
+  consumed_at timestamptz null              -- one row *is* one generation; there is no amount column
+
+admin_audit_log                             -- every operator action (spec 150)
+  id uuid pk
+  actor_id uuid → profiles on delete set null
+  action text check in ('user.suspend','user.reactivate','credits.grant',
+                        'ticket.close','ticket.reopen','review.publish','review.unpublish')
+  subject_type text check in ('user','organization','ticket','review')
+  subject_id uuid                           -- loose pair, not five nullable FKs; nothing joins on it
+  reason text
+
+profiles.suspended_at timestamptz null      -- read by getSession, so an open session dies (spec 150)
+
+admin_user_accounts (view)                  -- six auth.users columns the console shows (spec 150)
+admin_daily_series() · admin_totals() · admin_standing() · admin_project_status_counts()
+admin_interview_progress() · admin_ticket_categories() · admin_review_distribution()
+                                            -- aggregates, service_role only; execute revoked from public
 ```
 
 ## RLS pattern
@@ -153,6 +177,16 @@ So the plan is protected by **column-level privilege** instead: spec 74's migrat
 Read this as the general rule it implies: when a column decides what someone is *entitled to*, membership of the row is not sufficient authorization, and RLS is not the tool. Two denial tests in `schema.rls.test.ts` hold the line — one for a member's own organization, one for someone else's.
 
 `subscriptions` follows the same rule at table scope: members may `select` it and nothing more, because `status = 'active'` is an entitlement too. `stripe_events` goes further and has **RLS enabled with no policy at all** — the deny-everything shape `admin_emails` uses. It is the webhook's own bookkeeping, and there is no query a founder should be making against it.
+
+### `profiles` was the same bug, and had been since the beginning
+
+Spec 150 found `is_admin` sitting in exactly the position the plan column had been in, and losing the same argument. `20260725100000_schema.sql` granted `authenticated` table-wide `insert, update, delete` on `profiles` under the policy `own profile … using (id = auth.uid())` — a policy that is *correct*: the row genuinely is theirs. But the privilege is table-wide, so every column on it was theirs to write, and `update public.profiles set is_admin = true where id = auth.uid()` succeeded against PostgREST with an ordinary login. Until the admin console it bought an unlimited generation allowance; after it, it would have bought every other workspace's interview answers, and it would have let a suspended account clear its own `suspended_at`.
+
+The fix is spec 74's, applied to the same shape: `20260801130000_admin_console.sql` revokes `insert, update, delete` from `authenticated` and grants back `update (display_name, avatar_url)` — the two columns a founder legitimately owns. Row policies are unchanged, and every profile write in the app already went through the service-role DataStore, so nothing in the product noticed. Three denial tests in `admin.db.test.ts` hold the line: the escalation, the self-un-suspension, and the rename that must keep working.
+
+The general rule from the plan column now has a second instance and a sharper edge: **a column that decides authorization is never protected by a policy about the row.** RLS answers "whose row is this"; it cannot answer "which columns of their own row may they write".
+
+`generation_credits` and `admin_audit_log` go one step past `stripe_events`: RLS enabled, **no policy, and no grant to `authenticated` at all**. A founder who can insert a credit has granted themselves a generation, and no policy phrased as "your own organization" would stop them — their own organization is precisely the one they would grant it to. The statistics functions and `admin_user_accounts` are the same posture in function form: Postgres grants `execute` to `public` by default, so each one is explicitly revoked and granted to `service_role` alone.
 
 `support_tickets` and `project_reviews` are select-only for `authenticated` for the same family of reasons (spec 144). A ticket inserted from a browser console would skip the rate limit and the session the server action resolves the organization from; and `published_at` sits on a review row that genuinely belongs to the founder, so "may edit my own review" and "may publish my own testimonial" would be the same privilege. Writes go through the service-role path only, and the denial tests in `support.db.test.ts` say so.
 

@@ -69,3 +69,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | A way to reach us, and a way to say what it was worth | [144-support-review.md](144-support-review.md) | ✅ Done |
 | A chat on the landing page that answers, and leads on | [141-landing-chat.md](141-landing-chat.md) | ✅ Done |
 | Measuring visits without asking for anything | [153-cookie-consent.md](153-cookie-consent.md) | ✅ Done |
+| The operator's console: who they are, what they built, where they stopped | [150-admin-console.md](150-admin-console.md) | ✅ Done |
