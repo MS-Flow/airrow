@@ -7,13 +7,14 @@ import userEvent from "@testing-library/user-event";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/app" }));
 
+import { navItems } from "./nav-items";
 import { RailProvider } from "./rail";
 import { Sidebar } from "./sidebar";
 
 function renderSidebar() {
   return render(
     <RailProvider>
-      <Sidebar />
+      <Sidebar items={navItems({ isAdmin: false })} />
     </RailProvider>
   );
 }
