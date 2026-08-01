@@ -7,7 +7,8 @@
 import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import { FREE_GENERATION_LIMIT, REPAIR_WINDOW_HOURS } from "@/features/generation/limits";
-import { INCLUDED, SECTIONS, STEPS } from "@/features/landing/copy";
+import { INCLUDED, SECTIONS, STEPS, WHY_SDD } from "@/features/landing/copy";
+import { ARCHER } from "./copy";
 import { FAQ, SUGGESTED_QUESTIONS } from "./faq";
 import { buildKnowledge } from "./knowledge";
 
@@ -68,6 +69,31 @@ describe("what the landing chat knows", () => {
     expect(cost?.answer).toContain(SECTIONS.pricing.free.note);
   });
 
+  it("can make the case for spec-driven development in the page's own words", () => {
+    // Archer is asked to argue for this, not just describe it (spec 158) — so the argument has to be
+    // in the knowledge. Derived from `copy.ts` like everything else, which is what keeps a
+    // persuasive answer from becoming a claim nobody reviewed.
+    const knowledge = buildKnowledge();
+
+    for (const reason of WHY_SDD) expect(knowledge).toContain(reason);
+    expect(knowledge).toContain(SECTIONS.specDriven.loopNote);
+  });
+
+  it("introduces itself by the name on the panel, not a second one", () => {
+    // The name is imported from `copy.ts` rather than written twice, so "who are you?" cannot be
+    // answered with something other than the label two inches above the answer (spec 158).
+    expect(buildKnowledge()).toContain(ARCHER);
+  });
+
+  it("says a person is reachable, and that it takes signing in", () => {
+    const knowledge = buildKnowledge();
+
+    // Both halves matter. The first is the hand-off existing at all; the second is why a visitor
+    // does not experience it as a broken link — support lives inside the app (spec 144).
+    expect(knowledge).toMatch(/support page/i);
+    expect(knowledge).toMatch(/signing in/i);
+  });
+
   it("stays out of the browser bundle", () => {
     // The panel is a client component, so whatever it imports is shipped to every visitor. It may
     // have the four answers it renders and must not have the document written for the model — this
@@ -77,5 +103,18 @@ describe("what the landing chat knows", () => {
     expect(widget).toContain('from "./faq"');
     expect(widget).not.toMatch(/from "\.\/knowledge"/);
     expect(widget).not.toMatch(/from "\.\/provider"/);
+  });
+
+  it("stays out of the bundle from the mount point too", () => {
+    // The panel moved behind a layout in spec 158, which is a second door into the same client
+    // boundary: the layout renders the widget, so an import here would ship just as far.
+    const layout = readFileSync(
+      new URL("../../app/(public)/layout.tsx", import.meta.url),
+      "utf8"
+    );
+
+    expect(layout).toContain("ChatWidget");
+    expect(layout).not.toMatch(/chat\/knowledge/);
+    expect(layout).not.toMatch(/chat\/provider/);
   });
 });

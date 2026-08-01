@@ -10,8 +10,8 @@ order that works: get the foundation working, then connect the accounts, then st
 ### How the commands work
 
 Everything written as `/something` in this guide — `{{FIRST_COMMAND}}`, `/createspec`, `/clarify`,
-`/implement`, `/analyze`, `/push`, `/pr-check` — is a file in [`.claude/commands/`](.claude/commands),
-not a program on your machine.
+`/implement`, `/analyze`, `/push`, `/pr-check`, `/security` — is a file in
+[`.claude/commands/`](.claude/commands), not a program on your machine.
 Claude Code is what this foundation is built for.
 
 - Type the command as an ordinary message, e.g. `/createspec "add sign-in"`.
@@ -116,6 +116,12 @@ Anything you have not decided is left as a `[NEEDS CLARIFICATION]` marker rather
 That is the whole workflow, and it is the same six steps whether you are adding a button or a billing
 system. Repeat it per change and the documentation stays true as the codebase grows — which is the
 only reason an assistant is still useful to you in month six.
+
+**Outside the loop: `/security`.** It reads the whole project, fixes the security holes that can be
+closed without changing anything you would notice, asks before anything that would, and writes
+`SECURITY_AUDIT.md` — what it fixed, what it found, and what is still open. That file is gitignored on
+purpose: it is a list of the ways in that are still there, and it belongs on your machine, not in your
+repository. Run it whenever something new is exposed to the internet — and before you launch.
 
 ## 6. When something is unclear
 

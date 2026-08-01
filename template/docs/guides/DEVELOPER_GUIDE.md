@@ -27,6 +27,8 @@ one before it.
 
 ## Workflow
 Spec-driven, via slash commands: `/createspec → /clarify → /implement → /analyze`, with `/push` and
-`/pr-check` around the PR. Governed by
+`/pr-check` around the PR, and `/security` outside the loop — it reviews the whole repository for
+vulnerabilities, fixes only what nobody can see, and writes the gitignored `SECURITY_AUDIT.md`.
+Governed by
 [`../../.claude/spec-kit/constitution.md`](../../.claude/spec-kit/constitution.md). Branch + PR
 direction: see [`../architecture/BRANCHING.md`](../architecture/BRANCHING.md).

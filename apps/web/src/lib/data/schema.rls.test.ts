@@ -275,4 +275,73 @@ describe.skipIf(!dbUp)("full schema RLS (local Supabase)", () => {
     );
     expect(res.rows[0]?.plan).toBe("free");
   });
+
+  /* ── The allowance ledger (spec 157, finding H1) ──────────────────────────
+   *
+   * Reading usage is scoped by the cases above; what these assert is that it cannot be *written* from
+   * a browser. Both tables used to carry a blanket `insert, update, delete` for the API role, and the
+   * ledger's policy is `for all using (is_org_member(...))` — so a founder could empty their own
+   * organization's rows, or mark the jobs behind them `failed`, and hand themselves an unlimited free
+   * plan. `20260801140000_lock_generation_ledger.sql` revoked the writes; these are what say so.
+   */
+  it("generation_usage: a member cannot delete their own allowance ledger", async () => {
+    await expect(
+      asUser(USER_A, () =>
+        db.query("delete from public.generation_usage where organization_id = $1", [ORG_A])
+      )
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it("generation_usage: a member cannot write a ledger row either", async () => {
+    await expect(
+      asUser(USER_A, () =>
+        db.query("insert into public.generation_usage (organization_id, project_id) values ($1,$2)", [
+          ORG_A,
+          PROJECT_A
+        ])
+      )
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it("generation_jobs: a member cannot mark their own job failed to uncharge it", async () => {
+    // The second route to the same free plan: `chargedUsage` skips `failed` and `reused_authoring`
+    // jobs, so editing the job is editing the ledger by other means.
+    await expect(
+      asUser(USER_A, () =>
+        db.query("update public.generation_jobs set status = 'failed' where id = $1", [JOB_A])
+      )
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it("generation_usage: reading it is still allowed, so the screens that report usage keep working", async () => {
+    const seen = await asUser(USER_A, async () => {
+      const res = await db.query<{ id: string }>("select id from public.generation_usage");
+      return res.rows.map((r) => r.id);
+    });
+    expect(seen).toContain(USAGE_A);
+    expect(seen).not.toContain(USAGE_B);
+  });
+
+  /* ── Admin accounts (20260727180000_admin_colleague.sql) ──────────────────
+   *
+   * The last table in the schema without a denial test, which §II allows for no table — least of all
+   * this one. It is the list the signup trigger consults to decide who gets `is_admin`, and `is_admin`
+   * is an unlimited generation allowance. Two properties, neither obvious from the migration alone:
+   * the table carries no grant to the API role and no policy, so a founder can neither read who the
+   * admins are nor add themselves. Both are the absence of something, and an absence is exactly what a
+   * later migration restores by accident.
+   */
+  it("admin_emails: nobody can read who the admins are", async () => {
+    await expect(
+      asUser(USER_A, () => db.query("select email from public.admin_emails"))
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it("admin_emails: nobody can add themselves to it", async () => {
+    await expect(
+      asUser(USER_B, () =>
+        db.query("insert into public.admin_emails (email) values ($1)", ["attacker@example.com"])
+      )
+    ).rejects.toThrow(/permission denied/i);
+  });
 });
