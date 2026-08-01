@@ -5,7 +5,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { CHAT } from "./copy";
+import { SUPPORT_PATH } from "@/features/support/route";
+import { ARCHER, CHAT } from "./copy";
 import { FAQ, type FaqEntry } from "./faq";
 import { ChatWidget } from "./ChatWidget";
 
@@ -66,11 +67,64 @@ describe("ChatWidget", () => {
     await open();
     await userEvent.click(screen.getByRole("button", { name: faq(0).question }));
 
-    expect(
-      await screen.findByText("<img src=x onerror=alert(1)> and <b>bold</b>")
-    ).toBeInTheDocument();
-    expect(document.querySelector("img")).toBeNull();
-    expect(document.querySelector("b")).toBeNull();
+    // Scoped to the answer rather than the document: the panel has one legitimate `img` of its own
+    // now, Archer's avatar (spec 158). What must stay true is that nothing the *model* sent became
+    // an element — hence both the check inside the answer and the one for its own `src`.
+    const answer = await screen.findByText("<img src=x onerror=alert(1)> and <b>bold</b>");
+    expect(answer.querySelector("img")).toBeNull();
+    expect(answer.querySelector("b")).toBeNull();
+    expect(document.querySelector('img[src="x"]')).toBeNull();
+  });
+
+  it("introduces itself by name, with a face", async () => {
+    render(<ChatWidget ctaHref="/start" />);
+    await open();
+
+    expect(screen.getByRole("dialog", { name: ARCHER })).toBeInTheDocument();
+    // The avatar is the panel's own asset, not something an answer supplied.
+    expect(screen.getAllByAltText(CHAT.avatarAlt).length).toBeGreaterThan(0);
+  });
+
+  it("offers the support page, and says the sign-in step before the link, when asked for a person", async () => {
+    replyWith({ status: "answered", text: "That one needs a person.", support: true });
+    render(<ChatWidget ctaHref="/start" />);
+    await open();
+
+    await userEvent.type(screen.getByRole("textbox"), "can I talk to someone?");
+    await userEvent.click(screen.getByRole("button", { name: CHAT.send }));
+
+    expect(await screen.findByText(CHAT.supportNote)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: CHAT.supportAction })).toHaveAttribute(
+      "href",
+      SUPPORT_PATH
+    );
+    // Still a conversation: the hand-off is an offer, not the end of the thread.
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
+  });
+
+  it("keeps the hand-off out of the way of an answer that worked", async () => {
+    replyWith({ status: "answered", text: "Five minutes.", support: false });
+    render(<ChatWidget ctaHref="/start" />);
+    await open();
+    await userEvent.click(screen.getByRole("button", { name: faq(3).question }));
+
+    await screen.findByText("Five minutes.");
+    expect(screen.queryByText(CHAT.supportNote)).not.toBeInTheDocument();
+  });
+
+  it("shows the way to a person even when it has stopped answering", async () => {
+    // The fallback states are exactly when someone needs the human behind the panel, and the model
+    // is not there to ask for one on their behalf (spec 158).
+    replyWith({ status: "unavailable" });
+    render(<ChatWidget ctaHref="/start" />);
+    await open();
+    await userEvent.click(screen.getByRole("button", { name: faq(0).question }));
+
+    expect(await screen.findByText(CHAT.supportNote)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: CHAT.supportAction })).toHaveAttribute(
+      "href",
+      SUPPORT_PATH
+    );
   });
 
   it("shows the handwritten answers and the call to action when the model is unreachable", async () => {

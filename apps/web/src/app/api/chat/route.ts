@@ -6,9 +6,16 @@
 //
 // Thin, like every route (§I): it validates the request, decides whether an answer may be spent, and
 // hands the thread to the one place that talks to Claude. Nothing about the conversation is stored,
-// and nothing about it is logged — not the question, not the answer (§II).
+// and nothing about it is logged — not the question, not the answer (§II). What *is* logged, since
+// spec 151, is why an answer could not be produced: a cause from a closed set, never content.
 import { NextResponse } from "next/server";
 import { chatRequestSchema, type ChatReply } from "@/features/chat/contract";
+import {
+  diagnosticHeaders,
+  reportChatUnavailable,
+  UNAVAILABLE_REPLY,
+  type ChatUnavailableReason
+} from "@/features/chat/diagnostics";
 import { MAX_THREAD_TURNS } from "@/features/chat/limits";
 import { answerQuestion, chatConfigured } from "@/features/chat/provider";
 import { claimChatAnswer, releaseChatAnswer, visitorKey } from "@/lib/data/chat-limits";
@@ -33,10 +40,21 @@ function reply(body: ChatReply, status = 200): NextResponse {
   return NextResponse.json(body, { status });
 }
 
+/**
+ * The same `unavailable` body a visitor has always got, plus the cause where only an operator can
+ * see it: the log, and — outside production — a response header (spec 151).
+ */
+function unavailableReply(reason: ChatUnavailableReason): NextResponse {
+  return NextResponse.json(UNAVAILABLE_REPLY, { status: 200, headers: diagnosticHeaders(reason) });
+}
+
 export async function POST(req: Request): Promise<NextResponse> {
   // Asked before anything is parsed or claimed: an unconfigured deployment should cost a visitor
   // nothing and tell the panel to show its handwritten answers.
-  if (!chatConfigured()) return reply({ status: "unavailable" });
+  if (!chatConfigured()) {
+    reportChatUnavailable("no-api-key");
+    return unavailableReply("no-api-key");
+  }
 
   let body: unknown;
   try {
@@ -60,7 +78,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const key = visitorKey(callerAddress(req));
   const claim = await claimChatAnswer(key);
   if (!claim.allowed) {
-    if (claim.reason === "unavailable") return reply({ status: "unavailable" });
+    if (claim.reason === "unavailable") return unavailableReply(claim.cause);
     return reply({ status: "limited", scope: claim.reason });
   }
 
@@ -71,9 +89,9 @@ export async function POST(req: Request): Promise<NextResponse> {
   // the day having been told nothing.
   if (outcome.status === "unavailable") {
     await releaseChatAnswer(key);
-    return reply({ status: "unavailable" });
+    return unavailableReply(outcome.reason);
   }
 
   if (outcome.status === "off_topic") return reply({ status: "off_topic" });
-  return reply({ status: "answered", text: outcome.text });
+  return reply({ status: "answered", text: outcome.text, support: outcome.support });
 }

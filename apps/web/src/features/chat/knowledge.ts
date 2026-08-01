@@ -22,6 +22,7 @@ import {
   STEPS,
   WHY_SDD
 } from "@/features/landing/copy";
+import { ARCHER } from "./copy";
 
 /**
  * The things the landing page does not put in words, and a visitor asks anyway.
@@ -31,6 +32,10 @@ import {
  * an answer that hedges reads as a yes.
  */
 const BEYOND_THE_PAGE = [
+  // Support arrived after the chat did (spec 144, wired in by spec 158). The login step is part of
+  // the fact, not a footnote to it: support lives inside the app, and the visitor has to hear that
+  // *before* they follow the link rather than discover it on the sign-in screen.
+  "Airrow has a support page where a real person answers. It lives inside the app, so reaching it means signing in first — say so when you point someone at it.",
   "Airrow's servers never write your application code. They write the foundation: architecture, specifications, standards, workflow, CI and the context files an AI agent reads. That boundary is deliberate and it does not have exceptions on our side.",
   "The one command that does write code runs on the founder's own machine, inside the repository they downloaded, and only when they run it. For a new project it is /start, which sets the project up until it runs and then builds the product's core action, once. For a project that already exists it is /cleanup, which reads the code that is there and rewrites the foundation's documents to match; it changes no code and deletes nothing. A foundation ships exactly one of the two, decided by where the project came from.",
   "The interview takes about five minutes. It only asks questions whose answers change the output.",
@@ -40,6 +45,18 @@ const BEYOND_THE_PAGE = [
   "Interview answers and generated documents belong to the founder, are reachable only by their own workspace, and are never used as training data.",
   "Importing an existing project is a Pro feature. The free tier is about starting something new.",
   "Airrow is built with Airrow: this product's own repository runs the same specs, the same constitution and the same loop it generates."
+] as const;
+
+/**
+ * Who the visitor is talking to (spec 158).
+ *
+ * The name is imported from `copy.ts` rather than written again here, because the panel prints it on
+ * the header two inches above the answer: a bot that introduces itself as something else than the
+ * label on its own window is the one identity bug a visitor is guaranteed to notice.
+ */
+const IDENTITY = [
+  `Your name is ${ARCHER}.`,
+  "You are Airrow's assistant — software, not a person. If anyone asks who or what they are talking to, say that plainly. Never claim to be a member of the team, and never imply a human is reading."
 ] as const;
 
 /** Turns a list of strings into the bullet block the prompt is assembled from. */
@@ -55,6 +72,7 @@ function bullets(lines: readonly string[]): string {
  */
 export function buildKnowledge(): string {
   return [
+    `WHO YOU ARE\n${bullets(IDENTITY)}`,
     `WHAT AIRROW IS\n${HERO.leadBrand}${HERO.leadRest}`,
     `HOW IT WORKS\n${bullets(STEPS.map((s) => `${s.title}: ${s.body}`))}`,
     `WHAT A FOUNDATION CONTAINS\n${bullets(DELIVERABLES.map((d) => `${d.title}: ${d.body}`))}`,

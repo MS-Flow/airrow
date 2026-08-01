@@ -38,14 +38,31 @@ describe("POST /api/chat", () => {
   });
 
   it("answers a well-formed question", async () => {
-    answerQuestion.mockResolvedValue({ status: "answered", text: "Free for one foundation." });
+    answerQuestion.mockResolvedValue({
+      status: "answered",
+      text: "Free for one foundation.",
+      support: false
+    });
 
     const response = await post(oneQuestion);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       status: "answered",
-      text: "Free for one foundation."
+      text: "Free for one foundation.",
+      support: false
+    });
+  });
+
+  it("carries the hand-off to a person through to the panel", async () => {
+    // The route forwards the flag and never a URL: where the visitor is sent is decided in the
+    // panel, so nothing the model produced can point it somewhere else (spec 158).
+    answerQuestion.mockResolvedValue({ status: "answered", text: "Ask support.", support: true });
+
+    await expect((await post(oneQuestion)).json()).resolves.toEqual({
+      status: "answered",
+      text: "Ask support.",
+      support: true
     });
   });
 
@@ -70,7 +87,7 @@ describe("POST /api/chat", () => {
   });
 
   it("gives the answer back when the model produced nothing", async () => {
-    answerQuestion.mockResolvedValue({ status: "unavailable" });
+    answerQuestion.mockResolvedValue({ status: "unavailable", reason: "model-call-failed" });
 
     const response = await post(oneQuestion);
 
@@ -133,11 +150,54 @@ describe("POST /api/chat", () => {
     expect(visitorKey).toHaveBeenCalledWith("198.51.100.9");
   });
 
+  it("tells an operator why, without telling the visitor (spec 151)", async () => {
+    process.env.VERCEL_ENV = "preview";
+    chatConfigured.mockReturnValue(false);
+
+    const response = await post(oneQuestion);
+
+    // The body is what it always was; the cause rides a header that production never sets.
+    await expect(response.json()).resolves.toEqual({ status: "unavailable" });
+    expect(response.headers.get("x-airrow-chat-reason")).toBe("no-api-key");
+
+    delete process.env.VERCEL_ENV;
+  });
+
+  it("says nothing about its configuration in production", async () => {
+    process.env.VERCEL_ENV = "production";
+    chatConfigured.mockReturnValue(false);
+
+    const response = await post(oneQuestion);
+
+    await expect(response.json()).resolves.toEqual({ status: "unavailable" });
+    expect(response.headers.get("x-airrow-chat-reason")).toBeNull();
+
+    delete process.env.VERCEL_ENV;
+  });
+
+  it("carries the cause through from wherever it was discovered", async () => {
+    process.env.VERCEL_ENV = "preview";
+    answerQuestion.mockResolvedValue({ status: "unavailable", reason: "model-call-failed" });
+
+    const fromModel = await post(oneQuestion);
+    expect(fromModel.headers.get("x-airrow-chat-reason")).toBe("model-call-failed");
+
+    claimChatAnswer.mockResolvedValue({
+      allowed: false,
+      reason: "unavailable",
+      cause: "limit-store-unreachable"
+    });
+    const fromStore = await post(oneQuestion);
+    expect(fromStore.headers.get("x-airrow-chat-reason")).toBe("limit-store-unreachable");
+
+    delete process.env.VERCEL_ENV;
+  });
+
   it("cannot be answered by a request with no address at all", async () => {
     // `visitorKey` returns null, `claimChatAnswer` refuses it, and the panel falls back — an
     // unidentifiable caller is never served an unlimited chat.
     visitorKey.mockReturnValue(null);
-    claimChatAnswer.mockResolvedValue({ allowed: false, reason: "unavailable" });
+    claimChatAnswer.mockResolvedValue({ allowed: false, reason: "unavailable", cause: "limit-store-unreachable" });
 
     await expect((await post(oneQuestion, {})).json()).resolves.toEqual({ status: "unavailable" });
     expect(answerQuestion).not.toHaveBeenCalled();
