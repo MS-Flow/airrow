@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const requireSession = vi.hoisted(() => vi.fn());
+const requireSessionEvenIfSuspended = vi.hoisted(() => vi.fn());
 const getProject = vi.hoisted(() => vi.fn());
 const createTicket = vi.hoisted(() => vi.fn());
 const countRecentTickets = vi.hoisted(() => vi.fn());
@@ -19,7 +20,7 @@ const redirect = vi.hoisted(() =>
   })
 );
 
-vi.mock("@/lib/auth", () => ({ requireSession }));
+vi.mock("@/lib/auth", () => ({ requireSession, requireSessionEvenIfSuspended }));
 vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/data/store", () => ({ getProject }));
@@ -65,12 +66,17 @@ function reviewForm(overrides: Record<string, string> = {}): FormData {
   return form;
 }
 
+const SESSION = {
+  user: { id: "u1", email: "f@example.com", name: "Founder", createdAt: "2026-01-01T00:00:00.000Z" },
+  org: { id: "org1", name: "Workspace", kind: "personal", createdBy: "u1", plan: "free" }
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
-  requireSession.mockResolvedValue({
-    user: { id: "u1", email: "f@example.com", name: "Founder", createdAt: "2026-01-01T00:00:00.000Z" },
-    org: { id: "org1", name: "Workspace", kind: "personal", createdBy: "u1", plan: "free" }
-  });
+  requireSession.mockResolvedValue(SESSION);
+  // A ticket is the one write a suspended account may still make (spec 164), so this action reads its
+  // session through the helper that tolerates one.
+  requireSessionEvenIfSuspended.mockResolvedValue({ session: SESSION, suspended: false });
   getProject.mockResolvedValue(READY_PROJECT);
   countRecentTickets.mockResolvedValue(0);
   createTicket.mockResolvedValue({
@@ -140,6 +146,23 @@ describe("submitTicketAction", () => {
 
     expect(createTicket).not.toHaveBeenCalled();
     expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it("takes a suspended founder's ticket — asking to come back is the point (spec 164)", async () => {
+    requireSessionEvenIfSuspended.mockResolvedValue({ session: SESSION, suspended: true });
+
+    expect(await landedOn(submitTicketAction(ticketForm()))).toBe("/app/support?sent=t1");
+    expect(createTicket).toHaveBeenCalled();
+  });
+
+  it("rate-limits a suspended founder exactly like anyone else", async () => {
+    // Two different refusals, and conflating them would tell someone their account is suspended when
+    // what actually happened is that they wrote six tickets today.
+    requireSessionEvenIfSuspended.mockResolvedValue({ session: SESSION, suspended: true });
+    countRecentTickets.mockResolvedValue(5);
+
+    expect(await landedOn(submitTicketAction(ticketForm()))).toBe("/app/support?error=limit");
+    expect(createTicket).not.toHaveBeenCalled();
   });
 
   it("attaches a project only after checking it belongs to this workspace", async () => {

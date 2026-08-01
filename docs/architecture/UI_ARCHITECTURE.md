@@ -107,11 +107,17 @@ failure teaches founders to dismiss both. Below ~24px the mark drops the gradien
 /app/projects/[id]/import          Import review: what was derived, and conflicts to decide (spec 63)
 /app/projects/[id]/continue        "Continue locally" handoff
 /app/settings                      Profile, plan & billing, theme, workspace, connections
-/app/support                       Write to us — a ticket that reaches a real inbox (spec 144)
+/app/support                       Write to us — a ticket that reaches a real inbox (spec 144).
+                                   The one /app route a suspended account still reaches (spec 164)
+/app/suspended                     Where a suspended account lands: says so, links to support, names
+                                   no reason — the note is ours and lives in admin_audit_log (spec 164)
 /app/upgrade                       What Pro gives, and the way to buy it (specs 99, 100)
 /app/upgrade/return                Where Checkout returns: reconciles with Stripe, then Settings (spec 100)
-/app/admin                         Operator console — users (spec 150). Admin only; 404s everyone else
-/app/admin/projects                Every project, its origin, and its interview read back question by question
+/app/admin                         Operator console — users (spec 150). Admin only; 404s everyone else.
+                                   Plan in words with its end date and where Pro came from; give and
+                                   take Pro; suspend (never another admin) (spec 164)
+/app/admin/projects                Every project, its origin, its interview read back question by
+                                   question, and the files we delivered (spec 164)
 /app/admin/tickets                 Every support ticket; open ↔ closed (finishes spec 144's status column)
 /app/admin/reviews                 The publication queue — the only screen that sets published_at
 /app/admin/stats                   Signups, activation, where founders stop, invites, Pro — all from Postgres
