@@ -240,6 +240,101 @@ export async function signIn(email: string, password: string): Promise<SignInRes
 }
 
 /**
+ * Mail a password-reset link (spec 171).
+ *
+ * **Answers `void`, and that is the security property.** Supabase already refuses to say whether an
+ * address is registered; this signature makes it impossible for a caller to accidentally undo that by
+ * branching on an outcome. A genuine failure — a rate limit, an unreachable auth server — is logged for
+ * us and looks to the founder exactly like a link that is on its way, because the alternative is a form
+ * that answers differently for addresses that exist.
+ *
+ * `redirectTo` is derived per request like `signUp`'s `emailRedirectTo`, for the same reason: one
+ * Supabase project serves dev and production, so its Site URL cannot answer for both (spec 113).
+ */
+export async function sendPasswordReset(email: string, redirectTo: string): Promise<void> {
+  const supabase = await supabaseServer();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+  // The address is deliberately absent from the log line: a log that pairs an address with "no account"
+  // is the same oracle, written down.
+  if (error) console.error("[auth] password reset mail failed:", error.message);
+}
+
+/**
+ * Is the current password the one this account actually has?
+ *
+ * `signInWithPassword` against the founder's own address, which is the only way to ask Supabase this
+ * question. It reissues a session for the same user, so the cookie rotates and nothing else changes —
+ * a wrong answer leaves the existing session untouched.
+ */
+export async function verifyPassword(email: string, password: string): Promise<boolean> {
+  const supabase = await supabaseServer();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  return !error;
+}
+
+/**
+ * Does this account have a password at all?
+ *
+ * Supabase records one identity per way in, and the `email` provider is the one a password belongs to.
+ * A founder who has only ever pressed "Sign in with GitHub" has no `email` identity, and asking them
+ * for a current password would be asking for something that does not exist.
+ */
+export async function hasPassword(): Promise<boolean> {
+  const supabase = await supabaseServer();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  return Boolean(user?.identities?.some((i) => i.provider === "email"));
+}
+
+/**
+ * Replace the current password, then end every *other* session.
+ *
+ * The revoke is the point of a reset: a password is usually changed because someone else may know it,
+ * and leaving their session alive would make the change decorative. `scope: "others"` keeps the founder
+ * signed in on the device they are standing at, which is where they just did the work.
+ */
+export async function updatePassword(password: string): Promise<{ ok: true } | { ok: false; message: string }> {
+  const supabase = await supabaseServer();
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { ok: false, message: error.message };
+  await supabase.auth.signOut({ scope: "others" });
+  return { ok: true };
+}
+
+/** Why a login address could not be moved (spec 171) — a reason we own, never the provider's wording. */
+export type EmailChangeFailure =
+  /** The address belongs to another account. The one case where there is nothing to retry. */
+  | "taken"
+  /** Supabase is refusing further mail for now. Temporary, and nobody's fault. */
+  | "rate-limited"
+  | "unknown";
+
+export type EmailChangeResult = { status: "confirm-sent" } | { status: "error"; reason: EmailChangeFailure };
+
+/**
+ * Start moving the login address (spec 171).
+ *
+ * Nothing changes here. Supabase mails the new address a link, and the address moves when that link is
+ * clicked — which is why the result is named `confirm-sent` rather than `ok`: a screen that says "email
+ * updated" at this point would have a founder sign out and discover neither address works.
+ *
+ * The classification reuses `signUpFailure`'s vocabulary for the failure both flows share — a rate
+ * limit — and adds the one only this flow has.
+ */
+export async function changeEmail(email: string, emailRedirectTo: string): Promise<EmailChangeResult> {
+  const supabase = await supabaseServer();
+  const { error } = await supabase.auth.updateUser({ email }, { emailRedirectTo });
+  if (!error) return { status: "confirm-sent" };
+  if (signUpFailure(error) === "rate-limited") return { status: "error", reason: "rate-limited" };
+  const taken =
+    error.code === "email_exists" ||
+    error.code === "email_address_not_authorized" ||
+    /already (been )?(registered|taken|in use)|already exists/i.test(error.message);
+  return { status: "error", reason: taken ? "taken" : "unknown" };
+}
+
+/**
  * Start the GitHub OAuth flow (spec 67). Returns the URL to send the browser to, rather than
  * redirecting here, so the caller owns the navigation.
  *
