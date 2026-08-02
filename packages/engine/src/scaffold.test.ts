@@ -337,6 +337,48 @@ describe("the generated stack is stated consistently", () => {
     expect(vite.byPath.get(".github/workflows/deploy-dev.yml")).toContain("npx vercel@latest");
   });
 
+  // A founder's first message in a generated repository used to be "what do I do now?" — CLAUDE.md
+  // is what the assistant reads before answering it, so the answer belongs there (spec 159).
+  it("opens CLAUDE.md with the six things to type, in order", () => {
+    const claude = render().byPath.get("CLAUDE.md") ?? "";
+    expect(claude).toContain("## Starting a chat here");
+    const order = ["/start", "START_HERE.md", "/createspec", "/clarify", "/implement", "/analyze"];
+    let at = claude.indexOf("## Starting a chat here");
+    for (const step of order) {
+      const next = claude.indexOf(step, at);
+      expect(next, `CLAUDE.md's first-session table is missing "${step}" in order`).toBeGreaterThan(at);
+      at = next;
+    }
+    // The command deletes itself, so the row has to be conditional rather than a standing promise.
+    expect(claude).toContain(".claude/commands/start.md` still exists");
+    expect(claude).toContain("Installs the tools, scaffolds the stack");
+  });
+
+  // Knowing what /implement did is not knowing what to type next, and the one step nobody can guess
+  // is the one outside the terminal: a pushed branch does not merge itself (spec 159).
+  it("tells the assistant what to say after each command, merge included", () => {
+    const claude = render().byPath.get("CLAUDE.md") ?? "";
+    expect(claude).toContain("## After a command finishes");
+    for (const command of ["/createspec", "/clarify", "/implement", "/analyze", "/push", "/pr-check"]) {
+      expect(claude, `no next step after ${command}`).toContain(`| \`${command}\` |`);
+    }
+    expect(claude).toContain("**Squash and merge**");
+    expect(claude).toContain("`feature/<name>` → `develop` → `main`");
+    // After /start the next move is the founder's accounts, named — or the first spec.
+    expect(claude).toContain("the Supabase and Vercel accounts only they can create");
+    // And a command that failed gets no cheerful pointer at the step after it.
+    expect(claude).toMatch(/Never point at the next\s+step of a step that did not finish/);
+  });
+
+  it("names the merge in the vocabulary of the host the code is actually on", () => {
+    const azure = render({ repoProvider: "azure_devops" }).byPath.get("CLAUDE.md") ?? "";
+    expect(azure).toContain("Azure DevOps → Repos → Pull requests");
+    expect(azure).toContain("**Complete** the PR");
+    expect(azure).toContain("az repos pr create");
+    expect(azure).not.toContain("Squash and merge");
+    expect(render().byPath.get("CLAUDE.md")).toContain("gh pr create");
+  });
+
   it("gives ordered next steps from /start to the implement loop", () => {
     const { byPath } = render();
     const start = byPath.get("START_HERE.md") ?? "";

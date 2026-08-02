@@ -358,6 +358,28 @@ describe("START_HERE.md describes the real order", () => {
     const here = render(nextjs).byPath("START_HERE.md");
     expect(here).not.toContain("corepack enable");
   });
+
+  // Step 1 promises what section 5 of /start then does, so a founder who finds the command gone
+  // recognises it as the plan rather than as something having disappeared (spec 159).
+  it("says step 1 rewrites itself and the command stands down when it is done", () => {
+    const here = render(nextjs).byPath("START_HERE.md");
+    expect(here).toMatch(/Safe to run again if it stops early/);
+    expect(here).toMatch(/rewrites this\s+step to say so and removes itself/);
+  });
+
+  // /start installs everything this project needs — but it cannot install the thing that runs it.
+  // A founder who has to work that out from a `command not found` was let down by paragraph one.
+  it("names the one thing the founder installs before anything here can run", () => {
+    const here = render(nextjs).byPath("START_HERE.md");
+    expect(here).toMatch(/\*\*First, install \[Claude Code\]/);
+    expect(here).toContain("npm install -g @anthropic-ai/claude-code");
+    expect(here).toMatch(/That is the only thing you install by hand/);
+    // And it must not send them off to install what section 1 handles.
+    expect(here).toMatch(/are all step 1 of the command below/);
+    // Inside step 1, the install comes before the command it makes runnable.
+    const step1 = here.split("## 1. Get it running")[1]?.split("## 2.")[0] ?? "";
+    expect(step1.indexOf("Claude Code")).toBeLessThan(step1.indexOf("/start"));
+  });
 });
 
 describe("CI does not go red on a repo that has not run /start", () => {
@@ -416,19 +438,155 @@ describe("/start finishes what it builds", () => {
 
   it("removes itself only after the verification bar has actually passed", () => {
     const start = render(nextjs).start;
-    expect(start).toContain("## 5. Remove this command");
+    expect(start).toContain("## 6. Hand back, and remove this command");
     expect(start).toContain(".claude/commands/start.md");
     // The failure mode this must never have: a half-finished project with no way to finish it.
     expect(start).toMatch(/Only if all five commands above actually ran and passed/);
-    expect(start).toMatch(/leave this\s+file exactly where it is/);
+    expect(start).toMatch(/leave this\s+file and \[START_HERE\.md\]\([^)]+\) exactly as they are/);
     expect(start).toContain("Re-runnable until it succeeds");
+  });
+
+  // The command going quiet is only half the job: the file that told the founder to run it has to
+  // stop saying so, or step 1 of the first document anyone opens describes work that is already done.
+  it("rewrites START_HERE.md before it deletes itself, and names both places", () => {
+    const start = render(nextjs).start;
+    expect(start).toMatch(/Update \[START_HERE\.md\]\([^)]+\) so it no longer tells anyone to run this\s+command/);
+    expect(start).toContain('Step 1, "Get it running"');
+    expect(start).toContain('"How the commands work"');
+    // Order matters: an interruption must leave a runnable command, not orphaned instructions.
+    expect(start.indexOf("**6a.")).toBeLessThan(start.indexOf("**6b."));
+    expect(start).toMatch(/the guide first, the deletion second/);
+    // What must survive the rewrite: the block the founder comes back to, and the one paragraph in
+    // step 1 that is about every other command rather than about this one.
+    expect(start).toMatch(/the four commands with the \*\*verification bar\*\*/);
+    expect(start).toMatch(/the \*\*Claude Code\*\* paragraph that opens it/);
   });
 
   it("says the same things whichever stack it was rendered for", () => {
     for (const answers of [nextjs, vite, custom]) {
       const start = render(answers).start;
-      expect(start).toContain("## 5. Remove this command");
+      expect(start).toContain("## 6. Hand back, and remove this command");
       expect(start).toContain("Finish it");
     }
+  });
+});
+
+/* ── Six sections, the tools they need, and a bar that says where you are (spec 159) ─────────── */
+
+describe("/start is followable step by step", () => {
+  it("names its six sections once, in order, and numbers the headings to match", () => {
+    const start = render(nextjs).start;
+    const headings = (start.match(/^## \d\. .*/gm) ?? []).map((h) => h.replace(/^## /, ""));
+    expect(headings).toEqual([
+      "1. Tools",
+      "2. Stack and toolchain",
+      "3. Git, locally",
+      "4. The first screen",
+      "5. Verify, and report honestly",
+      "6. Hand back, and remove this command"
+    ]);
+  });
+
+  // A section that points at the wrong neighbour is how a founder ends up scaffolding twice.
+  it("has no cross-reference pointing at a section that moved", () => {
+    const start = render(nextjs).start;
+    expect(start).toContain("Skip to section 3.");
+    expect(start).toContain("shadcn/ui primitives section 2 installed");
+    expect(start).toMatch(/Once section 5 has passed in\s+full/);
+    expect(start).toMatch(/anything in section 4 was left as a `\[NEEDS CLARIFICATION\]`/);
+  });
+
+  it("tells the assistant to report progress, in a shape that cannot run ahead of the work", () => {
+    const start = render(nextjs).start;
+    expect(start).toContain("[██░░░░░░░░░░] 1/6 · Tools ✓");
+    expect(start).toContain("[░░░░░░░░░░░░] 0/6 · starting");
+    expect(start).toContain("[████████████] 6/6 · done");
+    expect(start).toMatch(/If a section fails, print the bar as far as you actually got/);
+    // An already-done section still counts — otherwise a second run reports 2/6 and looks stuck.
+    expect(start).toMatch(/\(already done\)/);
+  });
+
+  it("closes every section with what done looks like", () => {
+    const start = render(nextjs).start;
+    expect((start.match(/\*\*Done when:\*\*/g) ?? []).length).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("section 1 installs what the founder's machine is missing", () => {
+  it("checks for git, the runtime and the repo host's CLI before installing anything", () => {
+    const start = render(nextjs).start;
+    expect(start).toContain("**Check first, install only what is missing.**");
+    expect(start).toContain("`git --version`");
+    expect(start).toContain("`node --version`");
+    expect(start).toContain("`gh --version`");
+    expect(start).toContain("brew install git node gh");
+    expect(start).toContain("winget install --id GitHub.cli -e");
+  });
+
+  // pnpm ships with Node. A global install shadows the version the project pins, and the founder
+  // then debugs a lockfile mismatch that nothing in the repository explains.
+  it("enables pnpm through corepack rather than installing a second copy", () => {
+    expect(render(nextjs).start).toContain("corepack enable");
+    expect(render(nextjs).start).toContain("never `npm install -g pnpm`");
+    // Vite's toolchain here is npm, which comes with Node — nothing to enable.
+    expect(render(vite).start).not.toContain("corepack enable");
+  });
+
+  it("installs the CLI for the host the code will actually live on", () => {
+    const azure = render({ ...nextjs, repoProvider: "azure_devops" }).start;
+    expect(azure).toContain("`az --version`");
+    expect(azure).toContain("Microsoft.AzureCLI");
+    expect(azure).not.toContain("GitHub.cli");
+    // The Azure CLI cannot read a work item until its extension is added — an install that stops at
+    // the binary leaves `/createspec` broken in a way nothing else explains.
+    expect(azure).toContain("az extension add --name azure-devops");
+    expect(render(nextjs).start).not.toContain("Microsoft.AzureCLI");
+    // …and the table cell stays a name, not the extension instruction glued onto one.
+    expect(azure).toContain("| **the Azure CLI (`az`)** |");
+  });
+
+  it("names the runtime the described stack needs, not Node by default", () => {
+    const django = render({ ...BASE, framework: "custom", frameworkOther: "Django 5 with Python 3.12 and uv" }).start;
+    expect(django).toContain("`python3 --version`");
+    expect(django).not.toContain("`node --version`");
+
+    // Nothing recognised the stack, so no runtime is claimed — git and the CLI still are.
+    const unknown = render({ ...BASE, framework: "custom", frameworkOther: "something entirely of my own devising" }).start;
+    expect(unknown).toContain("`git --version`");
+    expect(unknown).toContain("`gh --version`");
+    expect(unknown).not.toMatch(/\| \*\*Node\.js|\| \*\*Python/);
+  });
+
+  // The machine boundary, at the one place this command now reaches past this directory.
+  it("installs tools but signs in to nothing, and never upgrades what is already there", () => {
+    const start = render(nextjs).start;
+    expect(start).toContain("**Sign in to nothing.**");
+    expect(start).toContain("`gh auth login` is the founder's own");
+    expect(start).toContain("**Never upgrade what is already there.**");
+    expect(start).toMatch(/do not\s+build from source/);
+    expect(start).toMatch(/pipe a script into a shell/);
+  });
+
+  it("stops rather than improvising when it cannot install something", () => {
+    const start = render(nextjs).start;
+    expect(start).toContain("**If an install fails, stop trying and say so.**");
+    expect(start).toContain("https://github.com/cli/cli#installation");
+    expect(start).toMatch(/a missing runtime stops section 2, a\s+missing `git` stops section 3/);
+  });
+
+  // The one failure that looks like a failed install and is not: a successful install the running
+  // shell cannot see yet. Reinstalling never fixes it, and editing a shell profile is not ours to do.
+  it("reads a stale PATH as a restart, not as a reason to install again", () => {
+    const start = render(nextjs).start;
+    expect(start).toMatch(/may not be on this shell's `PATH` yet/);
+    expect(start).toMatch(/restart their terminal/);
+    expect(start).toMatch(/do not edit their shell profile/);
+  });
+
+  // START_HERE.md's step 2 used to say "install the CLI and sign in". Section 1 does the install now.
+  it("leaves START_HERE.md asking only for the sign-in it cannot do", () => {
+    const here = render(nextjs).byPath("START_HERE.md");
+    expect(here).toContain("**Sign in:** `gh auth login`");
+    expect(here).not.toMatch(/Install the GitHub CLI \(`gh`\) and run/);
   });
 });

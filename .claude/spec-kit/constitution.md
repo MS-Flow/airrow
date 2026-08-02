@@ -21,7 +21,9 @@ Every feature, screen, and generated file is judged against these.
 - **Preparation, and a starting point.** Airrow's hosted product generates engineering *foundations* —
   documents, rules, workflow and CI — never application code. The `/start` command it ships **inside**
   a generated repository is the deliberate exception: run explicitly by the founder, on their own
-  machine, it scaffolds the stack and then builds the product's core action — `mvpFocus` — for real,
+  machine, it installs the tools that machine is missing — git, the stack's runtime, the repo host's
+  CLI, and nothing it was not asked for, signing in to none of them — scaffolds the stack, and then
+  builds the product's core action — `mvpFocus` — for real,
   to the design in `UI_ARCHITECTURE.md`, using only information already in the repo. **The ceiling is
   `mvpFocus`, built well** — not a second feature, not a roadmap item, not a capability picked for
   later, and never a guess at the product: everything created must trace back to something the
@@ -31,7 +33,9 @@ Every feature, screen, and generated file is judged against these.
   real auth service stay out; those are the founder's first spec. Everything past `mvpFocus` goes
   through the spec loop. **`/start` is re-runnable until it succeeds, and removes itself once it
   has** — only after its own verification bar has actually passed, so an interrupted or failing run
-  always leaves the founder the command that would finish the job
+  always leaves the founder the command that would finish the job. It rewrites `START_HERE.md`'s
+  step 1 before it deletes itself, in that order, so the first file anyone opens never points at a
+  command that is no longer there
   ([spec 159](../../specs/159-ui-reference-start.md), which records the previous "re-runnable by
   design" wording). A foundation generated for a project that **already exists** ships `/cleanup`
   in its place: run the same way, it reads the codebase that is there and rewrites the foundation's
