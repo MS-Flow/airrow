@@ -53,19 +53,26 @@ than the end of my account.**
 ## Design decision
 
 Three flows over one shared password form. `/forgot-password` sends the mail; the link lands on a new
-`/auth/reset` route handler that exchanges the code, marks the session as a recovery with a short-lived
-httpOnly cookie, and drops the founder on `/app/password`. That page and the Settings card render the
-**same** component and post to the **same** server action, and the action decides server-side whether the
-current password is required: it is, unless the recovery cookie says the founder just proved control of
-the mailbox. Changing the login address goes through the same action shape and does not take effect until
-the new address confirms.
+`/auth/reset` route handler that exchanges the code, marks the session with a short-lived httpOnly cookie,
+and drops the founder on the public `/reset-password`. That page and the Settings card render the **same**
+component and post to the **same** server action, and the action decides server-side whether the current
+password is required: it is, unless the recovery cookie says the founder just proved control of the
+mailbox. Changing the login address goes through the same action shape and does not take effect until the
+new address confirms.
+
+**A reset link is not a sign-in.** Supabase cannot change a password without a session, so `/auth/reset`
+has to create one — but that session is a key to one screen, never a way into the account. `middleware.ts`
+redirects the whole of `/app` to `/reset-password` while the marker is set, and setting the password signs
+out **globally** and returns the founder to `/login` to use what they just chose. *(Amended after the
+first implementation, which landed on `/app/password` inside the app and therefore signed the founder in
+automatically — see Implementation notes.)*
 
 **Not touched:** `/auth/confirm` is reused verbatim for the email-change confirmation rather than given a
 sibling — the code exchange is identical, and `attachPendingReferral` already refuses accounts older than
 ten minutes, so an established founder confirming a new address can never spend an invite
-([referrals/attach.ts:22-49](../apps/web/src/features/referrals/attach.ts#L22-L49)). No new middleware
-matcher entry: `/app/password` is inside `/app` and therefore already gated, and `/auth/reset` is
-deliberately outside it like the other two auth routes, because there is no session on arrival.
+([referrals/attach.ts:22-49](../apps/web/src/features/referrals/attach.ts#L22-L49)). The middleware
+*matcher* is unchanged: `/reset-password` is public, and `/auth/reset` stays outside it like the other two
+auth routes, because there is no session on arrival.
 
 ---
 
@@ -78,10 +85,14 @@ deliberately outside it like the other two auth routes, because there is no sess
       link — **tested**
 - [x] `/auth/reset` exchanges the code and lands on the change-password screen; an expired or reused link
       returns to `/login` with a reason and an offer to send another — **tested**
+- [x] **The link never signs anyone in.** While the marker is set the whole of `/app` redirects to
+      `/reset-password`, and setting the password signs out globally and returns to `/login` with a
+      confirmation — **tested** (`middleware.test.ts`, `credentials.test.ts`)
 - [x] The new password is validated by the signup rule (`PASSWORD_RULES`), with the same checklist,
       strength bar and repeat field the signup form uses — **tested** (schema + reused `PasswordFields`)
-- [x] After a reset the founder is signed in and every other session is revoked — **tested**
-      (`signOut({ scope: "others" })`)
+- [x] After a reset **every** session is revoked, this one included, and the founder signs in again with
+      the new password — **tested** (`signOut({ scope: "global" })`). From Settings it is `"others"`:
+      they are signed in legitimately and stay that way on this device.
 - [x] Settings has a **Password** card that changes the password, requiring the current one — **tested**
 - [x] The current password is verified **server-side**, and a recovery cookie is the only thing that
       waives it — never a form field — **tested**
@@ -89,9 +100,10 @@ deliberately outside it like the other two auth routes, because there is no sess
       screen says so before submitting — **tested**
 - [x] An account with no password (GitHub/Google only) is offered "set a password" by email rather than a
       current-password field it cannot fill — **tested**
-- [x] Recovery is not a way around a suspension: `/app/password` goes through `requireSession()`, whose
-      per-request read redirects a suspended account to `/app/suspended` — **tested** (that the page calls
-      it; the redirect itself is spec 164's own test)
+- [x] Recovery is not a way around a suspension — now by construction rather than by a check on the reset
+      screen: the reset session reaches no `/app` route at all, and signing in afterwards meets
+      `requireSession()`, which sends a suspended account to `/app/suspended` (spec 164) — **tested**
+      (`middleware.test.ts`; the suspension redirect is spec 164's own test)
 - [x] The reset and email-change emails are Airrow's own templates, pushed by
       `scripts/sync-supabase-auth.mjs` alongside the confirmation one, with the new redirect targets in
       both allow-lists (hosted script + local `config.toml`) — **tested**
@@ -109,8 +121,12 @@ deliberately outside it like the other two auth routes, because there is no sess
   - `packages/schemas/src/password.test.ts` — the new-password and email-change schemas.
   - `apps/web/src/lib/auth.test.ts` — `sendPasswordReset` passes the derived `redirectTo`; `updatePassword`
     revokes other sessions; `changeEmail` passes `emailRedirectTo`; `hasPassword` reads the email identity.
-  - `apps/web/src/app/auth/reset/route.test.ts` — code exchanged → redirect to `/app/password` with the
+  - `apps/web/src/app/auth/reset/route.test.ts` — code exchanged → redirect to `/reset-password` with the
     recovery cookie set; missing/invalid code → `/login?error=reset`, no cookie.
+  - `apps/web/src/middleware.test.ts` — the marker keeps a session out of `/app` whatever its state, 401s
+    the API rather than redirecting it, and leaves an ordinary session alone.
+  - `apps/web/src/app/(public)/reset-password/page.test.tsx` — no current-password field, no link into the
+    app, and no marker means `/login?error=reset`.
   - `apps/web/src/features/auth/credentials.test.ts` — the actions: wrong current password refuses;
     absent current password refuses without the recovery cookie and succeeds with it; the cookie is
     cleared after use; a mismatched repeat refuses.
@@ -120,8 +136,10 @@ deliberately outside it like the other two auth routes, because there is no sess
     redirect target is in the allow-list.
 - Suspension: covered by `requireSession()` on `/app/password` — the per-request database read is the
   enforcement (spec 164), asserted in the page test.
-- **Run 2026-08-02:** `pnpm -r typecheck` ✓ · `pnpm -r lint` ✓ · `pnpm --filter web test` ✓ (101 files,
-  990 tests) · `pnpm --filter @airrow/schemas test` ✓ (94) · `pnpm test:scripts` ✓ (89).
+- **Run 2026-08-02, after the "a reset link is not a sign-in" amendment:** `pnpm -r typecheck` ✓ ·
+  `pnpm -r lint` ✓ · `pnpm --filter web test` ✓ (102 files, 999 tests — **three consecutive runs**, since
+  the bug it uncovered was a scheduling-dependent one) · `pnpm --filter @airrow/schemas test` ✓ (94) ·
+  `pnpm test:scripts` ✓ (89).
   **Pre-existing failure, untouched by this change:** `packages/engine/src/security-command.test.ts` →
   "keeps the report out of version control, and says why" — a wrapping mismatch between the test's
   expected string and `template/commands/security.md`. No file under `packages/engine/` or `template/` is
@@ -130,11 +148,20 @@ deliberately outside it like the other two auth routes, because there is no sess
 
 ## Implementation notes
 
+- **Reported after the first implementation: the reset link signed the founder in.** The screen was
+  `/app/password`, inside the app, so the session `/auth/reset` creates — which exists only because
+  Supabase will not change a password without one — was an ordinary sign-in. Whoever opened the email held
+  the account, and the password they came to change was never what let them in. Three changes fixed it,
+  and none of them is the screen itself: `middleware.ts` now redirects all of `/app` to `/reset-password`
+  while the marker is set; the screen moved to the public `/reset-password`, whose only key is that
+  marker; and `updatePassword` takes a scope, so a reset signs out `"global"` — this session included —
+  and returns to `/login`, where using the new password is the proof it worked. Settings still signs out
+  `"others"` and stays where it is.
 - **The recovery cookie is the whole design.** One password form serves two arrivals, and what separates
   them is `airrow_recovery` — httpOnly, 15 minutes, set only by `/auth/reset` after a real code exchange
-  and cleared the moment it is spent. The alternative considered and rejected was a second screen outside
-  `/app`: it would have been reachable by a signed-in founder directly, which is a password change with no
-  current password at all.
+  and cleared the moment it is spent. It carries two jobs: it waives the current-password check, and it is
+  what the middleware reads to keep the app shut. Its name and shape live in `recovery-cookie.ts` with no
+  imports at all, because middleware may not import `next/headers`.
 - **Two message maps, not one.** Settings renders both cards from one query string, so a shared map put
   every answer under both of them — "open the link we sent to the new address" appeared above the password
   form. Every email-side key now carries the `email-` prefix its action redirects with. Found by the test
@@ -142,6 +169,13 @@ deliberately outside it like the other two auth routes, because there is no sess
 - **`/auth/confirm` is reused for the email change** rather than given a sibling: the exchange is
   identical, and `attachPendingReferral` ignores accounts older than ten minutes, so an established
   founder confirming a new address cannot spend an invitation. One fewer entry in both allow-lists.
+- **A test-suite collision this change exposed, and fixed.** `ui-references.db.test.ts` (spec 159) and
+  `admin.db.test.ts` (spec 150) both seed `organizations` with the same two primary keys, and both carry
+  the comment "Own '15…' namespace so a parallel run cannot collide with the other suites" — the ids were
+  copied along with the claim. Whichever ran second hit a duplicate key or found its rows deleted, but
+  only when Vitest happened to schedule them together, which is why two specs shipped over it. Adding
+  `middleware.test.ts` changed the scheduling and made it fail every run. ui-references moved to `16…`;
+  its `cleanup()` is scoped to its own ids, so nothing else was touched.
 - **Found by `/analyze`, and fixed:** a successful reset redirected to `/app?status=password-changed`,
   and the dashboard takes no `searchParams` ([app/page.tsx:16](../apps/web/src/app/app/page.tsx#L16)) — so
   the one confirmation a locked-out founder needs, *it worked and the other sessions are gone*, was
@@ -167,18 +201,22 @@ deliberately outside it like the other two auth routes, because there is no sess
    `updatePassword` and `changeEmail`, in the shape of the existing result unions.
 3. **`apps/web/src/app/(public)/forgot-password/page.tsx`** (new) — the request form and its
    `?status=sent` state, modelled on `/signup`'s `check-inbox` screen.
-4. **`apps/web/src/features/auth/recovery.ts`** (new) — the `airrow_recovery` cookie: shape, read, clear.
+4. **`apps/web/src/features/auth/recovery-cookie.ts`** (new) — the marker's name and shape, importing
+   nothing, because the middleware needs it and may not import `next/headers`.
+   **`recovery.ts`** (new) — the request-time read and clear, re-exporting the definition.
 5. **`apps/web/src/app/auth/reset/route.ts`** (new) — exchange, set the marker, redirect.
+   **`apps/web/src/middleware.ts`** — the marker shuts `/app` and sends the founder to `/reset-password`.
 6. **`apps/web/src/features/auth/credentials.ts`** (new) — `changePasswordAction`, `changeEmailAction`
    and `sendPasswordSetupAction`, with the closed set of two return targets.
 7. **`apps/web/src/features/auth/CredentialCards.tsx`** (new) — the Password and Email cards and their
    two message maps.
 8. **`apps/web/src/features/auth/PasswordFields.tsx`** — an optional `label`, so "New password" can sit
    beside a current-password field without both being called the same thing.
-9. **`apps/web/src/app/app/password/page.tsx`** (new) — the recovery landing; the same card, and a notice
-   when the marker is absent because the link was spent.
+9. **`apps/web/src/app/(public)/reset-password/page.tsx`** (new) — the public recovery landing: the same
+   card, no way onward but `/login`, and `/login?error=reset` when the marker is absent.
 10. **`apps/web/src/app/app/settings/page.tsx`** — the disabled email field gives way to the two cards.
-11. **`apps/web/src/app/(public)/login/page.tsx`** — the "Forgot password?" link and a `reset` error.
+11. **`apps/web/src/app/(public)/login/page.tsx`** — the "Forgot password?" link, a `reset` error, and the
+    success line that receives a founder whose reset just ended their session.
 12. **`supabase/templates/recovery.html`**, **`email-change.html`** (new) — from `confirmation.html`.
 13. **`supabase/config.toml`** — the two template blocks and the local redirect URLs.
 14. **`scripts/sync-supabase-auth.mjs`** — two `TEMPLATES` rows and the `/auth/reset` allow-list entries.
@@ -186,8 +224,11 @@ deliberately outside it like the other two auth routes, because there is no sess
     **`specs/README.md`**, **`specs/18-supabase-auth.md`** — the new routes on the map; the runbook's
     "the email template" now names all three; this spec listed; #18's "no password reset" gap closed.
 
-**No change needed:** `middleware.ts` — `/app/password` is already matched by `/app/:path*`, and
-`/auth/reset` is correctly outside it.
+16. **`apps/web/src/lib/data/ui-references.db.test.ts`** — moved to its own fixture namespace; it shared
+    `admin.db.test.ts`'s, which this change's new test file turned from latent into failing.
+
+**No change needed:** the middleware *matcher* — `/reset-password` is public and `/auth/reset` is
+correctly outside it. Only the handler gained a rule.
 
 ---
 

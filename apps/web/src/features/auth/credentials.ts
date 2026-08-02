@@ -27,11 +27,11 @@ import { clearRecovery, inRecovery } from "./recovery";
  */
 const RETURN_TO = {
   settings: "/app/settings",
-  password: "/app/password"
+  reset: "/reset-password"
 } as const;
 
 function returnTo(value: FormDataEntryValue | null): string {
-  return value === "password" ? RETURN_TO.password : RETURN_TO.settings;
+  return value === "reset" ? RETURN_TO.reset : RETURN_TO.settings;
 }
 
 /**
@@ -64,17 +64,20 @@ export async function changePasswordAction(formData: FormData): Promise<void> {
     if (!(await verifyPassword(user.email, current))) redirect(`${back}?error=wrong-password`);
   }
 
-  const result = await updatePassword(parsed.data.password);
+  // From a reset link, *this* session is the one that must not survive: it exists only so Supabase would
+  // accept the new password, and an email that leaves a usable session behind is a way into the account.
+  // From Settings the founder is signed in legitimately and stays that way.
+  const result = await updatePassword(parsed.data.password, recovery ? "global" : "others");
   if (!result.ok) redirect(`${back}?error=password-failed`);
 
-  // Spent, whichever screen this was. A waiver that outlived the change it paid for would let a second
-  // one through without the current password.
+  // Spent, whichever screen this was. It is also what is keeping `/app` shut (`middleware.ts`), so a
+  // founder signing in with the new password must not still be carrying it.
   await clearRecovery();
-  // Settings either way, and out of the recovery screen entirely: that form has nothing left to say, and
-  // leaving the founder on one they have just satisfied reads as though it did not take. `/app` was the
-  // first choice and is wrong — the dashboard reads no query string, so the one confirmation that a
-  // locked-out founder needs ("it worked, and the other sessions are gone") vanished on arrival.
-  redirect(`${RETURN_TO.settings}?status=password-changed`);
+  // Back to sign-in after a reset — using the new password is the proof it took, and there is no session
+  // left to carry them anywhere. From Settings, back to the card, which confirms it in place.
+  redirect(
+    recovery ? "/login?status=password-changed" : `${RETURN_TO.settings}?status=password-changed`
+  );
 }
 
 /**

@@ -106,10 +106,11 @@ export function PasswordCard({
           </>
         ) : (
           <form action={changePasswordAction} className="max-w-sm space-y-4">
-            <input type="hidden" name="from" value={recovery ? "password" : "settings"} />
+            <input type="hidden" name="from" value={recovery ? "reset" : "settings"} />
             {recovery ? (
               <p className="text-sm leading-relaxed text-fg-muted">
-                The link you followed is the proof — choose the password you want and you&apos;re back in.
+                The link you followed is the proof, so there&apos;s no old password to give. Choose a new
+                one and sign in with it — that link stops working either way.
               </p>
             ) : (
               <div>
@@ -125,7 +126,7 @@ export function PasswordCard({
             )}
             <PasswordFields label="New password" />
             <SubmitButton size="sm" pendingLabel="Saving…">
-              {recovery ? "Set password and continue" : "Change password"}
+              {recovery ? "Set password and sign in" : "Change password"}
             </SubmitButton>
           </form>
         )}

@@ -2,8 +2,10 @@
 //
 // Its own route rather than a branch inside `/auth/confirm`, for the reason that kept confirm out of
 // `/auth/callback`: the exchange is the same, and what happens next is not. A confirmation drops the
-// founder in the workspace they were already heading for; a recovery has to land on the one screen that
-// finishes the job, carrying the marker that lets it skip a password nobody in this flow remembers.
+// founder in the workspace they were already heading for. A recovery must not — clicking a link in an
+// email is not a sign-in, and the session created here exists only so that Supabase will accept a new
+// password. The marker set below is what keeps it that way: `middleware.ts` shuts `/app` while it is
+// there, and the change ends the session and returns the founder to `/login`.
 //
 // Deliberately outside the middleware matcher, like the other two: the founder has no session on arrival.
 import { NextResponse, type NextRequest } from "next/server";
@@ -22,7 +24,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
   if (error || !data.user) return NextResponse.redirect(`${origin}/login?error=reset`);
 
-  const response = NextResponse.redirect(`${origin}/app/password`);
+  const response = NextResponse.redirect(`${origin}/reset-password`);
   response.cookies.set(recoveryCookie);
   return response;
 }
