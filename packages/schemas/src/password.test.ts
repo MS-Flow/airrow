@@ -1,6 +1,13 @@
 // What a new password must contain, and — just as important — what an old one still may (spec 140).
 import { describe, expect, it } from "vitest";
-import { loginSchema, PASSWORD_RULES, signupSchema, unmetPasswordRules } from "./index";
+import {
+  emailChangeSchema,
+  loginSchema,
+  passwordChangeSchema,
+  PASSWORD_RULES,
+  signupSchema,
+  unmetPasswordRules
+} from "./index";
 
 const signup = (password: string, confirmPassword = password) =>
   signupSchema.safeParse({
@@ -97,5 +104,60 @@ describe("loginSchema", () => {
 
   it("still refuses a password shorter than the floor", () => {
     expect(loginSchema.safeParse({ email: "ada@example.com", password: "short" }).success).toBe(false);
+  });
+});
+
+// Spec 171 — the same rules, reached from the two screens where a founder replaces a credential rather
+// than creating one.
+describe("passwordChangeSchema", () => {
+  const change = (password: string, confirmPassword = password) =>
+    passwordChangeSchema.safeParse({ password, confirmPassword });
+
+  it("holds a new password to the signup rules, not the login ones", () => {
+    // Accepted by `loginSchema` because an old account may use it; never acceptable as a *new* password.
+    expect(change("password").success).toBe(false);
+    expect(change(STRONG).success).toBe(true);
+  });
+
+  it("refuses a repeat that does not match", () => {
+    const result = change(STRONG, `${STRONG}x`);
+
+    expect(result.success).toBe(false);
+    expect(result.success === false && result.error.issues[0]?.path).toEqual(["confirmPassword"]);
+  });
+
+  // The current password is deliberately not here: whether it is required at all is a server-side
+  // decision about how the founder arrived, and a schema field would invite the opposite reading.
+  it("says nothing about a current password", () => {
+    expect(change(STRONG).success).toBe(true);
+  });
+});
+
+describe("emailChangeSchema", () => {
+  it("takes an address and the current password", () => {
+    expect(
+      emailChangeSchema.safeParse({ email: "new@example.com", currentPassword: "anything" }).success
+    ).toBe(true);
+  });
+
+  it("refuses without a current password to prove it is the account holder", () => {
+    expect(emailChangeSchema.safeParse({ email: "new@example.com", currentPassword: "" }).success).toBe(
+      false
+    );
+    expect(emailChangeSchema.safeParse({ email: "new@example.com" }).success).toBe(false);
+  });
+
+  // The credential being proved is an existing one — an old weak password must still be usable here, or
+  // the founder who most needs to move address cannot.
+  it("does not hold the current password to the new-password rules", () => {
+    expect(
+      emailChangeSchema.safeParse({ email: "new@example.com", currentPassword: "password" }).success
+    ).toBe(true);
+  });
+
+  it("refuses an address that is not one", () => {
+    expect(
+      emailChangeSchema.safeParse({ email: "not-an-email", currentPassword: "anything" }).success
+    ).toBe(false);
   });
 });

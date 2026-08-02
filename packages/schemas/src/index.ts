@@ -253,7 +253,7 @@ export function unmetPasswordRules(value: string): PasswordRuleId[] {
  * must keep signing in, so tightening what we accept for a new password must never tighten what we accept
  * for an old one (spec 140).
  */
-const newPasswordSchema = z
+export const newPasswordSchema = z
   .string()
   .max(200)
   .superRefine((value, ctx) => {
@@ -273,6 +273,39 @@ export const signupSchema = loginSchema
     message: "The two passwords do not match.",
     path: ["confirmPassword"]
   });
+
+/**
+ * Asking for a reset link (spec 171). An address and nothing else — deliberately not `loginSchema`,
+ * which would demand a password from someone whose whole problem is not having one.
+ */
+export const passwordResetRequestSchema = loginSchema.pick({ email: true });
+
+/**
+ * Choosing a new password, from Settings or from a reset link.
+ *
+ * The **current** password is not part of it: whether it is required at all depends on how the founder
+ * arrived, and that is a server-side decision (`features/auth/credentials.ts`) rather than a field on a
+ * form. A schema that listed it would invite the reading that a present field is what authorises the
+ * change.
+ */
+export const passwordChangeSchema = z
+  .object({
+    password: newPasswordSchema,
+    confirmPassword: z.string().max(200)
+  })
+  .refine((values) => values.password === values.confirmPassword, {
+    message: "The two passwords do not match.",
+    path: ["confirmPassword"]
+  });
+
+/**
+ * Changing the login address. The current password *is* here, because this one is only ever reached with
+ * a session — an unattended one that could move the address to somebody else's inbox owns the account.
+ */
+export const emailChangeSchema = loginSchema.pick({ email: true }).extend({
+  // No `newPasswordSchema` rule: this is an existing credential being proved, not a new one being chosen.
+  currentPassword: z.string().min(1).max(200)
+});
 
 /** Validate a COMPLETE answer set: every visible question answered with a valid value. */
 export function validateCompleteAnswers(raw: unknown):

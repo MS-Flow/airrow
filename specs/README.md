@@ -76,3 +76,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | The operator's console: who they are, what they built, where they stopped | [150-admin-console.md](150-admin-console.md) | ✅ Done |
 | The console can act: a suspension that bites, a plan you can read, Pro you can hand out | [164-admin-suspend-and-pro.md](164-admin-suspend-and-pro.md) | ✅ Done |
 | References the founder can point at, and a `/start` that finishes the job | [159-ui-reference-start.md](159-ui-reference-start.md) | 🔄 In progress |
+| A way back in, and credentials you can change | [171-forgot-password.md](171-forgot-password.md) | ✅ Done |

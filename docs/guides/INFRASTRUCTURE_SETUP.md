@@ -232,8 +232,8 @@ real traffic. Spec 113 replaces it with Resend over plain SMTP.
    non-empty, so every "is it set?" check passes, and the API answers with a 401 about header format
    that names nothing. The script now rejects a credential containing whitespace for exactly that
    reason — but not needing the shell at all is better than diagnosing it well.
-5. **Push the whole auth configuration** — SMTP, the email template, the redirect allow-list and the
-   site URL, in one call:
+5. **Push the whole auth configuration** — SMTP, the three email templates (signup confirmation,
+   password reset, email change), the redirect allow-list and the site URL, in one call:
    ```bash
    node --env-file=.env scripts/sync-supabase-auth.mjs --dry-run   # inspect; the key is redacted
    node --env-file=.env scripts/sync-supabase-auth.mjs
@@ -245,8 +245,9 @@ real traffic. Spec 113 replaces it with Resend over plain SMTP.
    _Authentication → URL Configuration_ the redirect list. Then sign up with a real address and read the
    mail that arrives.
 
-**The repo is the source of truth for all of it, not the dashboard.** The template is
-[`supabase/templates/confirmation.html`](../../supabase/templates/confirmation.html); the SMTP values,
+**The repo is the source of truth for all of it, not the dashboard.** The templates are
+[`supabase/templates/`](../../supabase/templates/) — `confirmation.html`, `recovery.html` and
+`email-change.html` (spec 171); the SMTP values,
 the redirect allow-list and the site URL are constants in
 [`scripts/sync-supabase-auth.mjs`](../../scripts/sync-supabase-auth.mjs). Editing any of them in the
 dashboard is pointless — the next sync overwrites it. Only the two secrets live outside the repo: the
