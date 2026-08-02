@@ -169,7 +169,11 @@ additional_redirect_urls = [
   # The confirmation link lands here (spec 113). Supabase rejects an `emailRedirectTo` it has not been
   # told about, so both spellings need listing for the same reason the callback does.
   "http://127.0.0.1:3000/auth/confirm",
-  "http://localhost:3000/auth/confirm"
+  "http://localhost:3000/auth/confirm",
+  # And the reset link (spec 171), which needs its own landing because what happens after the exchange
+  # differs. The email-change confirmation reuses `/auth/confirm` above.
+  "http://127.0.0.1:3000/auth/reset",
+  "http://localhost:3000/auth/reset"
 ]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
@@ -267,6 +271,17 @@ otp_expiry = 3600
 [auth.email.template.confirmation]
 subject = "Confirm your email address"
 content_path = "./supabase/templates/confirmation.html"
+
+# The other two transactional mails (spec 171), same arrangement. `recovery` carries the reset link;
+# `email_change` goes to both addresses, old and new, because `secure_email_change` is on by default and
+# the address being moved away from is the one that needs telling.
+[auth.email.template.recovery]
+subject = "Choose a new Airrow password"
+content_path = "./supabase/templates/recovery.html"
+
+[auth.email.template.email_change]
+subject = "Confirm your new Airrow email address"
+content_path = "./supabase/templates/email-change.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]

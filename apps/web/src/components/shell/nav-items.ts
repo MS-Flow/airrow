@@ -17,6 +17,16 @@ const BASE_ITEMS: NavItem[] = [
 const ADMIN_ITEM: NavItem = { href: "/app/admin", label: "Admin", icon: "admin" };
 
 /**
+ * What a suspended account is offered (spec 164): the one route that still answers.
+ *
+ * A constant rather than a filter over `BASE_ITEMS`, so adding a nav entry later cannot accidentally
+ * hand it to a suspended founder — a new item has to be named here to appear here.
+ */
+export const SUSPENDED_ITEMS: NavItem[] = [
+  { href: "/app/support", label: "Support", icon: "support" }
+];
+
+/**
  * The navigation for one session.
  *
  * A function rather than the constant this used to be, because one entry now depends on who is

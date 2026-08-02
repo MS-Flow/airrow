@@ -132,6 +132,9 @@ replays from zero.
 
 ## Out of scope
 - Magic-link / OAuth / SSO providers (email + password only for now).
+- Password reset, and changing the password or the login address from Settings — **closed by
+  [spec 171](171-forgot-password.md)**, which added `/forgot-password`, the `/auth/reset` landing and the
+  two credential cards. Until then a forgotten password was the end of the account.
 - Team invites / multi-user orgs (`kind='team'` activates later, M7).
 - Password-strength UX beyond Supabase defaults; email deliverability / SMTP customization.
 - GitHub App delivery and Storage buckets (separate issues).

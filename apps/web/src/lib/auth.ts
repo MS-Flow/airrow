@@ -34,7 +34,21 @@ function metaName(meta: unknown, fallback: string): string {
 }
 
 /**
- * The authenticated user and their org, or null.
+ * Where an account stands, as three cases rather than a value-or-absence (spec 164).
+ *
+ * Suspension used to be expressed by `getSession()` answering `null`, which is the same answer it
+ * gives a signed-out visitor — so the only thing the app could do with a suspended founder was send
+ * them to `/login`, a screen that says they are not signed in when they are, and which they could not
+ * get past anyway. Naming the third case is what lets one door stay open.
+ */
+export type SessionRead =
+  | { kind: "none" }
+  /** Signed in, and taken offline. `suspendedAt` is for us; no screen shows it to them. */
+  | { kind: "suspended"; session: SessionContext; suspendedAt: string }
+  | { kind: "active"; session: SessionContext };
+
+/**
+ * The authenticated user, their org, and whether they are suspended.
  *
  * Memoised per request with React `cache()`. Without it a single `/app` navigation paid
  * for this twice — once in the layout and again in the page — and each call is a network
@@ -45,21 +59,22 @@ function metaName(meta: unknown, fallback: string): string {
  * auth server rather than trusting the cookie, and this is the value every RSC and action
  * scopes its data by.
  *
- * **A suspended account has no session here** (spec 150). This is the single place every `/app` page
- * and every server action already passes through, so refusing here is what makes a suspension bite at
- * the next server call rather than whenever the token happens to expire. Supabase Auth is banned in
- * the same admin action, which stops a *new* token being issued; this stops the one they are holding.
+ * **The suspension is read from the database on every request, and that is the whole of the
+ * enforcement** (spec 164). Supabase Auth's ban used to be described as the other half of it; it is
+ * not, and it no longer runs. A ban stops a new sign-in and a token refresh, but an access token
+ * already issued keeps working for its full lifetime — which is how a founder suspended nine seconds
+ * after signing in went on using the product. This check bites at their next server call, and it is
+ * the only one that does.
  */
-export const getSession = cache(async (): Promise<SessionContext | null> => {
+const readSession = cache(async (): Promise<SessionRead> => {
   const supabase = await supabaseServer();
   const {
     data: { user }
   } = await supabase.auth.getUser();
-  if (!user?.email) return null;
+  if (!user?.email) return { kind: "none" };
 
   const [org, flags] = await Promise.all([getOrgForUser(user.id), profileFlags(user.id)]);
-  if (!org) return null;
-  if (flags.suspendedAt) return null;
+  if (!org) return { kind: "none" };
 
   const rec: UserRecord = {
     id: user.id,
@@ -67,14 +82,55 @@ export const getSession = cache(async (): Promise<SessionContext | null> => {
     name: metaName(user.user_metadata, user.email),
     createdAt: user.created_at
   };
-  return { user: rec, org, isAdmin: flags.isAdmin };
+  const session: SessionContext = { user: rec, org, isAdmin: flags.isAdmin };
+  return flags.suspendedAt
+    ? { kind: "suspended", session, suspendedAt: flags.suspendedAt }
+    : { kind: "active", session };
 });
 
-/** For RSC pages/actions that require auth. Redirects when absent. */
+/**
+ * The session, or null — where "suspended" counts as null.
+ *
+ * The contract every existing caller was written against, kept exactly: thirty-odd call sites,
+ * including all three `/api/*` handlers, decide access by whether this returns something. Widening it
+ * to hand back suspended sessions would have quietly re-opened every one of them, so the widening
+ * lives in `requireSessionEvenIfSuspended` instead, where it has to be asked for by name.
+ */
+export const getSession = async (): Promise<SessionContext | null> => {
+  const read = await readSession();
+  return read.kind === "active" ? read.session : null;
+};
+
+/**
+ * For RSC pages/actions that require an account in good standing.
+ *
+ * Two refusals, because they are two different facts: no session goes to `/login`, and a suspended one
+ * goes to `/app/suspended`. Sending the suspended case to `/login` — which is what fell out of
+ * answering `null` for both — tells a founder their password is the problem and leaves them with no
+ * way to ask about the thing that actually happened.
+ */
 export async function requireSession(): Promise<SessionContext> {
-  const session = await getSession();
-  if (!session) redirect("/login");
-  return session;
+  const read = await readSession();
+  if (read.kind === "none") redirect("/login");
+  if (read.kind === "suspended") redirect("/app/suspended");
+  return read.session;
+}
+
+/**
+ * The one door a suspension leaves open: support, and the screen that explains there is one.
+ *
+ * Deliberately verbose at the call site. Everything else in `/app` uses `requireSession`, so a reader
+ * scanning for what a suspended account can still reach finds exactly the two files that name this,
+ * and a third would stand out in review — which is the property the spec's "one allowed route" rests
+ * on.
+ */
+export async function requireSessionEvenIfSuspended(): Promise<{
+  session: SessionContext;
+  suspended: boolean;
+}> {
+  const read = await readSession();
+  if (read.kind === "none") redirect("/login");
+  return { session: read.session, suspended: read.kind === "suspended" };
 }
 
 /**
@@ -181,6 +237,101 @@ export async function signIn(email: string, password: string): Promise<SignInRes
   const unconfirmed =
     error.code === "email_not_confirmed" || /email not confirmed/i.test(error.message);
   return unconfirmed ? { status: "unconfirmed" } : { status: "error", message: error.message };
+}
+
+/**
+ * Mail a password-reset link (spec 171).
+ *
+ * **Answers `void`, and that is the security property.** Supabase already refuses to say whether an
+ * address is registered; this signature makes it impossible for a caller to accidentally undo that by
+ * branching on an outcome. A genuine failure — a rate limit, an unreachable auth server — is logged for
+ * us and looks to the founder exactly like a link that is on its way, because the alternative is a form
+ * that answers differently for addresses that exist.
+ *
+ * `redirectTo` is derived per request like `signUp`'s `emailRedirectTo`, for the same reason: one
+ * Supabase project serves dev and production, so its Site URL cannot answer for both (spec 113).
+ */
+export async function sendPasswordReset(email: string, redirectTo: string): Promise<void> {
+  const supabase = await supabaseServer();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+  // The address is deliberately absent from the log line: a log that pairs an address with "no account"
+  // is the same oracle, written down.
+  if (error) console.error("[auth] password reset mail failed:", error.message);
+}
+
+/**
+ * Is the current password the one this account actually has?
+ *
+ * `signInWithPassword` against the founder's own address, which is the only way to ask Supabase this
+ * question. It reissues a session for the same user, so the cookie rotates and nothing else changes —
+ * a wrong answer leaves the existing session untouched.
+ */
+export async function verifyPassword(email: string, password: string): Promise<boolean> {
+  const supabase = await supabaseServer();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  return !error;
+}
+
+/**
+ * Does this account have a password at all?
+ *
+ * Supabase records one identity per way in, and the `email` provider is the one a password belongs to.
+ * A founder who has only ever pressed "Sign in with GitHub" has no `email` identity, and asking them
+ * for a current password would be asking for something that does not exist.
+ */
+export async function hasPassword(): Promise<boolean> {
+  const supabase = await supabaseServer();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  return Boolean(user?.identities?.some((i) => i.provider === "email"));
+}
+
+/**
+ * Replace the current password, then end every *other* session.
+ *
+ * The revoke is the point of a reset: a password is usually changed because someone else may know it,
+ * and leaving their session alive would make the change decorative. `scope: "others"` keeps the founder
+ * signed in on the device they are standing at, which is where they just did the work.
+ */
+export async function updatePassword(password: string): Promise<{ ok: true } | { ok: false; message: string }> {
+  const supabase = await supabaseServer();
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { ok: false, message: error.message };
+  await supabase.auth.signOut({ scope: "others" });
+  return { ok: true };
+}
+
+/** Why a login address could not be moved (spec 171) — a reason we own, never the provider's wording. */
+export type EmailChangeFailure =
+  /** The address belongs to another account. The one case where there is nothing to retry. */
+  | "taken"
+  /** Supabase is refusing further mail for now. Temporary, and nobody's fault. */
+  | "rate-limited"
+  | "unknown";
+
+export type EmailChangeResult = { status: "confirm-sent" } | { status: "error"; reason: EmailChangeFailure };
+
+/**
+ * Start moving the login address (spec 171).
+ *
+ * Nothing changes here. Supabase mails the new address a link, and the address moves when that link is
+ * clicked — which is why the result is named `confirm-sent` rather than `ok`: a screen that says "email
+ * updated" at this point would have a founder sign out and discover neither address works.
+ *
+ * The classification reuses `signUpFailure`'s vocabulary for the failure both flows share — a rate
+ * limit — and adds the one only this flow has.
+ */
+export async function changeEmail(email: string, emailRedirectTo: string): Promise<EmailChangeResult> {
+  const supabase = await supabaseServer();
+  const { error } = await supabase.auth.updateUser({ email }, { emailRedirectTo });
+  if (!error) return { status: "confirm-sent" };
+  if (signUpFailure(error) === "rate-limited") return { status: "error", reason: "rate-limited" };
+  const taken =
+    error.code === "email_exists" ||
+    error.code === "email_address_not_authorized" ||
+    /already (been )?(registered|taken|in use)|already exists/i.test(error.message);
+  return { status: "error", reason: taken ? "taken" : "unknown" };
 }
 
 /**

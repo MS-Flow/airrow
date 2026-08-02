@@ -163,12 +163,22 @@ admin_audit_log                             -- every operator action (spec 150)
   id uuid pk
   actor_id uuid → profiles on delete set null
   action text check in ('user.suspend','user.reactivate','credits.grant',
+                        'pro.grant','pro.revoke',                   -- spec 164
                         'ticket.close','ticket.reopen','review.publish','review.unpublish')
   subject_type text check in ('user','organization','ticket','review')
   subject_id uuid                           -- loose pair, not five nullable FKs; nothing joins on it
   reason text
 
-profiles.suspended_at timestamptz null      -- read by getSession, so an open session dies (spec 150)
+profiles.suspended_at timestamptz null      -- read on every server call, and the *whole* of the
+                                            -- suspension (specs 150, 164). Supabase Auth's ban was
+                                            -- dropped: it blocks a new sign-in but not a token already
+                                            -- issued, and it shut the founder out of support too
+
+plan_grants.source text check in ('referral','support')
+                                            -- 'referral' waits unstarted behind any subscription
+                                            -- (spec 122); 'support' is written already-started by an
+                                            -- operator, 30/90/365 days, and ended by closing its
+                                            -- window rather than deleting the row (spec 164)
 
 admin_user_accounts (view)                  -- six auth.users columns the console shows (spec 150)
 admin_daily_series() · admin_totals() · admin_standing() · admin_project_status_counts()

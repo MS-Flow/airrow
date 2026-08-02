@@ -66,6 +66,30 @@ function toPage<T>(found: T[], page: number, size: number): Page<T> {
 
 /* ── Users ──────────────────────────────────────────────────────────────── */
 
+/** Where an active grant came from — the two values `plan_grants_source_check` allows. */
+export type GrantSource = "referral" | "support";
+
+/** The grant covering a workspace right now, if one is (specs 122, 164). */
+export interface ActiveGrant {
+  organizationId: string;
+  source: GrantSource;
+  expiresAt: string;
+}
+
+/**
+ * What Stripe last told us about a workspace.
+ *
+ * All three fields, where the console used to carry only the first. `active` on its own cannot answer
+ * either question support is ever asked — when does this end, and did they cancel — and both answers
+ * were already sitting in the row (spec 164).
+ */
+export interface AdminSubscription {
+  status: string;
+  /** When it renews, or when a cancellation takes effect. Absent on statuses that carry no period. */
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+}
+
 export interface AdminUser {
   id: string;
   email: string;
@@ -78,15 +102,15 @@ export interface AdminUser {
   orgId: string | null;
   orgName: string | null;
   plan: string;
-  /** True when an earned week (spec 122) currently covers the workspace. */
-  grantActive: boolean;
+  /** The grant covering the workspace right now (specs 122, 164), or null. */
+  grant: ActiveGrant | null;
   creditsAvailable: number;
   projects: number;
   generations: number;
   lastGenerationAt: string | null;
   /** The workspace that invited them, if they arrived through a link (spec 122). */
   invitedBy: string | null;
-  subscriptionStatus: string | null;
+  subscription: AdminSubscription | null;
 }
 
 interface AccountRow {
@@ -170,8 +194,11 @@ export async function adminUsers(
       await db().from("generation_usage").select("organization_id, created_at").in("organization_id", orgIds)
     ),
     creditsAvailableFor(orgIds),
-    rowsOrAbsent<{ organization_id: string; starts_at: string | null; expires_at: string | null }>(
-      await db().from("plan_grants").select("organization_id, starts_at, expires_at").in("organization_id", orgIds)
+    rowsOrAbsent<GrantRow>(
+      await db()
+        .from("plan_grants")
+        .select("organization_id, source, starts_at, expires_at")
+        .in("organization_id", orgIds)
     ),
     rowsOrAbsent<{ referred_organization_id: string; referrer_organization_id: string }>(
       await db()
@@ -179,8 +206,16 @@ export async function adminUsers(
         .select("referred_organization_id, referrer_organization_id")
         .in("referred_organization_id", orgIds)
     ),
-    rowsOrAbsent<{ organization_id: string; status: string }>(
-      await db().from("subscriptions").select("organization_id, status").in("organization_id", orgIds)
+    rowsOrAbsent<{
+      organization_id: string;
+      status: string;
+      current_period_end: string | null;
+      cancel_at_period_end: boolean;
+    }>(
+      await db()
+        .from("subscriptions")
+        .select("organization_id, status, current_period_end, cancel_at_period_end")
+        .in("organization_id", orgIds)
     )
   ]);
 
@@ -192,22 +227,23 @@ export async function adminUsers(
     const current = lastGeneration.get(row.organization_id);
     if (!current || row.created_at > current) lastGeneration.set(row.organization_id, row.created_at);
   }
-  const now = Date.now();
-  const activeGrants = new Set(
-    (grants ?? [])
-      .filter(
-        (g) =>
-          g.starts_at !== null &&
-          g.expires_at !== null &&
-          Date.parse(g.starts_at) <= now &&
-          now < Date.parse(g.expires_at)
-      )
-      .map((g) => g.organization_id)
+  const now = new Date();
+  const grantByOrg = new Map(
+    (grants ?? []).filter((g) => isGrantActive(g, now)).map((g) => [g.organization_id, toActiveGrant(g)])
   );
   const inviterByOrg = new Map(
     (invites ?? []).map((r) => [r.referred_organization_id, r.referrer_organization_id])
   );
-  const subByOrg = new Map((subs ?? []).map((s) => [s.organization_id, s.status]));
+  const subByOrg = new Map(
+    (subs ?? []).map((s): [string, AdminSubscription] => [
+      s.organization_id,
+      {
+        status: s.status,
+        currentPeriodEnd: s.current_period_end,
+        cancelAtPeriodEnd: s.cancel_at_period_end
+      }
+    ])
+  );
 
   // Inviter workspaces are usually outside this page's orgs, so they are named in their own query.
   const inviterIds = [...new Set([...inviterByOrg.values()])];
@@ -236,17 +272,232 @@ export async function adminUsers(
       orgId,
       orgName: org?.name ?? null,
       plan: org?.plan ?? "free",
-      grantActive: orgId ? activeGrants.has(orgId) : false,
+      grant: (orgId ? grantByOrg.get(orgId) : null) ?? null,
       creditsAvailable: (orgId ? credits.get(orgId) : 0) ?? 0,
       projects: (orgId ? projectCounts.get(orgId) : 0) ?? 0,
       generations: (orgId ? generationCounts.get(orgId) : 0) ?? 0,
       lastGenerationAt: (orgId ? lastGeneration.get(orgId) : null) ?? null,
       invitedBy: inviter ? (inviterNames.get(inviter) ?? null) : null,
-      subscriptionStatus: (orgId ? subByOrg.get(orgId) : null) ?? null
+      subscription: (orgId ? subByOrg.get(orgId) : null) ?? null
     };
   });
 
   return { ...shown, items };
+}
+
+/* ── What we generated ──────────────────────────────────────────────────── */
+
+/** One file in the console's read-only view of a delivered foundation. */
+export interface AdminProjectFile {
+  path: string;
+  bytes: number;
+  /**
+   * `airrow` — we wrote it, and its content is here. `yours` — the founder brought it, and only the
+   * path is, because that is all we ever stored (spec 75).
+   */
+  origin: "airrow" | "yours";
+}
+
+export interface AdminProjectArtifact {
+  /** The job the tree came from, so a regeneration can be told from the original. */
+  jobId: string;
+  generatedAt: string | null;
+  files: AdminProjectFile[];
+  /** The content of the one file an operator opened, or null when none is. */
+  opened: { path: string; content: string } | null;
+}
+
+/**
+ * The files a project was actually delivered, for the one project an operator opened (spec 164).
+ *
+ * The most-asked support question after "what did they answer" is "and what did they get" — until now
+ * the console could answer the first and not the second, which meant reading the answers and guessing
+ * at the output.
+ *
+ * **Content is loaded for one named path, never for the tree.** The whole artifact is already in
+ * memory to list it, but handing every file's body to a React tree that renders twenty-five paths
+ * would put a founder's entire foundation into the RSC payload to show a list of names.
+ *
+ * The founder's own files appear as paths only. Not a UI choice — `import_files` holds a path, a size
+ * and a peppered digest, and never the bytes, because the privacy policy says we do not keep them.
+ *
+ * The latest **completed** job rather than the latest job: a failed regeneration must not blank out the
+ * foundation the founder is actually holding.
+ */
+export async function adminProjectFiles(
+  actorId: string,
+  projectId: string,
+  openPath: string | null,
+  loadFiles: (jobId: string) => Promise<{ path: string; content: string; bytes: number }[] | null>,
+  loadImportedPaths: (projectId: string) => Promise<{ path: string; bytes: number }[]>
+): Promise<AdminProjectArtifact | null> {
+  await assertAdmin(actorId);
+
+  const job = rows<{ id: string; finished_at: string | null }>(
+    await db()
+      .from("generation_jobs")
+      .select("id, finished_at")
+      .eq("project_id", projectId)
+      .eq("status", "completed")
+      .order("finished_at", { ascending: false, nullsFirst: false })
+      .limit(1)
+  )[0];
+  if (!job) return null;
+
+  const generated = await loadFiles(job.id);
+  if (!generated) return null;
+
+  const imported = await loadImportedPaths(projectId);
+  const files: AdminProjectFile[] = [
+    ...generated.map((f): AdminProjectFile => ({ path: f.path, bytes: f.bytes, origin: "airrow" })),
+    ...imported.map((f): AdminProjectFile => ({ path: f.path, bytes: f.bytes, origin: "yours" }))
+  ].sort((a, b) => a.path.localeCompare(b.path));
+
+  // Only a path we generated can be opened, and only by matching one we hold — an arbitrary string
+  // from the query cannot reach anything, and a founder's own path has nothing to reach.
+  const opened = openPath ? generated.find((f) => f.path === openPath) : undefined;
+
+  return {
+    jobId: job.id,
+    generatedAt: job.finished_at,
+    files,
+    opened: opened ? { path: opened.path, content: opened.content } : null
+  };
+}
+
+/* ── Pro that support gives ─────────────────────────────────────────────── */
+
+interface GrantRow {
+  organization_id: string;
+  source: string;
+  starts_at: string | null;
+  expires_at: string | null;
+}
+
+/**
+ * Is this grant covering its workspace right now?
+ *
+ * The same window `claimPro` applies, deliberately duplicated in the reading direction rather than
+ * imported: `referrals.ts` owns the one that *starts* a week and must stay the only caller that can,
+ * because reading a screen must never spend a founder's entitlement (spec 122).
+ */
+function isGrantActive(grant: GrantRow, now: Date): boolean {
+  if (!grant.starts_at || !grant.expires_at) return false;
+  return Date.parse(grant.starts_at) <= now.getTime() && now.getTime() < Date.parse(grant.expires_at);
+}
+
+function toActiveGrant(grant: GrantRow): ActiveGrant {
+  return {
+    organizationId: grant.organization_id,
+    // A source the constraint does not allow cannot exist; anything unrecognised is read as the
+    // programme's own, which is the older and less privileged of the two.
+    source: grant.source === "support" ? "support" : "referral",
+    // `isGrantActive` has already established both ends are set.
+    expiresAt: grant.expires_at ?? ""
+  };
+}
+
+/** How long an operator may hand out in one go. Free text would be a typo away from a decade. */
+export const SUPPORT_GRANT_DAYS = [30, 90, 365] as const;
+
+export type SupportGrantDays = (typeof SUPPORT_GRANT_DAYS)[number];
+
+/** An untrusted number from a form, or nothing. */
+export function isSupportGrantDays(value: number): value is SupportGrantDays {
+  // `as` justified: `includes` needs the wider value narrowed to ask the question at all, and the
+  // predicate is what the caller gets back.
+  return SUPPORT_GRANT_DAYS.includes(value as SupportGrantDays);
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Why a grant did not happen. */
+export type GrantRefusal =
+  /** The workspace is already paying Stripe, so a grant would sit behind the plan and change nothing. */
+  | "already-pro"
+  /** A grant is already running. Stacking two silently would make the end date on the card a lie. */
+  | "already-granted";
+
+/**
+ * Give a workspace Pro for a fixed number of days (spec 164).
+ *
+ * A `plan_grants` row with `source = 'support'`, started immediately — unlike a referral week, which
+ * is written unstarted and waits for `claimPro` to open its window behind any subscription. Support is
+ * answering a founder who is on the phone now, so the window opens now.
+ *
+ * **`organizations.plan` is not touched, and must never be.** That column is reconciled against Stripe
+ * by the webhook and by `syncPlanFromStripe`; a value we wrote there would be overwritten the next
+ * time either ran, and the founder would lose the Pro support had just promised them without anyone
+ * seeing it happen (specs 74, 99, 100).
+ */
+export async function grantSupportPro(
+  actorId: string,
+  orgId: string,
+  days: SupportGrantDays,
+  now: Date = new Date()
+): Promise<{ ok: true; expiresAt: string } | { ok: false; reason: GrantRefusal }> {
+  await assertAdmin(actorId);
+
+  const org = rows<{ plan: string | null }>(
+    await db().from("organizations").select("plan").eq("id", orgId)
+  )[0];
+  if (org?.plan === "pro") return { ok: false, reason: "already-pro" };
+
+  const existing = rows<GrantRow>(
+    await db()
+      .from("plan_grants")
+      .select("organization_id, source, starts_at, expires_at")
+      .eq("organization_id", orgId)
+  );
+  if (existing.some((g) => isGrantActive(g, now))) return { ok: false, reason: "already-granted" };
+
+  const expiresAt = new Date(now.getTime() + days * DAY_MS).toISOString();
+  const res = await db().from("plan_grants").insert({
+    organization_id: orgId,
+    source: "support",
+    duration_days: days,
+    starts_at: now.toISOString(),
+    expires_at: expiresAt
+  });
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
+
+  return { ok: true, expiresAt };
+}
+
+/**
+ * End the grant currently covering a workspace.
+ *
+ * The row stays and its window is closed — `plan_grants` is the record of what we gave and when, and
+ * a deleted row would take the reason for a founder's lost Pro with it. Source-agnostic on purpose: an
+ * operator pressing "remove Pro" means the entitlement should stop, and leaving an earned week running
+ * because it was earned rather than given would make the button say something untrue.
+ */
+export async function revokeActiveGrant(
+  actorId: string,
+  orgId: string,
+  now: Date = new Date()
+): Promise<{ ok: true } | { ok: false; reason: "none-active" }> {
+  await assertAdmin(actorId);
+
+  const grants = rows<GrantRow & { id: string }>(
+    await db()
+      .from("plan_grants")
+      .select("id, organization_id, source, starts_at, expires_at")
+      .eq("organization_id", orgId)
+  );
+  const running = grants.filter((g) => isGrantActive(g, now));
+  if (running.length === 0) return { ok: false, reason: "none-active" };
+
+  const res = await db()
+    .from("plan_grants")
+    .update({ expires_at: now.toISOString() })
+    .in(
+      "id",
+      running.map((g) => g.id)
+    );
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
+
+  return { ok: true };
 }
 
 function tally(values: string[]): Map<string, number> {
@@ -338,6 +589,8 @@ export async function recordAdminAction(input: {
     | "user.suspend"
     | "user.reactivate"
     | "credits.grant"
+    | "pro.grant"
+    | "pro.revoke"
     | "ticket.close"
     | "ticket.reopen"
     | "review.publish"
@@ -770,13 +1023,26 @@ export async function setReviewPublished(
 
 /* ── Suspension ─────────────────────────────────────────────────────────── */
 
+/** Why a suspension did not happen. One case today, and it is the one worth naming. */
+export type SuspendRefusal = "admin";
+
 /**
  * Take an account offline, or bring it back.
  *
- * Two writes, both required. `profiles.suspended_at` is what `getSession` reads, so the session the
- * founder is holding stops working at their next server call; the Supabase Auth ban is what stops them
- * fetching a new one. Doing only the first leaves a cosmetic suspension that lasts until the token
- * expires; doing only the second leaves an open session working for its remaining lifetime.
+ * **One write, and it is the whole mechanism** (spec 164). `profiles.suspended_at` is read by
+ * `readSession` on every server call, so the session the founder is holding stops working at their
+ * next request.
+ *
+ * This used to also ban the account in Supabase Auth, described as the half that stopped them
+ * fetching a *new* token. That framing was wrong in a way that mattered: a ban blocks a fresh sign-in
+ * and a refresh, but the access token already in the browser stays valid for its full lifetime, so the
+ * ban bought nothing the database check was not already doing sooner. What it cost was the ability to
+ * sign in at all — including to `/app/support`, the one door a suspension is supposed to leave open.
+ * So it is gone, and the row is the truth.
+ *
+ * **An admin cannot be suspended.** We are two people; suspending either of us locks the console and
+ * the way out is SQL. The UI hides the button and this refuses anyway — the button being hidden is
+ * presentation, and a server action is a POST endpoint.
  *
  * Nothing is deleted, and the whole thing is reversible — which is exactly why this is the operator
  * action that exists and account deletion is not (spec 150, _Out of scope_).
@@ -786,21 +1052,24 @@ export async function setUserSuspended(
   userId: string,
   suspended: boolean,
   now: Date = new Date()
-): Promise<void> {
+): Promise<{ ok: true } | { ok: false; reason: SuspendRefusal }> {
   await assertAdmin(actorId);
 
+  if (suspended) {
+    const target = await profileFlags(userId);
+    if (target.isAdmin) return { ok: false, reason: "admin" };
+  }
+
+  // A database without this spec's column answers `PGRST204` here, which `rows`-style handling turns
+  // into a throw and the screen into an error. That is the intended outcome: an operator who is told
+  // nothing and assumes it worked is how spec 164 started.
   const res = await db()
     .from("profiles")
     .update({ suspended_at: suspended ? now.toISOString() : null })
     .eq("id", userId);
   if (res.error) throw new Error(`Supabase: ${res.error.message}`);
 
-  // `none` rather than `0` clears an existing ban — Supabase's admin API spells "not banned" as a
-  // zero-length duration.
-  const ban = await db().auth.admin.updateUserById(userId, {
-    ban_duration: suspended ? "876000h" : "none"
-  });
-  if (ban.error) throw new Error(`Supabase Auth: ${ban.error.message}`);
+  return { ok: true };
 }
 
 /* ── Statistics ─────────────────────────────────────────────────────────── */

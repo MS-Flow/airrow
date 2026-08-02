@@ -31,18 +31,30 @@ describe("buildAuthConfig", () => {
   it("maps each template onto the auth-config fields the API expects", () => {
     const body = buildAuthConfig(reader(VALID_HTML), {});
 
-    expect(body.mailer_subjects_confirmation).toBe("Confirm your email address");
-    expect(body.mailer_templates_confirmation_content).toBe(VALID_HTML);
+    for (const { subject, subjectField, contentField } of TEMPLATES) {
+      expect(body[subjectField]).toBe(subject);
+      expect(body[contentField]).toBe(VALID_HTML);
+    }
   });
 
-  it("reads the template by filename, so the file on disk is what gets pushed", () => {
+  it("reads every template by filename, so the files on disk are what get pushed", () => {
     const asked = [];
     buildAuthConfig((file) => {
       asked.push(file);
       return VALID_HTML;
     }, {});
 
-    expect(asked).toEqual(["confirmation.html"]);
+    expect(asked).toEqual(TEMPLATES.map((t) => t.file));
+  });
+
+  // Reset and email change were spec 113's "adding one is a row plus its HTML file"; spec 171 added them,
+  // and this is what stops one going missing again.
+  it("manages the signup, reset and email-change mails", () => {
+    expect(TEMPLATES.map((t) => t.file)).toEqual([
+      "confirmation.html",
+      "recovery.html",
+      "email-change.html"
+    ]);
   });
 
   // The two ways a template can be broken while still looking fine in a diff.
@@ -166,14 +178,13 @@ describe("requireCredentials", () => {
   });
 });
 
-describe("the template committed in the repo", () => {
+describe("the templates committed in the repo", () => {
   // Comments explain the markup and mention tags in prose; only what actually renders is checked.
-  const html = readFileSync("supabase/templates/confirmation.html", "utf8").replace(
-    /<!--[\s\S]*?-->/g,
-    ""
-  );
+  const rendered = (file) =>
+    readFileSync(`supabase/templates/${file}`, "utf8").replace(/<!--[\s\S]*?-->/g, "");
+  const html = TEMPLATES.map((t) => rendered(t.file)).join("\n");
 
-  it("passes its own validation", () => {
+  it("pass their own validation", () => {
     expect(() =>
       buildAuthConfig((file) => readFileSync(`supabase/templates/${file}`, "utf8"), {})
     ).not.toThrow();
@@ -181,13 +192,13 @@ describe("the template committed in the repo", () => {
 
   // An email cannot resolve a relative path, and a renamed asset would degrade to alt text forever
   // without anything failing — so the file it points at has to exist, and be the small one.
-  it("references images by absolute URL only", () => {
+  it("reference images by absolute URL only", () => {
     for (const [, src] of html.matchAll(/<img[^>]*\ssrc="([^"]*)"/g)) {
       expect(src).toMatch(/^https:\/\//);
     }
   });
 
-  it("points at brand assets that are actually in the repo", () => {
+  it("point at brand assets that are actually in the repo", () => {
     for (const [, src] of html.matchAll(/<img[^>]*\ssrc="https:\/\/airrow\.app(\/[^"]*)"/g)) {
       expect(() => readFileSync(`apps/web/public${src}`)).not.toThrow();
     }
@@ -233,12 +244,15 @@ describe("the allow-list agrees with the app's", () => {
     }
   });
 
-  it("covers both auth landings for each host it names", () => {
-    const confirm = REDIRECT_URLS.filter((u) => u.endsWith("/auth/confirm"));
-    const callback = REDIRECT_URLS.filter((u) => u.endsWith("/auth/callback"));
+  // Three landings now (spec 171): a reset link built for a host Supabase has not been told about is
+  // rejected at the moment a locked-out founder clicks it, which is the worst possible time to find out.
+  it("covers every auth landing for each host it names", () => {
+    const hostsFor = (path) =>
+      REDIRECT_URLS.filter((u) => u.endsWith(path))
+        .map((u) => new URL(u.replace("*.", "wildcard.")).host)
+        .sort();
 
-    expect(confirm.map((u) => new URL(u.replace("*.", "wildcard.")).host).sort()).toEqual(
-      callback.map((u) => new URL(u.replace("*.", "wildcard.")).host).sort()
-    );
+    expect(hostsFor("/auth/callback")).toEqual(hostsFor("/auth/confirm"));
+    expect(hostsFor("/auth/reset")).toEqual(hostsFor("/auth/confirm"));
   });
 });

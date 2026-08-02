@@ -188,6 +188,37 @@ describe.skipIf(!dbUp)("referrals and plan grants (local Supabase)", () => {
     ).rejects.toThrow(/plan_grants_window_check/);
   });
 
+  it("accepts a support grant, and still nothing else (spec 164)", async () => {
+    // The constraint was widened by one value, and the point of pinning it is that it was widened by
+    // *one*: a source nobody has written a migration for is still refused.
+    await expect(
+      db.query(
+        "insert into public.plan_grants (organization_id, source, duration_days, starts_at, expires_at) values ($1, 'support', 30, now(), now() + interval '30 days')",
+        [ORG_A]
+      )
+    ).resolves.toMatchObject({ rowCount: 1 });
+
+    await expect(
+      db.query(
+        "insert into public.plan_grants (organization_id, source, duration_days) values ($1, 'because-i-said-so', 30)",
+        [ORG_A]
+      )
+    ).rejects.toThrow(/plan_grants_source_check/);
+  });
+
+  it("still lets nobody but the service role write a support grant (spec 164)", async () => {
+    // Widening the constraint must not have widened the privilege — this is the attack the table was
+    // built to refuse, and a new source value is exactly the moment to re-check it.
+    await expect(
+      asUser(USER_B, () =>
+        db.query(
+          "insert into public.plan_grants (organization_id, source, duration_days, starts_at, expires_at) values ($1, 'support', 3650, now(), now() + interval '10 years')",
+          [ORG_B]
+        )
+      )
+    ).rejects.toThrow(/permission denied/i);
+  });
+
   it("takes the grants and referrals with the workspace when it is deleted", async () => {
     await db.query("delete from public.organizations where id = $1", [ORG_B]);
 
