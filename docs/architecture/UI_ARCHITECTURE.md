@@ -96,6 +96,8 @@ failure teaches founders to dismiss both. Below ~24px the mark drops the gradien
 /                                  Landing
 /start                             Signed-out interview — no account until "generate" (spec 11)
 /login  /signup                    Auth — email+password live; Google/GitHub/Email/magic-link disabled
+/forgot-password                   Ask for a reset link. Answers the same for every address, account
+                                   or not, so it cannot be used to enumerate them (spec 171)
 /app                               Dashboard: continue, recent projects, recent generations
 /app/projects                      Project list
 /app/projects/new                  Create project (step 1 of 2)
@@ -106,7 +108,9 @@ failure teaches founders to dismiss both. Below ~24px the mark drops the gradien
 /app/projects/[id]/preview         Repo browser (tree + reader + editor) — the one view of the output
 /app/projects/[id]/import          Import review: what was derived, and conflicts to decide (spec 63)
 /app/projects/[id]/continue        "Continue locally" handoff
-/app/settings                      Profile, plan & billing, theme, workspace, connections
+/app/password                      Where a reset link lands. Asks for the current password unless the
+                                   recovery marker says the mailbox was just proved (spec 171)
+/app/settings                      Profile, credentials, plan & billing, theme, workspace, connections
 /app/support                       Write to us — a ticket that reaches a real inbox (spec 144).
                                    The one /app route a suspended account still reaches (spec 164)
 /app/suspended                     Where a suspended account lands: says so, links to support, names
