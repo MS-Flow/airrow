@@ -277,6 +277,34 @@ describe("the documents match the command the founder actually has", () => {
 /* ── /cleanup does not learn /start's new trick (spec 159) ─────────────────── */
 
 describe("/cleanup still deletes nothing", () => {
+  // CLAUDE.md's first-session table is the same six rows for both origins, but row 1 is not the same
+  // promise: `/cleanup` installs nothing, builds nothing and stays put.
+  it("describes its own command in CLAUDE.md, and promises no self-removal", () => {
+    const claude = render(IMPORTED).byPath("CLAUDE.md");
+    expect(claude).toContain("## Starting a chat here");
+    expect(claude).toContain("rewrites these documents to match. Changes no code, deletes nothing");
+    expect(claude).not.toContain("then removes itself");
+    expect(claude).toContain(".claude/commands/cleanup.md` still exists");
+  });
+
+  // Both origins need Claude Code before anything in the guide runs; only one of them then has a
+  // command that installs things, and START_HERE must not promise the founder otherwise.
+  // The "what next" table has a row for the command this project has, and only that one — the
+  // imported foundation must not mention a /start it does not ship.
+  it("points an imported project at its own first command and then the spec loop", () => {
+    const claude = render(IMPORTED).byPath("CLAUDE.md");
+    expect(claude).toContain("## After a command finishes");
+    expect(claude).toContain("| `/cleanup` | These documents now describe the code that is really here.");
+    expect(claude).not.toContain("| `/start` |");
+  });
+
+  it("asks an imported project for Claude Code and nothing else", () => {
+    const here = render(IMPORTED).byPath("START_HERE.md");
+    expect(here).toMatch(/\*\*First, install \[Claude Code\]/);
+    expect(here).toContain("`/cleanup` installs nothing");
+    expect(here).not.toContain("are all step 1 of the command below");
+  });
+
   it("does not remove itself, whatever /start now does", () => {
     const cleanup = render(IMPORTED).byPath(CLEANUP);
     expect(cleanup).not.toMatch(/delete .*cleanup\.md/i);
