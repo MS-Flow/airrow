@@ -359,7 +359,9 @@ describe("the generated stack is stated consistently", () => {
   it("tells the assistant what to say after each command, merge included", () => {
     const claude = render().byPath.get("CLAUDE.md") ?? "";
     expect(claude).toContain("## After a command finishes");
-    for (const command of ["/createspec", "/clarify", "/implement", "/analyze", "/push", "/pr-check"]) {
+    // Every command the foundation ships, `/security` included — a command with no next step is the
+    // one a founder stops at.
+    for (const command of ["/createspec", "/clarify", "/implement", "/analyze", "/push", "/pr-check", "/security"]) {
       expect(claude, `no next step after ${command}`).toContain(`| \`${command}\` |`);
     }
     expect(claude).toContain("**Squash and merge**");

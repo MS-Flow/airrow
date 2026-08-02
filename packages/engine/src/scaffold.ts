@@ -1338,6 +1338,7 @@ function afterEachCommand(model: ProjectModel): string {
     `| \`/analyze\` | The spec is checked off and closed. Next: \`/push\`. |`,
     `| \`/push\` | The branch is on ${host}. Next: \`/pr-check\`, which confirms it merges cleanly and prints the command that opens the pull request. |`,
     `| \`/pr-check\` | ${merge} |`,
+    "| `/security` | The findings are in `SECURITY_AUDIT.md`, which is gitignored and stays on this machine. Next: read **Needs you, outside the code** — those are theirs to decide, and anything that changes behaviour goes through `/createspec` like everything else. |",
     "",
     `After that merge the issue branch is finished. The same route takes the work the rest of the way:`,
     "`feature/<name>` → `develop` → `main`, one pull request each, never skipped — and the next change",

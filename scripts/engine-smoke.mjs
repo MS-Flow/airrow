@@ -195,6 +195,10 @@ for (const fx of fixtures) {
     fail(`documents name /${imported ? "start" : "cleanup"}, which this foundation does not ship`);
   }
 
+  // Spec 157: /security has no alternative to pair it with — a project started from nothing and one
+  // that arrived with years of code both have holes to find, so every foundation ships it.
+  if (!paths.has(".claude/commands/security.md")) fail("missing /security command");
+
   // Spec 66: the commands the documents tell the founder to run have to be the ones `/start` sets
   // up. A foundation whose START_HERE names `pnpm test` while `/start` wires `npm test` is the same
   // broken first experience as having no commands at all, just harder to spot.
