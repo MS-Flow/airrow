@@ -32,7 +32,7 @@ import {
   WHY_SDD,
   type DeliverableIcon
 } from "@/features/landing/copy";
-import { readPricing } from "@/features/billing/prices";
+import { readPricing, savingFrom } from "@/features/billing/prices";
 import { readFoundation } from "@/features/landing/foundation";
 import { proCtaHref } from "@/features/landing/pro-cta";
 import { startCtaHref } from "@/features/landing/start-cta";
@@ -83,6 +83,8 @@ export default async function Landing() {
   // unreachable, and the card draws itself without an amount rather than failing.
   const { prices, founding } = await readPricing();
   const monthly = prices.find((p) => p.interval === "month");
+  // The figure to strike through beside the founding one, or nothing to show (spec 182).
+  const saving = savingFrom(founding);
 
   return (
     <div className="min-h-screen bg-bg">
@@ -269,12 +271,25 @@ export default async function Landing() {
                             founding.remaining,
                             founding.total
                           )}
-                          {/* The founding amount, not the list price: Checkout applies the coupon,
-                              so `yearly.amount` here would advertise the deal at the rate you get
-                              for declining it. */}
-                          {founding.amount
-                            ? ` at ${founding.amount} ${SECTIONS.pricing.pro.perYear}`
-                            : ""}
+                          {/* Both figures, and which is which is never in doubt: the list price is
+                              struck through and dimmed, the founding price is the one in the
+                              sentence. Spec 179 carried only the second, which made the offer read
+                              as a price rather than as a discount; spec 182 shows the saving without
+                              changing what is charged. When the list price cannot be read, this
+                              renders exactly as it did before — the founding figure, alone. */}
+                          {founding.amount ? (
+                            <>
+                              {" at "}
+                              {saving ? (
+                                <span className="font-normal text-fg-faint line-through">
+                                  <span className="sr-only">Usual price </span>
+                                  {saving}
+                                </span>
+                              ) : null}
+                              {saving ? " " : ""}
+                              {founding.amount} {SECTIONS.pricing.pro.perYear}
+                            </>
+                          ) : null}
                         </p>
                         <p className="mt-1 text-sm text-fg-muted">
                           {SECTIONS.pricing.pro.founding.promise}

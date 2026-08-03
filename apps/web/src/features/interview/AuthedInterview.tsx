@@ -29,6 +29,7 @@ export function AuthedInterview({
   return (
     <InterviewRuntime
       projectName={projectName}
+      mode="account"
       initialAnswers={initialAnswers}
       regenerating={regenerating}
       rejectedAnswers={rejectedAnswers}

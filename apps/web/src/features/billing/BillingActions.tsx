@@ -40,10 +40,15 @@ const INTERVAL_PERIOD: Record<string, string> = {
  * screen shows has to be the price Checkout charges — a button reading one figure and billing another
  * is worse than a button reading none (spec 179, amendment 1). It is `null` whenever Stripe could not
  * be asked, and the button then reads exactly as it did before prices were shown at all.
+ *
+ * `wasAmount` is the list price the offer discounts from, shown struck through beside `amount` so the
+ * founding rate reads as a saving rather than as a price (spec 182). `null` whenever there is no
+ * offer running on this interval — which is when there is nothing to strike through.
  */
 export interface UpgradeOption {
   interval: string;
   amount: string | null;
+  wasAmount: string | null;
 }
 
 export function UpgradeButtons({ options }: { options: UpgradeOption[] }) {
@@ -57,7 +62,7 @@ export function UpgradeButtons({ options }: { options: UpgradeOption[] }) {
     <div className="mt-4 space-y-3">
       {state.error ? <InlineError>{state.error}</InlineError> : null}
       <div className="flex flex-wrap gap-2">
-        {options.map(({ interval, amount }, i) => (
+        {options.map(({ interval, amount, wasAmount }, i) => (
           <form action={action} key={interval}>
             <input type="hidden" name="interval" value={interval} />
             <SubmitButton
@@ -66,7 +71,17 @@ export function UpgradeButtons({ options }: { options: UpgradeOption[] }) {
               pendingLabel="Opening Stripe…"
             >
               {INTERVAL_LABEL[interval] ?? "Upgrade"}
-              {amount ? ` — ${amount} ${INTERVAL_PERIOD[interval] ?? ""}`.trimEnd() : ""}
+              {amount ? " — " : ""}
+              {/* The saving, and only where one exists. `line-through` on its own would read as a
+                  price that had been withdrawn, so the struck figure is also dimmed and carries the
+                  label a screen reader needs to know which of the two is charged. */}
+              {amount && wasAmount ? (
+                <span className="opacity-60 line-through">
+                  <span className="sr-only">Usual price </span>
+                  {wasAmount}
+                </span>
+              ) : null}
+              {amount ? `${wasAmount ? " " : ""}${amount} ${INTERVAL_PERIOD[interval] ?? ""}`.trimEnd() : ""}
             </SubmitButton>
           </form>
         ))}

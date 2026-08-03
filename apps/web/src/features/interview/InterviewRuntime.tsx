@@ -2,7 +2,7 @@
 
 // Adaptive interview runtime (F-301). One question per screen, schema-driven,
 // conditions evaluated live, answers persisted per change.
-import { useCallback, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Pencil } from "lucide-react";
@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { InlineError, Notice, UpgradeNotice } from "@/components/ui/states";
+import { captureClient } from "@/features/analytics/client";
 import { rejectionSummary } from "@/features/generation/rejection";
 import { cn } from "@/lib/utils";
 import { UiKitPreview } from "./UiKitPreview";
@@ -39,6 +40,14 @@ import { UiReferences, type ReferenceUploads } from "./UiReferences";
  */
 interface Props {
   projectName: string;
+  /**
+   * Which of the two interviews this is (spec 182).
+   *
+   * Passed rather than inferred from `uploads` or `destroy` being absent. Those happen to be
+   * undefined on the guest path today, and a funnel that quietly re-labels itself the day one of
+   * them is added to guests is worse than a prop.
+   */
+  mode: "guest" | "account";
   initialAnswers: InterviewAnswers;
   /** The project already has a generated foundation — submitting replaces it. */
   regenerating?: boolean;
@@ -97,6 +106,7 @@ function answerLabel(q: Question, answers: InterviewAnswers): string {
 
 export function InterviewRuntime({
   projectName,
+  mode: interviewMode,
   initialAnswers,
   regenerating = false,
   persist: persistAnswers,
@@ -168,7 +178,28 @@ export function InterviewRuntime({
     [applyAnswers]
   );
 
+  // The top of the funnel's second step (spec 182). Once per mounted interview, regardless of how
+  // many questions the founder then gets through — including none, which is the number this exists to
+  // measure against.
+  useEffect(() => {
+    captureClient("interview_started", { mode: interviewMode });
+  }, [interviewMode]);
+
   const advance = useCallback(() => {
+    // The question *just completed*, with where it sat — this is the drop-off curve (spec 182). The
+    // id is the question's, never the answer's: what was typed into it never leaves the browser
+    // (§II). Emitted here rather than inside the updater below, because a state updater must stay
+    // pure — React is free to run it twice, and under StrictMode it does, which would report every
+    // interview as twice as long as it was.
+    const shown = visible.findIndex((q) => q.id === current?.id);
+    if (current && shown >= 0) {
+      captureClient("interview_step", {
+        question: current.id,
+        index: shown + 1,
+        total: visible.length
+      });
+    }
+
     setAnswers((prev) => {
       const vis = visibleQuestions(prev);
       const idx = vis.findIndex((q) => q.id === current?.id);
@@ -176,7 +207,7 @@ export function InterviewRuntime({
       else setMode("review");
       return prev;
     });
-  }, [current]);
+  }, [current, visible]);
 
   const submit = () => {
     setError(null);

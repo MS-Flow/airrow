@@ -4,13 +4,22 @@
 // must write real words into the field the founder then owns — not select an option that lives
 // somewhere else and quietly disagrees with what they typed. There is one answer at the end of this
 // screen, and these tests are what say so.
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { interviewQuestions, type AnswerId, type InterviewAnswers } from "@airrow/schemas";
 import { InterviewRuntime } from "./InterviewRuntime";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
+const analytics = vi.hoisted(() => ({
+  captures: [] as { name: string; properties: Record<string, unknown> }[]
+}));
+vi.mock("@/features/analytics/client", () => ({
+  captureClient: (name: string, properties: Record<string, unknown>) => {
+    analytics.captures.push({ name, properties });
+  }
+}));
 
 const direction = interviewQuestions.find((q) => q.id === "uiDirection");
 const preset = direction?.options?.find((o) => o.value === "soft_minimal");
@@ -30,6 +39,7 @@ function renderInterview({
       destroy={destroy}
       rejectedAnswers={rejectedAnswers}
       projectName="Pied Piper"
+      mode="account"
       // Seeded past every required question, so the interview opens on the design question itself.
       initialAnswers={{
         productType: "saas",
@@ -66,6 +76,56 @@ async function openTheDesignQuestion(): Promise<HTMLTextAreaElement> {
   if (!(field instanceof HTMLTextAreaElement)) throw new Error("no design field");
   return field;
 }
+
+// The top of the funnel (spec 182), which had no test until `/analyze` looked. The drop-off curve
+// is the single most useful thing on the dashboard — "the interview is too long" is a claim you can
+// only make with it — and it is entirely made of these two events.
+describe("the funnel events", () => {
+  beforeEach(() => {
+    analytics.captures = [];
+  });
+
+  it("reports the interview starting, once, with which of the two it is", () => {
+    renderInterview();
+
+    expect(analytics.captures).toEqual([
+      { name: "interview_started", properties: { mode: "account" } }
+    ]);
+  });
+
+  it("reports the question just completed, with where it sat", async () => {
+    renderInterview();
+    await openTheDesignQuestion();
+    analytics.captures = [];
+
+    // "Skip", exactly — the review screen's "Skip to review →" is a different button, and a regex
+    // matches both.
+    await userEvent.click(screen.getByRole("button", { name: "Skip" }));
+
+    const step = analytics.captures.find((c) => c.name === "interview_step");
+    expect(step?.properties).toMatchObject({ question: "uiDirection" });
+    expect(step?.properties.index).toBeGreaterThan(0);
+    expect(step?.properties.total).toBeGreaterThanOrEqual(
+      Number(step?.properties.index)
+    );
+  });
+
+  it("never carries what was typed into the question", async () => {
+    // Interview answers are customer IP (§II). The event names the question; the answer stays in the
+    // browser. `sanitize` enforces it too — this asserts the caller never even offers it.
+    renderInterview();
+    const field = await openTheDesignQuestion();
+    await userEvent.type(field, "A CRM for veterinary clinics");
+    analytics.captures = [];
+
+    // The label flips to "Continue" once the field has text.
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    for (const capture of analytics.captures) {
+      expect(JSON.stringify(capture.properties)).not.toContain("veterinary");
+    }
+  });
+});
 
 describe("the design question", () => {
   it("offers the starting directions and the field on one screen", async () => {

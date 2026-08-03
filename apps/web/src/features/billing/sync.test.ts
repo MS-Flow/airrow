@@ -9,8 +9,16 @@ const getSubscription = vi.hoisted(() => vi.fn());
 const applySubscriptionState = vi.hoisted(() => vi.fn(async () => {}));
 const subscriptionsList = vi.hoisted(() => vi.fn());
 const configured = vi.hoisted(() => ({ current: true }));
+const captured = vi.hoisted(() => ({ paid: [] as { tier: string }[] }));
 
 vi.mock("@/lib/data/store", () => ({ getSubscription, applySubscriptionState }));
+// The transport only; `paid.ts` is real, because whether *this* path reports a conversion or a
+// repeat is a property of this path (spec 182).
+vi.mock("@/features/analytics/server", () => ({
+  capture: (name: string, _id: string, properties: { tier: string }) => {
+    if (name === "paid") captured.paid.push(properties);
+  }
+}));
 vi.mock("@/lib/stripe", async () => {
   const actual = await vi.importActual<typeof import("@/lib/stripe")>("@/lib/stripe");
   return {
@@ -39,7 +47,11 @@ function subscription(overrides: Record<string, unknown> = {}) {
     status: "active",
     created: 1_700_000_000,
     cancel_at_period_end: false,
-    items: { data: [{ current_period_end: 1_800_000_000 }] },
+    // What `paidTier` reads, as Stripe actually sends it (spec 182).
+    items: {
+      data: [{ current_period_end: 1_800_000_000, price: { recurring: { interval: "month" } } }]
+    },
+    discounts: [],
     ...overrides
   };
 }
@@ -48,8 +60,26 @@ describe("syncPlanFromStripe", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     configured.current = true;
+    captured.paid = [];
     getSubscription.mockResolvedValue(record);
     subscriptionsList.mockResolvedValue({ data: [subscription()] });
+  });
+
+  it("reports a conversion when this is the reconciliation that grants Pro", async () => {
+    // The row said `incomplete` before the write — a founder whose webhook never arrived, which is
+    // the whole reason this path exists. That is a real customer arriving, and the funnel says so.
+    await syncPlanFromStripe("org1");
+
+    expect(captured.paid).toEqual([{ tier: "monthly" }]);
+  });
+
+  it("reports nothing when the organization was already on Pro", async () => {
+    // Every billing screen reconciles. Without this, opening Settings twice would be two customers.
+    getSubscription.mockResolvedValue({ ...record, status: "active" });
+
+    await syncPlanFromStripe("org1");
+
+    expect(captured.paid).toEqual([]);
   });
 
   it("grants Pro from what Stripe reports, not from what a browser claims", async () => {

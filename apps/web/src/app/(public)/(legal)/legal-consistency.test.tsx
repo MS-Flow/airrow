@@ -44,6 +44,21 @@ describe("the cookie policy", () => {
   it("says the analytics stays off the signed-in app", () => {
     expect(textOf(<CookiesPage />)).toMatch(/public pages/i);
   });
+
+  it("names the second analytics tool, and says it keeps nothing on the device either", () => {
+    // Spec 182 added PostHog. A cookie policy that lists one of two tools is a cookie policy that is
+    // wrong, and the sentence it would be wrong in is the one holding up the no-banner reasoning.
+    const text = textOf(<CookiesPage />);
+
+    expect(text).toMatch(/PostHog/);
+    expect(text).toMatch(/no cookie, no local storage/i);
+  });
+
+  it("still says what the analytics never receives", () => {
+    const text = textOf(<CookiesPage />);
+
+    expect(text).toMatch(/interview answers/i);
+  });
 });
 
 describe("the privacy policy", () => {
@@ -68,6 +83,14 @@ describe("the privacy policy", () => {
     expect(text).toMatch(/advertising/i);
     expect(text).toMatch(/session-recording/i);
     expect(text).toMatch(/intellectual property/i);
+  });
+
+  it("lists PostHog as a processor, and what it is not given", () => {
+    // A new processor is a change to this list, and it ships with the code rather than after it.
+    const text = textOf(<PrivacyPage />);
+
+    expect(text).toMatch(/PostHog/);
+    expect(text).toMatch(/no email address, no name/i);
   });
 
   it("points at the cookie policy for the detail", () => {
