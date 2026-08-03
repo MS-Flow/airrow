@@ -16,6 +16,11 @@ const claimStripeEvent = vi.hoisted(() => vi.fn(async () => true));
 const orgForStripeCustomer = vi.hoisted(() => vi.fn(async (): Promise<string | null> => "org1"));
 const applySubscriptionState = vi.hoisted(() => vi.fn(async () => {}));
 const releaseStripeEvent = vi.hoisted(() => vi.fn(async () => {}));
+/** The row as it stood before the write, which is what tells `paid` a purchase from a renewal. */
+const getSubscription = vi.hoisted(() =>
+  vi.fn(async (): Promise<{ status: string } | null> => null)
+);
+const captured = vi.hoisted(() => ({ paid: [] as { tier: string }[] }));
 
 vi.mock("@/lib/stripe", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/stripe")>();
@@ -33,7 +38,15 @@ vi.mock("@/lib/data/store", () => ({
   claimStripeEvent,
   orgForStripeCustomer,
   applySubscriptionState,
+  getSubscription,
   releaseStripeEvent
+}));
+// The transport only. `paid.ts` itself is real, because whether this endpoint reports a *conversion*
+// rather than a redelivery is a property of the endpoint (spec 182).
+vi.mock("@/features/analytics/server", () => ({
+  capture: (name: string, _id: string, properties: { tier: string }) => {
+    if (name === "paid") captured.paid.push(properties);
+  }
 }));
 
 import { POST } from "./route";
@@ -45,7 +58,12 @@ function subscription(overrides: Record<string, unknown> = {}) {
     customer: "cus_1",
     status: "active",
     cancel_at_period_end: false,
-    items: { data: [{ current_period_end: 1790000000 }] },
+    // `price` and `discounts` are what `paidTier` reads to tell monthly from yearly from a founding
+    // place (spec 182). Stripe sends them on every subscription; the fixture now does too.
+    items: {
+      data: [{ current_period_end: 1790000000, price: { recurring: { interval: "year" } } }]
+    },
+    discounts: [],
     ...overrides
   };
 }
@@ -69,6 +87,8 @@ describe("stripe webhook", () => {
     orgForStripeCustomer.mockResolvedValue("org1");
     applySubscriptionState.mockResolvedValue(undefined);
     releaseStripeEvent.mockResolvedValue(undefined);
+    getSubscription.mockResolvedValue(null);
+    captured.paid = [];
   });
 
   describe("authorization", () => {
@@ -279,6 +299,82 @@ describe("stripe webhook", () => {
 
       expect(res.status).toBe(200);
       expect(applySubscriptionState).not.toHaveBeenCalled();
+    });
+  });
+
+  // The funnel's last step, which is the one with the most ways to overcount (spec 182).
+  describe("the paid event", () => {
+    it("reports a conversion the first time an organization becomes Pro", async () => {
+      constructEventAsync.mockResolvedValue(
+        event("customer.subscription.updated", subscription({ discounts: ["di_1"] }))
+      );
+
+      await POST(request());
+
+      expect(captured.paid).toEqual([{ tier: "founding" }]);
+    });
+
+    it("distinguishes an undiscounted yearly subscription from a founding place", async () => {
+      constructEventAsync.mockResolvedValue(event("customer.subscription.updated", subscription()));
+
+      await POST(request());
+
+      expect(captured.paid).toEqual([{ tier: "yearly" }]);
+    });
+
+    it("reports nothing when the organization was already paying", async () => {
+      // A renewal, or Stripe redelivering an event whose twin already landed. Both find a row that
+      // says Pro, and neither is a new customer.
+      getSubscription.mockResolvedValue({ status: "active" });
+      constructEventAsync.mockResolvedValue(event("customer.subscription.updated", subscription()));
+
+      await POST(request());
+
+      expect(captured.paid).toEqual([]);
+    });
+
+    it("reports nothing on a cancellation", async () => {
+      getSubscription.mockResolvedValue({ status: "active" });
+      constructEventAsync.mockResolvedValue(
+        event("customer.subscription.deleted", subscription({ status: "canceled" }))
+      );
+
+      await POST(request());
+
+      expect(captured.paid).toEqual([]);
+    });
+
+    it("reads the row before the write, not after", async () => {
+      // The other order reads back the row this very request just wrote, which always says Pro —
+      // and the event would then never fire at all.
+      const order: string[] = [];
+      getSubscription.mockImplementation(async () => {
+        order.push("read");
+        return null;
+      });
+      applySubscriptionState.mockImplementation(async () => {
+        order.push("write");
+      });
+      constructEventAsync.mockResolvedValue(event("customer.subscription.updated", subscription()));
+
+      await POST(request());
+
+      expect(order).toEqual(["read", "write"]);
+    });
+
+    it("still answers 200 when the analytics helper throws", async () => {
+      // The property everything else here depends on: Stripe must never be told a successful
+      // payment failed, because it would retry one that already worked.
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      constructEventAsync.mockResolvedValue(
+        // A subscription with no items at all — the shape that would throw on a naive read.
+        event("customer.subscription.updated", subscription({ items: { data: [] } }))
+      );
+
+      const res = await POST(request());
+
+      expect(res.status).toBe(200);
+      expect(applySubscriptionState).toHaveBeenCalled();
     });
   });
 });

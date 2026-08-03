@@ -462,7 +462,7 @@ describe("required means required, and optional means optional", () => {
     expect(ANSWER_MAX_CHARS.integrations).toBeGreaterThan(0);
 
     const merged = question("coreEntities");
-    expect(merged.title).toMatch(/keep track of/i);
+    expect(merged.title).toMatch(/core pages/i);
     expect(merged.title).toMatch(/connect to/i);
     expect(merged.help).toMatch(/connect/i);
     expect(merged.required).toBe(false);

@@ -9,6 +9,7 @@
 // Deliberately outside the middleware matcher, like the GitHub callback: the founder has no session
 // yet when they arrive.
 import { NextResponse, type NextRequest } from "next/server";
+import { captureSignup } from "@/features/analytics/signup";
 import { attachPendingReferral } from "@/features/referrals/attach";
 import { supabaseServer } from "@/lib/data/supabase-server";
 
@@ -28,6 +29,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // the new workspace (spec 122). It cannot fail loudly: nothing about a referral is worth breaking a
   // confirmed signup over.
   await attachPendingReferral({ id: data.user.id, createdAt: data.user.created_at });
+  // The email half of the same event. Clicking the link is where an email account becomes usable,
+  // which is the moment worth counting (spec 182).
+  await captureSignup({ id: data.user.id, createdAt: data.user.created_at }, "email");
 
   // Confirmed and signed in — straight to the workspace, which is what the founder was doing when
   // the confirmation interrupted them.

@@ -118,6 +118,7 @@ export function GuestInterview() {
   return (
     <InterviewRuntime
       projectName={basics.name}
+      mode="guest"
       initialAnswers={initialAnswers}
       persist={(answers) => save(basics, answers)}
       submit={async (answers) => {

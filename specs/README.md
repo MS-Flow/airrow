@@ -79,3 +79,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | A way back in, and credentials you can change | [171-forgot-password.md](171-forgot-password.md) | ✅ Done |
 | Curated directions that install real code | [165-installable-ui-directions.md](165-installable-ui-directions.md) | ✅ Done |
 | A real price on the Pro card, and a founding-member deal | [179-pro-price-founding-offer.md](179-pro-price-founding-offer.md) | ✅ Done |
+| Knowing where people fall out | [182-posthog-funnel.md](182-posthog-funnel.md) | 🔄 In progress |

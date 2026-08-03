@@ -10,9 +10,7 @@
 // A client component solely because `beforeSend` is a function, and a Server Component cannot hand one
 // to a client boundary.
 import { Analytics } from "@vercel/analytics/next";
-
-/** Everything under here is a signed-in founder's own workspace, and none of our business to count. */
-const PRIVATE_PREFIX = "/app";
+import { isPrivatePath } from "@/features/analytics/events";
 
 export function SiteAnalytics() {
   return (
@@ -24,10 +22,9 @@ export function SiteAnalytics() {
         // Filtering here rather than by mounting per-route keeps it one decision in one place, and one
         // that fails closed: a new route under /app is excluded the day it exists.
         try {
-          const path = new URL(event.url).pathname;
-          // The segment, not the string. A bare `startsWith("/app")` also swallows `/apply` and
-          // `/approach` — public pages we would silently stop counting.
-          if (path === PRIVATE_PREFIX || path.startsWith(`${PRIVATE_PREFIX}/`)) return null;
+          // The predicate moved to `features/analytics/events.ts` when spec 182 added a second tool
+          // that has to answer the same question. Same rule, same segment check, one file (§IV).
+          if (isPrivatePath(new URL(event.url).pathname)) return null;
         } catch {
           // An unparseable URL is not something to guess about. Dropping it loses one count; letting it
           // through could send a path we meant to withhold.

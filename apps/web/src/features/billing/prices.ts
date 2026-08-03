@@ -24,14 +24,26 @@ export interface FoundingOffer {
   /**
    * The yearly amount **after** the coupon, formatted — what pressing the button charges.
    *
-   * Never the list price. Checkout attaches the coupon, so naming `STRIPE_PRICE_YEARLY`'s own figure
-   * beside a founding badge would advertise a deal at the rate you get for *not* taking it.
-   *
    * `null` when it cannot be worked out — no yearly price configured, or a coupon Stripe describes
    * with neither `percent_off` nor `amount_off`. The line then renders without a figure, which is the
    * same rule the rest of this module follows: no number beats a wrong one.
    */
   amount: string | null;
+  /**
+   * The yearly **list** price the offer discounts from, formatted — the struck-through figure.
+   *
+   * Spec 179 refused to carry this at all, reasoning that naming `STRIPE_PRICE_YEARLY`'s own figure
+   * beside a founding badge advertises a deal at the rate you get for *not* taking it. Spec 182
+   * narrows that rather than dropping it, because the objection was about **mislabelling**: a lone
+   * list price next to a founding badge is a lie about what the button charges, and a struck-through
+   * one beside the live figure is the opposite — it says plainly which is charged and which is not.
+   * What survives unchanged is the rule underneath: `amount` is still the only figure ever presented
+   * as payable.
+   *
+   * `null` when the yearly price could not be read, and the card then shows the founding figure
+   * alone. A saving nobody can see is better than an empty strikethrough beside a real price.
+   */
+  listAmount: string | null;
 }
 
 export interface Pricing {
@@ -48,6 +60,20 @@ export interface Pricing {
  * amount lives in Stripe is that exactly one place is allowed to know it.
  */
 export const NO_PRICING: Pricing = { prices: [], founding: null };
+
+/**
+ * The list price beside the founding one, or nothing to strike through.
+ *
+ * A saving is only worth showing while it is *a* saving: once the places are gone the list price is
+ * simply the price, and drawing a line through the number somebody is about to pay would be a
+ * discount that does not exist. Equal figures are treated the same way — a coupon Stripe applied as
+ * zero is not an offer.
+ */
+export function savingFrom(founding: FoundingOffer | null): string | null {
+  if (!founding || founding.remaining === 0) return null;
+  if (!founding.amount || !founding.listAmount) return null;
+  return founding.listAmount === founding.amount ? null : founding.listAmount;
+}
 
 /** How long a price may be stale. One Stripe call an hour per deployment, whatever the traffic. */
 const REVALIDATE_SECONDS = 3600;
@@ -127,7 +153,11 @@ async function readFounding(yearly: RawPrice | undefined): Promise<FoundingOffer
   return {
     total: coupon.max_redemptions,
     remaining: seatsRemaining(coupon.max_redemptions, coupon.times_redeemed),
-    amount: rate === null || !yearly ? null : formatAmount(rate, yearly.currency)
+    amount: rate === null || !yearly ? null : formatAmount(rate, yearly.currency),
+    // Formatted from the same price and the same currency as the discounted figure, so the pair on
+    // the card can never be two amounts from two reads (spec 182).
+    listAmount:
+      yearly?.unitAmount == null ? null : formatAmount(yearly.unitAmount, yearly.currency)
   };
 }
 
@@ -172,11 +202,16 @@ const cachedPricing = unstable_cache(fetchPricing, ["landing-pricing"], {
 });
 
 /**
- * What each interval's upgrade button should say it costs.
+ * What each interval's upgrade button should say it costs, and what it costs without the offer.
  *
- * Yearly reports the **founding** amount while places remain, because a button that reads one figure
- * and charges another is worse than a button that reads none. Once the offer is gone it falls back to
- * the list price, which is then what Checkout actually bills.
+ * `amount` is the **payable** figure and nothing else: yearly reports the founding rate while places
+ * remain, because a button that reads one figure and charges another is worse than a button that
+ * reads none. Once the offer is gone it falls back to the list price, which is then what Checkout
+ * actually bills.
+ *
+ * `wasAmount` is the figure to strike through beside it, and is `null` on every interval that is not
+ * currently discounted — which is every interval but yearly, and yearly too once the places are
+ * gone. It is never the payable one (spec 182).
  *
  * `null` throughout when Stripe could not be asked, and the buttons read exactly as they did before
  * any of this existed.
@@ -186,13 +221,15 @@ const cachedPricing = unstable_cache(fetchPricing, ["landing-pricing"], {
 export function upgradeAmounts(
   { prices, founding }: Pricing,
   intervals: string[]
-): { interval: string; amount: string | null }[] {
+): { interval: string; amount: string | null; wasAmount: string | null }[] {
+  const discountedYear = founding && founding.remaining > 0;
   return intervals.map((interval) => ({
     interval,
     amount:
-      interval === "year" && founding && founding.remaining > 0
+      interval === "year" && discountedYear
         ? founding.amount
-        : (prices.find((p) => p.interval === interval)?.amount ?? null)
+        : (prices.find((p) => p.interval === interval)?.amount ?? null),
+    wasAmount: interval === "year" ? savingFrom(founding) : null
   }));
 }
 
