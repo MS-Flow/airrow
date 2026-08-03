@@ -461,8 +461,14 @@ be rehearsed anywhere — which is why Step 4 is a deliberate walk-through rathe
 ### Step 3 — Redeploy (5 min, mostly waiting)
 
 Environment variables are read at build time, so an existing deployment will not pick them up.
-Vercel → **Deployments** → the newest Production one → **⋯ → Redeploy**. Leave "use existing build
-cache" ticked; it is the env vars that changed, not the code.
+Vercel → **Deployments** → the newest Production one → **⋯ → Redeploy**.
+
+**Untick "use existing Build Cache".** This matters and is easy to get wrong: `NEXT_PUBLIC_*` values
+are not read at runtime — Next inlines them into the client bundle as string literals during
+compilation. A cached build can reuse the already-compiled bundle, in which the value is still empty,
+and you get a deployment where the *server* half sends events and the *browser* half silently does
+not. The server keys (`POSTHOG_KEY`) are read at runtime and are unaffected, which is exactly what
+makes the symptom confusing.
 
 Wait for it to go green before Step 4. A half-deployed app will simply not send anything, and you
 will spend twenty minutes debugging a deployment that was still building.
@@ -487,12 +493,37 @@ Eight events. There is a ninth name, `github_pushed`, which is defined and **nev
 a foundation to a repository is not built yet, and the name exists so the funnel has a slot ready
 rather than to claim a feature we do not have.
 
-**If nothing appears at all:** check the browser devtools Network tab for requests to
-`eu.i.posthog.com`. None at all means `NEXT_PUBLIC_POSTHOG_KEY` did not reach the build — re-check
-the environment scoping in Step 2 and redeploy. Requests that 401 mean the key is wrong.
+#### When nothing arrives
+
+Work through these in order — the first two are what actually went wrong the first time this was set
+up, and neither produces an error message anywhere.
+
+**1. Read the variable names back, character by character.** `NEXT_PUBLICPOSTHOG_KEY` — a single
+missing underscore — cost an afternoon. Next exposes a variable to the browser *only* if the name
+starts with exactly `NEXT_PUBLIC_`; anything else stays server-side, where nothing reads it. The
+Vercel list looks completely correct at a glance, the build succeeds, and the browser sends nothing.
+There is no warning for this, in Vercel or in Next.
+
+**2. Redeploy without the build cache** (Step 3). A cached build reuses the compiled client bundle,
+in which the inlined value is still whatever it was at the last real compile.
+
+**3. Devtools → Network, filter `posthog`, reload the production site.**
+
+| What you see | What it means |
+|---|---|
+| A request to `eu.i.posthog.com` | It works — the problem is the PostHog view, not the app |
+| Nothing at all | The key is not in the client bundle → 1 or 2 |
+| 401 or 403 | Wrong key, or wrong region in the host |
+
+**4. Search the bundle directly.** Devtools → **Sources** → `Ctrl+Shift+F` → search `phc_`. A hit
+means the key compiled in and the fault is elsewhere; no hit confirms 1 or 2 without guesswork.
 
 **If the client events appear but `signup` / `paid` do not:** those are server-sent, so the problem is
 `POSTHOG_KEY` (the one without `NEXT_PUBLIC_`), not the browser. Check the Vercel function logs.
+
+**Note the asymmetry that makes this confusing:** `POSTHOG_KEY` is read at *runtime*, so a typo there
+breaks only the server half; `NEXT_PUBLIC_POSTHOG_KEY` is inlined at *build* time, so a typo there
+breaks only the browser half — and each half fails silently and independently.
 
 ### Step 5 — Build the dashboard as ratios (5 min)
 
