@@ -75,6 +75,17 @@ picked from a list (spec 67). Both are read server-side, then:
    A conflict is only ever written when the founder picks it on `/app/projects/[id]/import`;
    an undecided conflict keeps their file.
 
+**Integrated or hidden (spec 187).** The founder chooses on the same review screen, before generating,
+and the choice is stored on `import_sources` (`delivery_layout` + `hidden_folder`, one check
+constraint keeping the pair honest) rather than re-derived from anything. It travels to the pure
+engine on `ProjectModel.origin`'s imported arm and is applied **once, in `generate()`** — `nestUnder`
+prefixes every path with the folder before validation, so what is stored is already what will be
+delivered. Every stage after that is unchanged and unaware: nothing shares a path with the founder's
+tree any more, so step 4 finds zero conflicts, `applyResolutions` has nothing to resolve, and no
+`.airrow.md` sidecar is ever produced. `shipsPath` drops both CI files, because a workflow inside an
+ignored folder is never pushed and never runs. The folder is offered only when the analysis found a
+code signal, and only `/cleanup` — on the founder's machine — writes the ignore rule.
+
 5. **Show** — `mergePreviewFiles` + `buildPreviewTree` put those paths in the *preview* tree next to
    Airrow's own files, each row tagged with where it comes from. Shape only: the founder's files are
    listed by name, never opened, because their content was never stored.

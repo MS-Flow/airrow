@@ -96,6 +96,17 @@ passes it in.
   foundation's documents to match, changes no code and deletes nothing — including itself. Exactly one
   of the two ships, decided by the project's origin. ZIP delivery must always work with no integration
   connected.
+- **An import lands integrated or hidden, and the founder picks (spec 187).** Integrated is the
+  original shape. **Hidden** nests the entire foundation under one folder the founder names —
+  validated as a single path segment, **stored** on `import_sources`, never re-derived — and
+  `/cleanup` has git ignore it via `.git/info/exclude`, so the shared repository's diff stays empty;
+  the committed `.gitignore` line is offered, never written without a yes. The nesting happens **once,
+  in `generate()`**, so what is stored is what is delivered and nothing downstream knows the mode
+  exists: nothing collides, so there are no conflicts and no `.airrow.md` sidecars. Hidden ships **no
+  CI** (a workflow in an ignored folder can never run) and narrows `/cleanup` to the folder — it
+  builds no branch model, rewrites none of the team's documents, and reports nothing for deletion.
+  Offered only when the analysis found code; a documents-only import gets `/start` and stays
+  integrated.
 - **Curated UI directions are a visual language, never a layout (spec 165).** Each of the three
   directions on the design question points at a **theme** — palette, type, corner, spacing, surface,
   motion — that `/start` installs on top of shadcn/ui at an **exact pinned version**, never `@latest`.

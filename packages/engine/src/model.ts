@@ -55,6 +55,28 @@ export function slugify(name: string): string {
   );
 }
 
+/**
+ * A hidden delivery's folder name from whatever the founder typed, or `null` when there is nothing
+ * usable in it (spec 187).
+ *
+ * Deliberately *not* `slugify`, whose empty case falls back to `"project"`. That fallback is right
+ * for a project slug, which must exist and which nobody reads as a promise; it is wrong here,
+ * because it would answer a founder who typed punctuation with a folder called `project` that they
+ * never chose and would not recognise in their own repository. Nothing usable is an answer, and the
+ * caller decides what to do with it — refuse a submission, or fill a prefill.
+ */
+export function hiddenFolderFrom(raw: string): string | null {
+  const folder = raw
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48)
+    .replace(/-+$/, "");
+  return folder === "" ? null : folder;
+}
+
 export function resolveProjectModel(input: ResolveInput): ProjectModel {
   const a = input.answers;
   const productType: ProductType = a.productType ?? "saas";
@@ -93,7 +115,13 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
 
   // Same test `commandFor` applies to the finished model, asked here because `uiKit` is resolved
   // before there is a model to ask.
-  const origin: ProjectOrigin = input.origin ?? { kind: "new" };
+  // An origin with no delivery is normalised here rather than trusted to arrive complete: the field
+  // is newer than the callers (spec 187), and every import that predates it was delivered
+  // integrated — so the fill-in is what actually happened, not a guess. Doing it once, at the only
+  // door into the model, is what lets `hiddenFolder` read the field without defending itself.
+  const given: ProjectOrigin = input.origin ?? { kind: "new" };
+  const origin: ProjectOrigin =
+    given.kind === "imported" ? { ...given, delivery: given.delivery ?? { kind: "integrated" } } : given;
   const imported = origin.kind === "imported" && origin.stackDetected;
 
   const hosting: Hosting = a.hosting ?? "vercel";
@@ -256,9 +284,33 @@ export function commandFor(m: ProjectModel): "start" | "cleanup" {
   return m.origin.kind === "imported" && m.origin.stackDetected ? "cleanup" : "start";
 }
 
-/** Where that command lives in the generated repository. */
+/** Where that command lives in the generated repository, before the layout is applied. */
 export function commandPath(m: ProjectModel): string {
   return `.claude/commands/${commandFor(m)}.md`;
+}
+
+/**
+ * The folder a hidden delivery nests under, or `null` when the foundation takes the tree as its own.
+ *
+ * The single place the layout is read. Everything downstream — the paths, what ships, what the
+ * documents say about where to stand — asks this rather than unpacking `origin` again, so there is
+ * one answer to "is this hidden" and not four that can drift (spec 187).
+ */
+export function hiddenFolder(m: ProjectModel): string | null {
+  if (m.origin.kind !== "imported") return null;
+  return m.origin.delivery.kind === "hidden" ? m.origin.delivery.folder : null;
+}
+
+/**
+ * Where a generated file actually lands.
+ *
+ * Integrated, that is the path the template gave it. Hidden, everything moves together under one
+ * folder — which is why the documents' own relative links keep resolving: the whole foundation
+ * moved, not parts of it.
+ */
+export function deliveredPath(m: ProjectModel, path: string): string {
+  const folder = hiddenFolder(m);
+  return folder === null ? path : `${folder}/${path}`;
 }
 
 /** The command as the founder types it — for the documents that tell them to run it. */

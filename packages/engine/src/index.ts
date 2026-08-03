@@ -13,13 +13,28 @@ import type {
   AuthoredSlots,
   AuthoredToolchain
 } from "../../schemas/src/authoring.ts";
-import { ENGINE_VERSION, commandPath, resolveProjectModel, slugify } from "./model.ts";
+import {
+  ENGINE_VERSION,
+  commandPath,
+  deliveredPath,
+  resolveProjectModel,
+  slugify
+} from "./model.ts";
 import type { ResolveInput } from "./model.ts";
+import { nestUnder } from "./import.ts";
 import { hasUnresolvedToken, renderScaffold } from "./scaffold.ts";
 import type { TemplateFile } from "./scaffold.ts";
 
 export { ENGINE_VERSION, resolveProjectModel, slugify };
-export { commandFor, commandName, commandPath, shipsCleanup } from "./model.ts";
+export {
+  commandFor,
+  commandName,
+  commandPath,
+  deliveredPath,
+  hiddenFolder,
+  hiddenFolderFrom,
+  shipsCleanup
+} from "./model.ts";
 export type { ResolveInput };
 
 export { renderScaffold, deriveScaffoldValues, shipsPath } from "./scaffold.ts";
@@ -40,6 +55,7 @@ export {
   isIgnoredImportPath,
   mergeOverlay,
   mergePreviewFiles,
+  nestUnder,
   pathOverlap,
   sidecarPath,
   stripCommonRoot,
@@ -63,7 +79,13 @@ export class GenerationError extends Error {
   }
 }
 
-/** Stage 4: validate completeness. Throws GenerationError on failure. */
+/**
+ * Stage 4: validate completeness. Throws GenerationError on failure.
+ *
+ * The required list is written in template-relative paths and asked for through `deliveredPath`, so
+ * a hidden delivery (spec 187) is held to exactly the same bar in its own folder — the mode changes
+ * where a foundation lands, never whether it is complete.
+ */
 function validate(files: GeneratedFile[], model: ProjectModel): void {
   const issues: string[] = [];
   const seen = new Set<string>();
@@ -96,7 +118,8 @@ function validate(files: GeneratedFile[], model: ProjectModel): void {
       issues.push("unresolved content in: " + f.path);
   }
   for (const r of required) {
-    if (!seen.has(r)) issues.push("missing required file: " + r);
+    const delivered = deliveredPath(model, r);
+    if (!seen.has(delivered)) issues.push("missing required file: " + delivered);
   }
   if (issues.length > 0) {
     throw new GenerationError("Generation validation failed (" + issues.length + " issues)", issues);
@@ -165,13 +188,17 @@ export function generate(
   model: ProjectModel,
   options: GenerateOptions = {}
 ): GenerationResult {
-  const { files } = renderScaffold(
+  const rendered = renderScaffold(
     template,
     model,
     options.authored,
     options.authoredDocuments,
     options.authoredToolchain
   );
+  // The layout is applied here, once, before anything else sees the files (spec 187): what gets
+  // validated, stored, diffed, previewed and downloaded is then the same list, and no later stage
+  // has to know a hidden mode exists.
+  const files = nestUnder(rendered.files, model);
   files.forEach((f, i) => options.onFile?.(f.path, i + 1, files.length));
   validate(files, model);
   // No prose landed, so there is nothing to attribute even if a caller passed provenance in.

@@ -147,14 +147,31 @@ export interface UiReferenceImage {
 export type AnswerId = keyof InterviewAnswers;
 
 /**
+ * How a foundation lands in the project that already exists (spec 187).
+ *
+ * `integrated` is the original shape: generated files take their own paths in the founder's tree,
+ * collide with what is there, and are resolved file by file. `hidden` nests every one of them under
+ * a single folder the founder names, which git is told to ignore — so a developer can bring Airrow
+ * into a codebase they share without changing a line their team will see. The folder is carried
+ * here rather than derived at delivery because the founder chose it, and a value they chose is not
+ * something to recompute.
+ */
+export type DeliveryLayout = { kind: "integrated" } | { kind: "hidden"; folder: string };
+
+/**
  * Where a project came from, and — for an import — whether the analysis found code to read.
  *
  * It decides which command the foundation ships (spec 91): a project started from nothing gets
  * `/start`, which scaffolds a stack; an imported one that already has a stack gets `/cleanup`, which
  * reads it and rewrites the documents to match. An import with nothing but documents in it has
  * nothing to read, so it gets `/start` like any other empty project.
+ *
+ * `delivery` hangs off the imported arm alone (spec 187): a project begun from nothing has a
+ * repository of its own and nobody to hide from, so there is no layout to choose.
  */
-export type ProjectOrigin = { kind: "new" } | { kind: "imported"; stackDetected: boolean };
+export type ProjectOrigin =
+  | { kind: "new" }
+  | { kind: "imported"; stackDetected: boolean; delivery: DeliveryLayout };
 
 /** Fully resolved, validated model the engine generates from. */
 export interface ProjectModel {

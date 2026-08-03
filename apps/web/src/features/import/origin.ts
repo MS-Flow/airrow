@@ -17,10 +17,17 @@ export async function projectOrigin(projectId: string): Promise<ProjectOrigin> {
 
   const parsed = projectOriginSchema.safeParse({
     kind: "imported",
-    stackDetected: source.analysis.stackDetected
+    stackDetected: source.analysis.stackDetected,
+    delivery: source.delivery
   });
   // An import source exists, so the one thing this project is not is new. A malformed analysis
   // therefore falls back to the other half of the pair rather than to the opposite answer: assume
   // there is code to read, and let `/cleanup` report finding none.
-  return parsed.success ? parsed.data : { kind: "imported", stackDetected: true };
+  //
+  // The layout falls back the same way, to the mode that changes nothing about how imports already
+  // behave (spec 187). Guessing `hidden` from a row we could not read would scatter a foundation
+  // into a folder the founder never named.
+  return parsed.success
+    ? parsed.data
+    : { kind: "imported", stackDetected: true, delivery: { kind: "integrated" } };
 }
