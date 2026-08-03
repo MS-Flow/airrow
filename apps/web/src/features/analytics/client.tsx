@@ -83,7 +83,15 @@ export const POSTHOG_OPTIONS = {
   capture_pageleave: false,
   // Session recording would reach interview answers, which are customer IP (§II). Never on.
   disable_session_recording: true,
-  autocapture: false
+  autocapture: false,
+  // **A separate switch from `autocapture`, and on by default.** It sends `$web_vitals` carrying the
+  // full URL — which meant workspace paths like `/app/projects/<id>` reaching PostHog from the one
+  // place we had carefully excluded, while `autocapture: false` sat right above it looking like it
+  // covered this. Found by reading the live feed after the first real deploy, not by a test.
+  capture_performance: false,
+  capture_heatmaps: false,
+  capture_dead_clicks: false,
+  rageclick: false
 } as const;
 
 /**

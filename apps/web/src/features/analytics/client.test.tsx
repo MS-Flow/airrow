@@ -74,6 +74,16 @@ describe("the options PostHog is started with", () => {
     expect(POSTHOG_OPTIONS.autocapture).toBe(false);
   });
 
+  it("sends nothing PostHog collects on its own, whatever it calls the switch", () => {
+    // `autocapture: false` does *not* cover performance capture. `$web_vitals` arrived anyway,
+    // carrying the full URL — so workspace paths reached PostHog from the one place we excluded.
+    // Every self-collecting feature is now named explicitly rather than assumed to be off.
+    expect(POSTHOG_OPTIONS.capture_performance).toBe(false);
+    expect(POSTHOG_OPTIONS.capture_heatmaps).toBe(false);
+    expect(POSTHOG_OPTIONS.capture_dead_clicks).toBe(false);
+    expect(POSTHOG_OPTIONS.rageclick).toBe(false);
+  });
+
   it("are the options actually handed to init", async () => {
     // The constant above proves nothing on its own if `init` is passed something else.
     await initAnalytics("");
