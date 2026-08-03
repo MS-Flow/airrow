@@ -78,3 +78,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | References the founder can point at, and a `/start` that finishes the job | [159-ui-reference-start.md](159-ui-reference-start.md) | 🔄 In progress |
 | A way back in, and credentials you can change | [171-forgot-password.md](171-forgot-password.md) | ✅ Done |
 | Curated directions that install real code | [165-installable-ui-directions.md](165-installable-ui-directions.md) | ✅ Done |
+| A download button that downloads | [188-download-routing.md](188-download-routing.md) | 🔄 In progress |
