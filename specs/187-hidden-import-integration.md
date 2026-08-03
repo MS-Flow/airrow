@@ -9,8 +9,8 @@
 | -------------- | ------------------------------------ |
 | **Status**     | 🔄 In progress                       |
 | **Issue**      | [#187](https://github.com/MS-Flow/airrow/issues/187) — "Pro: hidden integration for imported projects — foundation in one gitignored folder" |
-| **Branch**     | `187-hidden-import-integration` (from `feature/pro`) |
-| **Feature**    | Pro                                  |
+| **Branch**     | `187-hidden-import-integration` (from `feature/import-existing-projects`) |
+| **Feature**    | Import existing projects             |
 | **Depends on** | [63-import-existing-projects.md](63-import-existing-projects.md) — the import flow, the diff and `applyResolutions` · [91-cleanup-command.md](91-cleanup-command.md) — `/cleanup`, the origin on the model, and the sidecar rule this mode makes moot · [74-pro-entitlements.md](74-pro-entitlements.md) — the plan that already gates importing |
 
 **Short on time?** Read _User story_ and _Acceptance criteria_ — that's the whole point of the change and
@@ -383,6 +383,22 @@ guess" reasoning already governing `origin` itself. The fixture is deliberately 
 seam. They mention `{{CI_FILE}}` — and `substitute()` is a single pass over the template, so a token
 inside a substituted value is never reached and would have shipped to the founder as
 `[NEEDS CLARIFICATION: CI_FILE]`. `cleanupRepoWork` takes `ciFile` and interpolates it directly.
+
+### Moved to the import feature, after the branch was already cut
+
+Cut from `feature/pro`, because the mode is Pro-gated. That was the wrong reading: **importing is
+already Pro** ([`import/actions.ts:130`](../apps/web/src/features/import/actions.ts#L130)), so hidden
+mode gates nothing new — it is a shape an import can take, and every line it touches is import code.
+Moved to `feature/import-existing-projects`, where the rest of that work continues.
+
+Free to move, and worth recording why: both feature branches had been synced to the same commit
+(`3aaadcb`), so this branch's parent *was* `feature/import-existing-projects`' tip. No rebase, no
+cherry-pick, no history rewritten — only the PR's base changes. `feature/pro` never contained this
+work, so nothing is stranded there.
+
+The move also pays off for [188](188-download-routing.md): the two now share a feature branch, so the
+hidden cell of that spec's routing matrix can be wired as soon as the second of them lands there,
+instead of waiting for both to reach `develop`.
 
 ### `/analyze` — 2026-08-03: three findings, all fixed
 
