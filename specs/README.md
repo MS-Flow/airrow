@@ -79,3 +79,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | A way back in, and credentials you can change | [171-forgot-password.md](171-forgot-password.md) | ✅ Done |
 | Curated directions that install real code | [165-installable-ui-directions.md](165-installable-ui-directions.md) | ✅ Done |
 | Hidden integration: the foundation in one folder nobody else sees | [187-hidden-import-integration.md](187-hidden-import-integration.md) | 🔄 In progress |
+| A download button that downloads | [188-download-routing.md](188-download-routing.md) | 🔄 In progress |

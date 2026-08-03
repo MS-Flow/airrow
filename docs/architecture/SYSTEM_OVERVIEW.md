@@ -89,11 +89,19 @@ code signal, and only `/cleanup` — on the founder's machine — writes the ign
 5. **Show** — `mergePreviewFiles` + `buildPreviewTree` put those paths in the *preview* tree next to
    Airrow's own files, each row tagged with where it comes from. Shape only: the founder's files are
    listed by name, never opened, because their content was never stored.
-6. **Deliver** — the download is assembled **in the browser**: `MergedDownload` overlays Airrow's
-   files onto the founder's own archive, cached in IndexedDB at import time. The server sends only
-   what `applyResolutions` deemed safe to write, so the overlay is correct by construction. If this
-   browser no longer holds the archive, the founder is asked to pick it again rather than handed a
-   silent additions-only ZIP.
+6. **Deliver** — `DownloadProject` picks between two downloads, on whether a merge is *possible and
+   wanted* rather than on whether the project was imported (spec 188). Only an uploaded **ZIP** meets
+   that bar: Airrow holds the sole copy of those files, so `MergedDownload` overlays Airrow's output
+   onto the founder's own archive **in the browser**, cached in IndexedDB at import time. The server
+   sends only what `applyResolutions` deemed safe to write, so the overlay is correct by
+   construction. If this browser no longer holds the archive the founder is asked to pick it again —
+   with a secondary "Foundation only" link, so a second machine is never a dead end.
+
+   A **repository** import gets the foundation on its own, from the plain ZIP route: their code is in
+   a repository they control and already have checked out, and nothing ever cached an archive for it,
+   because the files were read server-side. Routing it to the merge is what made that button
+   permanently demand an archive that never existed. Wherever the download is the foundation alone
+   the button says **"Download foundation"**, so it is never mistaken for the whole project.
 
 **Only digests are stored.** `import_files` holds path, size and an **HMAC-SHA256** of each imported
 file, keyed by a pepper that lives in the app environment and never in the database

@@ -108,7 +108,9 @@ export default async function ContinuePage({ params }: { params: Promise<{ id: s
         <Link href={`/app/projects/${id}/preview`} className="text-sm text-fg-muted hover:text-fg">
           ← Back to preview
         </Link>
-        <DownloadProject projectId={id} slug={slug} />
+        {/* The one placement with vertical room, and the screen where "what do I do with this
+            file" is the actual question — so this is where the line goes (spec 188). */}
+        <DownloadProject projectId={id} slug={slug} explain />
       </div>
     </PageContainer>
   );
