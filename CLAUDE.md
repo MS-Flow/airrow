@@ -96,6 +96,18 @@ passes it in.
   foundation's documents to match, changes no code and deletes nothing — including itself. Exactly one
   of the two ships, decided by the project's origin. ZIP delivery must always work with no integration
   connected.
+- **Curated UI directions are a visual language, never a layout (spec 165).** Each of the three
+  directions on the design question points at a **theme** — palette, type, corner, spacing, surface,
+  motion — that `/start` installs on top of shadcn/ui at an **exact pinned version**, never `@latest`.
+  It installs **no screens and no layout blocks**: what is on a screen, and how someone moves between
+  screens, comes from the founder's own answers, and a picked picture must never outrank them. The
+  interview shows each direction as a *specimen* of the look, drawn from that same record (or a real
+  capture of it — `pnpm capture:ui-kits`), so the picture cannot drift from what gets installed. The
+  pick is **stored** (`uiKit`), not derived from the prose: editing the words must not cancel an
+  install. `UI_ARCHITECTURE.md` names the theme, version and licence, and every foundation that
+  installs the library ships `THIRD_PARTY_NOTICES.md` — a custom stack and an imported project
+  install nothing and get neither. Only permissive licences may be installed
+  (`PERMISSIVE_LICENCES`); a weekly workflow reports a stale pin and never bumps one.
 - **UI references:** the interview's design question accepts links and uploaded screenshots (spec 159).
   Links are an ordinary answer and are **never fetched**; images live in the private `ui-references`
   bucket with an org-scoped row each, are read only by the authoring provider's UI call, and never

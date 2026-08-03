@@ -13,6 +13,7 @@ import {
   type AuthoredSlots,
   type AuthoredToolchain
 } from "../../schemas/src/authoring.ts";
+import { SHADCN_UI, type UiKit, type UiKitPalette } from "../../schemas/src/ui-kits.ts";
 import { inferStack, type InferredStack, type Runtime } from "./toolchain.ts";
 import {
   aiUsageLabel,
@@ -20,6 +21,7 @@ import {
   authMethodLabel,
   backendSummary,
   commandName,
+  coreAction,
   commandPath,
   databaseLabel,
   featureLabel,
@@ -503,11 +505,16 @@ const FIRST_RUN_COMMANDS = [".claude/commands/start.md", ".claude/commands/clean
  * `/start` and `/cleanup` are alternatives for the same reason (spec 91): one scaffolds a stack, the
  * other reads the stack that is already there. A repository holding both would be a repository where
  * one of them is wrong, and nothing in it says which.
+ *
+ * `THIRD_PARTY_NOTICES.md` ships only where there is something to attribute (spec 165): a foundation
+ * whose stack the founder named themselves installs no library of ours, and a notice for code that
+ * was never installed is a file they cannot explain.
  */
 export function shipsPath(model: ProjectModel, path: string): boolean {
   if (path.startsWith(".github/")) return !usesAzureRepos(model);
   if (path.startsWith("azure-pipelines")) return usesAzureRepos(model);
   if (FIRST_RUN_COMMANDS.includes(path)) return path === commandPath(model);
+  if (path === "THIRD_PARTY_NOTICES.md") return !isCustomStack(model) && !shipsCleanup(model);
   return true;
 }
 
@@ -547,10 +554,26 @@ const VITEST_MAJOR = "^3";
  */
 function designSystemStep(model: ProjectModel): string[] {
   const run = dlx(model);
-  const init = `${run} shadcn@latest init --yes --base-color neutral`;
+  const kit = model.uiKit;
+  // Pinned, unlike the framework scaffolders above (see `VITEST_MAJOR` for why they are not): this
+  // one writes `components.json` and the theme every later `add` resolves against, and
+  // `UI_ARCHITECTURE.md` now names the version it wrote. `@latest` there is a document that stops
+  // being true on someone else's release schedule (spec 165).
+  const cli = `${SHADCN_UI.pkg}@${SHADCN_UI.version}`;
+  // Every flag here is load-bearing, and each one was found by running this command rather than by
+  // reading about it. `--yes` alone is not non-interactive: `init` still asks which component
+  // library and which preset, and an assistant running `/start` cannot answer an arrow-key prompt —
+  // it waits until something times out. `-b radix` is the primitive set this project's documents
+  // name; `-p nova` is the library's own default preset. There is no `--base-color` flag: the base
+  // colour is a `components.json` field now, and the theme below overrides those values anyway.
+  const init = `${run} ${cli} init --yes -b radix -p nova`;
   const closing = [
     `   That writes \`components.json\` and the \`cn\` helper, and installs **no components**.`,
-    `   Components arrive one at a time, when a spec calls for one: \`${run} shadcn@latest add <name>\`.`
+    `   Components arrive one at a time, when a spec calls for one: \`${run} ${cli} add <name>\`.`,
+    ...(kit
+      ? [`   Set \`tailwind.baseColor\` to \`${kit.baseColor}\` in \`components.json\` — this direction's neutral family.`]
+      : []),
+    ...(kit ? themeStep(kit) : [])
   ];
   if (model.stack.framework === "vite") {
     return [
@@ -583,6 +606,47 @@ function designSystemStep(model: ProjectModel): string[] {
     "   ```",
     "",
     ...closing
+  ];
+}
+
+/**
+ * The theme the founder picked, written into the stylesheet `init` just created (spec 165).
+ *
+ * The values come from the same `UiKit` record the interview drew its preview from, so the screen a
+ * founder chose by looking at it and the theme they end up with cannot disagree. Written as CSS
+ * custom properties because that is what shadcn/ui's own theming is: there is nothing to install
+ * beyond the values, and nothing here is anyone else's code.
+ */
+function themeStep(kit: UiKit): string[] {
+  const vars = (p: UiKitPalette): string[] => [
+    `     --background: ${p.bg};`,
+    `     --card: ${p.surface};`,
+    `     --foreground: ${p.fg};`,
+    `     --muted-foreground: ${p.muted};`,
+    `     --border: ${p.border};`,
+    `     --primary: ${p.accent};`
+  ];
+  return [
+    "",
+    `   Then apply the **${kit.name}** theme this project chose. In the stylesheet \`init\` just`,
+    "   touched, set these on `:root` and the `.dark` block, keeping every other variable it wrote:",
+    "",
+    "   ```css",
+    "   :root {",
+    `     --radius: ${kit.design.radius};`,
+    ...vars(kit.light),
+    "   }",
+    "   .dark {",
+    ...vars(kit.dark),
+    "   }",
+    "   ```",
+    "",
+    `   That is the whole install — no component library beyond the primitives above, and no screens.`,
+    `   **${kit.name}** is a visual language, not a layout: ${kit.design.typography} ${kit.design.headline}`,
+    `   Surfaces are separated by ${kit.design.surfaces}, spacing is ${kit.design.spacing}, and the brand`,
+    `   leads with a ${kit.design.logo}. ${kit.design.motion}`,
+    `   ${kit.darkFirst ? "Dark is the default theme; light is the alternative." : "Light is the default theme; dark is the alternative."}`,
+    "   These values are the design system now; a hardcoded colour or radius in a component is a bug."
   ];
 }
 
@@ -936,7 +1000,7 @@ function cmdName(model: ProjectModel, script: string): string {
  * founder actually wrote. Data and real auth stay out; see the two closing rules.
  */
 function startMinimum(model: ProjectModel): string {
-  const what = model.mvpFocus || model.description;
+  const what = coreAction(model);
   const entities = model.coreEntities
     ? `The core objects this product is about: ${model.coreEntities}`
     : "No core objects were described in the interview — do not invent any.";
@@ -946,7 +1010,9 @@ function startMinimum(model: ProjectModel): string {
   // experience of /start.
   const styling = isCustomStack(model)
     ? "Style it the way this stack styles things — plainly, using what section 2 set up. Add no UI library that was not already there."
-    : "Style it with Tailwind, using the shadcn/ui primitives section 2 installed. That is this project's design system, and using it is not a feature.";
+    : model.uiKit
+      ? `Style it with the **${model.uiKit.name}** theme section 2 installed — its tokens, its \`${model.uiKit.design.radius}\` corners, its ${model.uiKit.design.spacing} spacing, ${model.uiKit.design.surfaces} between surfaces, and the brand leading with a ${model.uiKit.design.logo}. The founder chose that look by looking at it, so it should be recognisable. **What is on the screen is still theirs to have decided** — build what their answers describe, laid out the way this product needs, and let the theme make it look like the picture. Never copy a layout from a swatch. Overriding the theme with hand-written colours is a bug.`
+      : "Style it with Tailwind, using the shadcn/ui primitives section 2 installed. That is this project's design system, and using it is not a feature.";
   // What the founder pointed at, if anything. The brief describes the references in words — nothing
   // here has ever seen an image — so this is a pointer to the section, not a second copy of it.
   const references =
@@ -957,6 +1023,14 @@ function startMinimum(model: ProjectModel): string {
     "Read `docs/architecture/UI_ARCHITECTURE.md` before writing anything. It is the build brief for",
     "what you are about to make — the screens, the navigation, the layout, the states, the design",
     `language — written for this project. The core action it should perform: **${what}**`,
+    "",
+    // That answer comes from a question asking two things at once — what it must do first, and where
+    // it is heading (spec 165) — so it routinely contains both. Left unsaid, an assistant reads the
+    // long-term half as a build target and sails straight past the ceiling this section exists to
+    // set. The founder wrote the sentence; which half is buildable is ours to say.
+    "**Where that names both a first thing and a long-term one, the first thing is the ceiling.** A",
+    "clause about where this is heading is context for the decisions you make — never a second thing",
+    "to build. If the two are hard to tell apart, build the smaller one.",
     "",
     references,
     "",
@@ -1070,7 +1144,7 @@ function uiReferences(model: ProjectModel): string {
 
 /** The screens the answers actually imply — named where they can be, marked where they cannot. */
 function uiScreens(model: ProjectModel): string {
-  const focus = model.mvpFocus || model.description;
+  const focus = coreAction(model);
   const entities = model.coreEntities
     ? `The core objects are ${model.coreEntities} — each one a founder works with needs somewhere to be listed and somewhere to be seen on its own.`
     : "[NEEDS CLARIFICATION: the interview named no core objects, so the screens beyond the first cannot be derived — name them here before building past the first screen.]";
@@ -1132,6 +1206,60 @@ function uiStates(): string {
     "**Empty is a designed screen, not an absence.** It says what would be here, and offers the action that puts something here. It is the first screen most founders' first user ever sees.",
     "**Error says what failed and what to do next.** A stack trace, a spinner that never stops, and a silent no-op are all the same bug wearing different clothes."
   ].join("\n\n");
+}
+
+/**
+ * What the first screen is actually built from — named, pinned, and licensed (spec 165).
+ *
+ * The section exists because the previous answer to "what does it look like?" was prose, and prose
+ * is interpreted: two runs of the same picked direction produced two different screens. Naming the
+ * theme and its version makes the document *checkable* — a founder can see what is installed, and so
+ * can the assistant that opens this file six months from now.
+ */
+function uiDesignSystem(model: ProjectModel): string {
+  const kit = model.uiKit;
+  if (!kit) {
+    if (shipsCleanup(model)) {
+      return "This project already had a stack when the foundation was written, so nothing here installed a design system. Whatever it is styled with is what it is styled with — the direction above describes it rather than replacing it.";
+    }
+    if (isCustomStack(model)) {
+      return `No theme is installed: ${frameworkLabel(model)} brings its own conventions, and this foundation does not put a second design system on top of them. The direction above is the whole brief — build to it using whatever this stack styles things with.`;
+    }
+    return `No curated direction was picked, so no theme was installed beyond the shadcn/ui defaults \`${commandName(model)}\` sets up. The direction above is the whole brief; finish the screen to it.`;
+  }
+  const { source } = kit;
+  return [
+    `**${kit.name}**, built on ${source.pkg}/ui \`${source.version}\` — installed by \`${commandName(model)}\`, pinned to that exact version so this section stays true.`,
+    `It is a **visual language, not a layout**: ${kit.design.typography} ${kit.design.headline} Surfaces are separated by ${kit.design.surfaces}, spacing is ${kit.design.spacing}, corners are \`${kit.design.radius}\`, and the brand leads with a ${kit.design.logo}. ${kit.design.motion}`,
+    `What is on each screen, and how someone moves between them, comes from the sections below — from what this product actually is. The theme decides how those screens look, never what they are.`,
+    `Base colour \`${kit.baseColor}\`. ${kit.darkFirst ? "Dark is the default theme; light is the alternative." : "Light is the default theme; dark is the alternative."} It suits ${kit.suits.charAt(0).toLowerCase()}${kit.suits.slice(1)}`,
+    `The theme's values are this project's design tokens. Build with them — a hardcoded colour or radius in a component is a bug, because it is the one thing that cannot be changed later in one place.`,
+    `Licensed ${source.licence}, © ${source.holder} — see \`THIRD_PARTY_NOTICES.md\`, which ships with this repository and has to stay in it.`
+  ].join("\n\n");
+}
+
+/**
+ * The attribution the foundation owes for the code it installs.
+ *
+ * Not new debt: `{{FIRST_COMMAND}}` has installed shadcn/ui into every Tailwind foundation since
+ * spec 66, and no generated repository carried the notice its licence requires. Spec 165 pins the
+ * version and therefore had to look the licence up — which is how a two-year-old obligation nobody
+ * had discharged turned out to be one line of work.
+ */
+function thirdPartyNotices(model: ProjectModel): string {
+  const { source } = model.uiKit ?? { source: SHADCN_UI };
+  const themed = model.uiKit
+    ? `This project's **${model.uiKit.name}** theme is Airrow's own work and carries no third-party claim; what is licensed below is the component library it is built on.`
+    : "This project installs the library's defaults — no curated theme was picked.";
+  return [
+    `\`${source.pkg}/ui\` \`${source.version}\` — ${source.homepage}`,
+    "",
+    themed,
+    "",
+    "```",
+    source.licenceText,
+    "```"
+  ].join("\n");
 }
 
 /** Deterministic fallback for the design-language section — stack-correct either way. */
@@ -1544,11 +1672,11 @@ export function deriveScaffoldValues(
   const values: Record<string, string> = {
     PROJECT_NAME: model.name,
     PROJECT_SLUG: model.slug,
-    PROJECT_TAGLINE: model.mvpFocus || "",
+    PROJECT_TAGLINE: coreAction(model),
     PROJECT_DESCRIPTION: model.description,
     DOMAIN_OVERVIEW: `${model.name} is ${aOrAn(productTypeName(model))} for ${audienceLabel[model.audience]}. ${model.description}`,
     VISION: model.vision,
-    MVP_FOCUS: model.mvpFocus,
+    MVP_FOCUS: coreAction(model),
     PROBLEM: model.problem,
     NON_GOALS: nonGoalsText(model),
     CAPABILITY_SCOPE: capabilityScope(model),
@@ -1569,6 +1697,8 @@ export function deriveScaffoldValues(
     START_BOOTSTRAP: startBootstrap(model, stackName, inferred),
     START_MINIMUM: startMinimum(model),
     UI_DIRECTION_SUMMARY: uiDirectionSummary(model),
+    UI_DESIGN_SYSTEM: uiDesignSystem(model),
+    THIRD_PARTY_NOTICES: thirdPartyNotices(model),
     UI_REFERENCES: uiReferences(model),
     UI_SCREENS: uiScreens(model),
     UI_LAYOUT: uiLayout(model),
@@ -1644,7 +1774,7 @@ export function deriveScaffoldValues(
     dec("SECURITY_POSTURE", model.dataSensitivity, "interview", "Data-sensitivity answer — drives the encryption/audit posture."),
     dec("SCALE_POSTURE", model.scale, "interview", "Scale target for v1 — drives the caching/database posture.")
   ];
-  if (!model.mvpFocus) {
+  if (!coreAction(model)) {
     decisions.push(dec("PROJECT_TAGLINE", "(unset)", "default", "No MVP focus given — left for the founder to fill."));
   }
   decisions.push(
@@ -1786,6 +1916,12 @@ function authModelText(model: ProjectModel): string {
 
 function integrationsText(model: ProjectModel): string {
   if (model.integrations) return model.integrations;
+  // Asked alongside the core objects since spec 165 — the two questions were circling the same
+  // ground, so they became one. A founder who named Stripe there named it here, and pointing at
+  // that answer is more use than a section that claims nothing was named.
+  if (model.coreEntities) {
+    return `Named alongside the core objects, if at all: ${model.coreEntities}\n\nRecord each external system here as you integrate it.`;
+  }
   if (model.derived.hasPayments) {
     return "[NEEDS CLARIFICATION: payments were selected but no payment provider was named — decide the provider before the first payments spec.]";
   }
@@ -1916,10 +2052,10 @@ function deployTargetSetup(model: ProjectModel): string {
 }
 
 function firstSpecHint(model: ProjectModel): string {
-  if (!model.mvpFocus) {
+  if (!coreAction(model)) {
     return "Start with the single flow the product is useless without. [NEEDS CLARIFICATION: the MVP focus was left blank — decide it before writing the first spec.]";
   }
-  return `Start with the flow the MVP is useless without: **${model.mvpFocus}** Spec that one flow end to end — not the whole product.`;
+  return `Start with the flow the MVP is useless without: **${coreAction(model)}** Spec that one flow end to end — not the whole product.`;
 }
 
 function architectureInvariants(model: ProjectModel): string {

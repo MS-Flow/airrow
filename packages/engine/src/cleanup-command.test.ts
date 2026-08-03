@@ -312,4 +312,22 @@ describe("/cleanup still deletes nothing", () => {
     // Its own ceiling, restated: the command that changes no code cannot start by changing a file.
     expect(prose(cleanup)).toMatch(/deletes nothing|delete nothing|never deletes/i);
   });
+
+  // A theme is something a command installs, and this command installs nothing (spec 165).
+  it("installs no theme and claims no licence, however the founder answered", () => {
+    const picked = { ...BASE, uiKit: "stark_terminal" } satisfies InterviewAnswers;
+    const { files, byPath } = render(IMPORTED, picked);
+
+    expect(byPath("docs/architecture/UI_ARCHITECTURE.md")).toContain(
+      "already had a stack when the foundation was written"
+    );
+    expect(byPath("docs/architecture/UI_ARCHITECTURE.md")).not.toContain("Stark & technical");
+    // No install means nothing to attribute — a notice here would name code nobody added.
+    expect(files.some((f) => f.path === "THIRD_PARTY_NOTICES.md")).toBe(false);
+  });
+
+  it("still ships the notice to a new project on the same stack", () => {
+    // The gate is what the foundation installs, not which stack it is — the contrast that proves it.
+    expect(render(NEW).files.some((f) => f.path === "THIRD_PARTY_NOTICES.md")).toBe(true);
+  });
 });

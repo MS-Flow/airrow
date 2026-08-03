@@ -36,7 +36,7 @@ import {
  * Bump when a prompt changes in a way that would produce different prose from identical answers.
  * Recorded per file in the manifest, and part of what a regeneration is keyed on.
  */
-export const PROMPT_VERSION = "10";
+export const PROMPT_VERSION = "11";
 
 /**
  * Claude Haiku 4.5. Settled here after two other tries (spec 123 "The authoring ceiling" and its
@@ -224,6 +224,14 @@ WHAT THE DOCUMENT COVERS, IN THIS ORDER — every heading, every time:
 - Design direction: the overall feel, grounded in uiDirection, in the starting direction the founder
   picked, or — absent both — in the product itself. Never generic taste with no connection to what
   this product is.
+- Design system: when the answers name a theme, that theme, its pinned version and its licence are
+  facts already decided — restate them exactly as given and do not contradict, substitute or
+  "improve" them, and do not invent a version, a library or a licence when none was named. It is a
+  visual language and nothing more: colour, type, corner, spacing, surface, motion. **It does not
+  decide what is on any screen.** Never turn it into a layout, never let it name navigation, and
+  never let it override what the product answers say the screens are — the theme is how they look.
+  When none was named, say plainly that nothing was installed and the direction above is the whole
+  brief.
 - References: what the founder pointed at and what you took from it, plus the rule above stated for
   whoever reads this file later. Say plainly when nothing was attached.
 - Screens & navigation: name the screens the core action (mvpFocus) and the core entities actually
@@ -388,6 +396,28 @@ function answersSection(model: ProjectModel): string {
     mvpFocus: model.mvpFocus,
     coreEntities: model.coreEntities,
     uiDirection: model.uiDirection,
+    // Facts, not taste: the theme was picked in the interview and is installed by the first-run
+    // command at this exact version. The model restates it; it does not choose it (spec 165). Null
+    // whenever nothing is installed, which is the only signal the "say so plainly" branch needs.
+    designSystem: model.uiKit
+      ? {
+          theme: model.uiKit.name,
+          builtOn: `${model.uiKit.source.pkg}/ui`,
+          version: model.uiKit.source.version,
+          licence: model.uiKit.source.licence,
+          baseColor: model.uiKit.baseColor,
+          defaultTheme: model.uiKit.darkFirst ? "dark" : "light",
+          // The visual language, and only that. No layout: the screens come from the product
+          // answers above, and a theme that named a navigation shape would outrank them (spec 165).
+          radius: model.uiKit.design.radius,
+          spacing: model.uiKit.design.spacing,
+          surfaces: model.uiKit.design.surfaces,
+          logo: model.uiKit.design.logo,
+          headline: model.uiKit.design.headline,
+          typography: model.uiKit.design.typography,
+          motion: model.uiKit.design.motion
+        }
+      : null,
     nonGoals: model.nonGoals,
     tenancy: model.tenancy,
     authModel: model.authModel,

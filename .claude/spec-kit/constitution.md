@@ -48,6 +48,11 @@ Every feature, screen, and generated file is judged against these.
   installs nothing, sends nothing anywhere, attacks nothing, and rewrites no history; its report,
   `SECURITY_AUDIT.md`, lists the holes still open and stays out of version control. Airrow runs it on
   nobody's behalf — like the other two, it runs on the founder's machine, when they ask.
+  **What `/start` installs is named, pinned and attributed** ([spec 165](../../specs/165-installable-ui-directions.md)):
+  a curated design direction is a theme on top of a **permissively licensed** library at an **exact
+  version**, never a range and never `@latest`, so the version `UI_ARCHITECTURE.md` names is the
+  version the founder got. Airrow ships the name and the command, never the library's code, and every
+  foundation that installs it carries the licence notice it owes.
   (Amended by [spec 66](../../specs/66-start-command.md), which records the previous wording, extended
   by [spec 91](../../specs/91-cleanup-command.md), amended again by
   [spec 123](../../specs/123-foundation-starts-strong.md) — which records the "bare minimum that runs"

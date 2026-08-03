@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveProjectModel } from "./model.ts";
 import { renderScaffold, type TemplateFile } from "./scaffold.ts";
+import { uiKitFor } from "../../schemas/src/ui-kits.ts";
 import type { ResolveInput } from "./model.ts";
 import type { InterviewAnswers } from "../../schemas/src/types.ts";
 
@@ -401,6 +402,7 @@ describe("UI_ARCHITECTURE.md is a brief a screen can be built from", () => {
     const brief = render().byPath.get(UI_DOC) ?? "";
     for (const heading of [
       "## Design direction",
+      "## Design system",
       "## References",
       "## Screens & navigation",
       "## Layout, spacing & type",
@@ -452,6 +454,51 @@ describe("UI_ARCHITECTURE.md is a brief a screen can be built from", () => {
     const { files } = renderScaffold(TEMPLATE, model);
     const brief = files.find((f) => f.path === UI_DOC)?.content ?? "";
     expect(brief).toContain("2 screenshots were attached");
+  });
+
+  /* ── The theme the brief is allowed to name (spec 165) ─────────────────── */
+
+  it("names the theme, the pinned version and the licence when one was picked", () => {
+    const kit = uiKitFor("bold_contrast")!;
+    const brief = render({ uiKit: "bold_contrast" }).byPath.get(UI_DOC) ?? "";
+    expect(brief).toContain(kit.name);
+    expect(brief).toContain(kit.source.version);
+    expect(brief).toContain(`Licensed ${kit.source.licence}, © ${kit.source.holder}`);
+    expect(brief).toContain("THIRD_PARTY_NOTICES.md");
+    // The claim the pin exists to make true.
+    expect(brief).toMatch(/pinned to that exact version so this section stays true/);
+    // And the boundary that keeps a picked look from becoming a picked layout.
+    expect(brief).toContain("visual language, not a layout");
+    expect(brief).toMatch(/The theme decides how those screens look, never what they are/);
+  });
+
+  it("says plainly that nothing was installed when nothing was picked", () => {
+    const brief = render().byPath.get(UI_DOC) ?? "";
+    expect(brief).toContain("No curated direction was picked");
+    // The command by name, not an unrendered token — this value is substituted, never re-expanded.
+    expect(brief).toContain("`/start`");
+    expect(brief).not.toMatch(/\{\{[A-Z_]+\}\}/);
+  });
+
+  it("installs no theme on a stack that brings its own conventions", () => {
+    const brief =
+      render({
+        uiKit: "bold_contrast",
+        framework: "custom",
+        frameworkOther: "Django 5 with Postgres, managed by uv"
+      }).byPath.get(UI_DOC) ?? "";
+    expect(brief).toContain("No theme is installed");
+    expect(brief).not.toContain("Bold contrast");
+    expect(brief).not.toContain("Licensed MIT");
+  });
+
+  it("keeps the founder's own reference above the theme they picked", () => {
+    // Spec 159's rule, unchanged by a pick becoming installable: our theme is a starting point,
+    // their screenshot is theirs and wins where the two disagree.
+    const brief =
+      render({ uiKit: "soft_minimal", uiReferenceLinks: "linear.app" }).byPath.get(UI_DOC) ?? "";
+    expect(brief).toContain("Soft minimal");
+    expect(brief).toMatch(/never as something to copy/);
   });
 });
 

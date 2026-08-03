@@ -1,0 +1,55 @@
+name: UI kit pins
+
+# The curated design directions install a pinned version of shadcn/ui, and `UI_ARCHITECTURE.md` names
+# that version in every foundation generated from them (spec 165). A pin nobody looks at is a pin
+# that quietly ages: the founder's documents stay true, but they stay true about something two years
+# old. This checks weekly and opens an issue when upstream has moved.
+#
+# It never bumps anything. A version bump changes generated output, which is a product decision
+# reviewed like code under the constitution's snapshot rule (§V) — not a chore a robot may land.
+
+on:
+  schedule:
+    # Mondays, 07:00 UTC. Weekly because that is roughly how often this moves, and a check that fires
+    # more often than the thing it watches trains everyone to close it unread.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # Pinned by SHA like every other third-party action in this repository.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+
+      - name: Compare each pin against the registry
+        id: check
+        run: node scripts/check-ui-kit-pins.mjs
+
+      # `gh` rather than actions/github-script: it is preinstalled on the runner, so this adds no
+      # third-party action to pin and no dependency to review.
+      - name: Open or update the issue when a pin has fallen behind
+        if: steps.check.outputs.stale == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPORT: ${{ steps.check.outputs.report }}
+        run: |
+          printf '%s\n' "$REPORT" > report.md
+          # One open issue at a time: a weekly check that opens a weekly issue is a weekly issue
+          # nobody reads. If one is already open, the report goes on it as a comment instead.
+          existing="$(gh issue list --label ui-kit-pins --state open --limit 1 --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file report.md
+          else
+            gh issue create \
+              --title "UI kit pins have fallen behind upstream" \
+              --label ui-kit-pins \
+              --body-file report.md
+          fi

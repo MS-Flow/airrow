@@ -169,7 +169,12 @@ export const DOCUMENT_MAX_CHARS: Record<AuthoredDocumentPath, number> = {
   // Sized as a build brief, not a page — this is the document `/start` reads to decide what to build,
   // so an undersized ceiling costs more here than on any other document: see the note above
   // DOCUMENT_MAX_CHARS on what an undersized ceiling actually does (silent fallback, every time).
-  "docs/architecture/UI_ARCHITECTURE.md": 5000
+  //
+  // 7000 for ten sections. Spec 159 grew the document from four sections to nine and recorded this
+  // raise as done; it was not, and the ceiling stayed at the four-section 5000 — so the brief has
+  // been one long answer away from silently falling back to its template ever since. Spec 165 adds
+  // the tenth (design system) and makes the raise real.
+  "docs/architecture/UI_ARCHITECTURE.md": 7000
 };
 
 /**
@@ -346,16 +351,26 @@ export function pickValidToolchain(raw: unknown): AuthoredToolchain {
  * founder typed is ever flagged. Derived from the interview rather than listed again, so a text
  * question added tomorrow is flaggable the day it ships.
  *
- * `guided_text` and `references` count as typed: the first may be *seeded* from a direction we wrote,
- * but the founder owns the field from the first keystroke, and the second is a field of their own
- * words beside an upload. Deriving this from `type === "text"` alone silently dropped `uiDirection`
- * the day it gained its starting points (spec 159).
+ * `guided_text` counts as typed: it may be *seeded* from a direction we wrote, but the founder owns
+ * the field from the first keystroke. Deriving this from `type === "text"` alone silently dropped
+ * `uiDirection` the day it gained its starting points (spec 159).
+ *
+ * **A satellite answer counts too, and for the same reason.** `uiReferenceLinks` stopped being a
+ * question when the design screen absorbed it (spec 165), while staying a field the founder types
+ * into. Leaving it to fall out of a question-derived list would have re-run spec 159's regression on
+ * the very next answer: a model unable to point at the reference list that made an interview
+ * unusable. `uiKit` is deliberately not here — it is a picked option, and a picked option cannot be
+ * the reason answers do not describe a software product.
  */
-const TYPED_QUESTION_TYPES: ReadonlySet<string> = new Set(["text", "guided_text", "references"]);
+const TYPED_QUESTION_TYPES: ReadonlySet<string> = new Set(["text", "guided_text"]);
 
-export const FLAGGABLE_ANSWERS: readonly AnswerId[] = interviewQuestions
-  .filter((q) => TYPED_QUESTION_TYPES.has(q.type))
-  .map((q) => q.id);
+/** Satellites the founder types into, as opposed to picks. See `SATELLITE_ANSWERS`. */
+const TYPED_SATELLITES: readonly AnswerId[] = ["uiReferenceLinks"];
+
+export const FLAGGABLE_ANSWERS: readonly AnswerId[] = [
+  ...interviewQuestions.filter((q) => TYPED_QUESTION_TYPES.has(q.type)).map((q) => q.id),
+  ...TYPED_SATELLITES
+];
 
 const FLAGGABLE_ANSWER_SET: ReadonlySet<string> = new Set(FLAGGABLE_ANSWERS);
 
