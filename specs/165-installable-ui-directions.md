@@ -213,6 +213,12 @@ _What "done" means. Every line is something a reviewer can check._
       300 → 500, sized for two answers.
 - [x] `coreAction(model)` replaced four copies of `mvpFocus || description`, so the fallback to the
       merged answer is decided in one place rather than four.
+- [x] **`/start` is told which half of that answer is the ceiling.** The merged question produces a
+      sentence containing both the first thing and the long-term one, and `/start` receives the whole
+      of it as "the core action to perform" — so it now says plainly that a clause about where this
+      is heading is context, never a second thing to build, and that the smaller reading wins when
+      the two are hard to tell apart. Without it the question merge would have quietly widened §0's
+      ceiling from `mvpFocus` to the vision.
 - [x] **`integrations` merged into `coreEntities`** — "What are the main things in it, and what does
       it plug into?" — and that question **moved after `capabilities`**, because half of it is about
       the capabilities just chosen. Both asserted, order included. `integrationsText` points at that

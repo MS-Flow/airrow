@@ -674,6 +674,22 @@ describe("/start installs the theme the founder picked", () => {
     expect(start).not.toContain("--radius:");
   });
 
+  it("names which half of a two-part answer is the ceiling", () => {
+    // The vision question asks what it must do first *and* where it is heading (spec 165), so the
+    // answer `/start` receives routinely contains both. Handing that over as "the core action to
+    // perform" without saying which half is buildable invites the assistant past the ceiling.
+    const start = render({
+      ...picked,
+      mvpFocus: undefined,
+      vision: "Let someone drop in a folder and get it back smaller. Long-term, the compression layer everything runs on."
+    }).start;
+
+    expect(start).toContain("Long-term, the compression layer everything runs on.");
+    expect(prose(start)).toMatch(/the first thing is the ceiling/);
+    expect(prose(start)).toMatch(/never a second thing to build/);
+    expect(prose(start)).toMatch(/build the smaller one/);
+  });
+
   it("keeps the mvpFocus ceiling exactly where spec 123 put it", () => {
     // A theme is presentation. It must not have quietly become permission to build a second feature.
     const start = render(picked).start;

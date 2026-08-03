@@ -1024,6 +1024,14 @@ function startMinimum(model: ProjectModel): string {
     "what you are about to make — the screens, the navigation, the layout, the states, the design",
     `language — written for this project. The core action it should perform: **${what}**`,
     "",
+    // That answer comes from a question asking two things at once — what it must do first, and where
+    // it is heading (spec 165) — so it routinely contains both. Left unsaid, an assistant reads the
+    // long-term half as a build target and sails straight past the ceiling this section exists to
+    // set. The founder wrote the sentence; which half is buildable is ours to say.
+    "**Where that names both a first thing and a long-term one, the first thing is the ceiling.** A",
+    "clause about where this is heading is context for the decisions you make — never a second thing",
+    "to build. If the two are hard to tell apart, build the smaller one.",
+    "",
     references,
     "",
     "**Build that action for real — not a placeholder screen.** A founder opening this for the first",
