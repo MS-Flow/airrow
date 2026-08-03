@@ -54,7 +54,7 @@ describe("the upgrade screen", () => {
         { interval: "month", amount: "$11.99" },
         { interval: "year", amount: "$119.99" }
       ],
-      founding: { total: 100, remaining: 40, amount: "$95.99" }
+      founding: { total: 100, remaining: 40, amount: "$95.99", listAmount: "$119.99" }
     };
   });
 
@@ -68,17 +68,34 @@ describe("the upgrade screen", () => {
     render(await UpgradePage());
 
     expect(screen.getByRole("button", { name: /\$95\.99 a year/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /\$119\.99/ })).not.toBeInTheDocument();
+    // The list price appears too, and only struck through — the payable figure is still the
+    // founding one, which is the rule spec 179 set and spec 182 narrowed rather than dropped.
+    const struck = screen.getByText("$119.99");
+    expect(struck).toHaveClass("line-through");
+    expect(screen.queryByRole("button", { name: /\$119\.99 a year/i })).not.toBeInTheDocument();
   });
 
-  it("charges the list price once the founding places are gone", async () => {
+  it("charges the list price once the founding places are gone, with nothing struck through", async () => {
     pricing.current = {
       ...pricing.current,
-      founding: { total: 100, remaining: 0, amount: "$95.99" }
+      founding: { total: 100, remaining: 0, amount: "$95.99", listAmount: "$119.99" }
     };
     render(await UpgradePage());
 
     expect(screen.getByRole("button", { name: /\$119\.99 a year/i })).toBeInTheDocument();
+    // The struck figure always carries this label, so its absence is the absence of a strikethrough.
+    expect(screen.queryByText(/usual price/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the founding price alone when the list price could not be read", async () => {
+    pricing.current = {
+      ...pricing.current,
+      founding: { total: 100, remaining: 40, amount: "$95.99", listAmount: null }
+    };
+    render(await UpgradePage());
+
+    expect(screen.getByRole("button", { name: /\$95\.99 a year/i })).toBeInTheDocument();
+    expect(screen.queryByText(/usual price/i)).not.toBeInTheDocument();
   });
 
   it("keeps the plain labels when Stripe cannot be asked", async () => {

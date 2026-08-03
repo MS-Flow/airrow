@@ -82,3 +82,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Hidden integration: the foundation in one folder nobody else sees | [187-hidden-import-integration.md](187-hidden-import-integration.md) | 🔄 In progress |
 | A download button that downloads | [188-download-routing.md](188-download-routing.md) | 🔄 In progress |
 | The landing page tells a founder who already has code | [196-landing-import-modes.md](196-landing-import-modes.md) | ✅ Done |
+| Knowing where people fall out | [182-posthog-funnel.md](182-posthog-funnel.md) | 🔄 In progress |

@@ -33,7 +33,10 @@ const pricing = vi.hoisted((): { current: Pricing } => ({
   current: { prices: [], founding: null }
 }));
 
-vi.mock("@/features/billing/prices", () => ({
+// Only the Stripe read is faked. `savingFrom` is real, because which of the two figures the card
+// strikes through is exactly what these tests are about (spec 182).
+vi.mock("@/features/billing/prices", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   readPricing: () => Promise.resolve(pricing.current)
 }));
 
@@ -46,7 +49,7 @@ const PRICED: Pricing = {
   ],
   // `amount` is the founding rate, already discounted — deliberately different from the $149.99 list
   // price above, so a test asserting the wrong one fails.
-  founding: { total: 100, remaining: 88, amount: "$119.99" }
+  founding: { total: 100, remaining: 88, amount: "$119.99", listAmount: "$149.99" }
 };
 
 describe("the Pro pricing card", () => {
@@ -78,22 +81,34 @@ describe("the Pro pricing card", () => {
   });
 
   it("names the places left without a figure when the founding rate is unknown", async () => {
-    pricing.current = { ...PRICED, founding: { total: 100, remaining: 88, amount: null } };
+    pricing.current = {
+      ...PRICED,
+      founding: { total: 100, remaining: 88, amount: null, listAmount: "$149.99" }
+    };
     render(await Landing());
 
     expect(screen.getByText(/88 founding places left of 100/i)).toBeInTheDocument();
     expect(screen.queryByText(/per year/i)).not.toBeInTheDocument();
+    // And no orphaned strikethrough: without a founding figure there is nothing for a list price to
+    // be a saving *from*, and a lone struck-through number reads as a price we withdrew.
+    expect(screen.queryByText("$149.99")).not.toBeInTheDocument();
   });
 
   it("reads the last place as one place, not one places", async () => {
-    pricing.current = { ...PRICED, founding: { total: 100, remaining: 1, amount: "$119.99" } };
+    pricing.current = {
+      ...PRICED,
+      founding: { total: 100, remaining: 1, amount: "$119.99", listAmount: "$149.99" }
+    };
     render(await Landing());
 
     expect(screen.getByText(/1 founding place left of 100/i)).toBeInTheDocument();
   });
 
   it("says the offer is taken once the places are gone, and drops the badge", async () => {
-    pricing.current = { ...PRICED, founding: { total: 100, remaining: 0, amount: "$119.99" } };
+    pricing.current = {
+      ...PRICED,
+      founding: { total: 100, remaining: 0, amount: "$119.99", listAmount: "$149.99" }
+    };
     render(await Landing());
 
     expect(screen.getByText(/all 100 founding places are taken/i)).toBeInTheDocument();
@@ -114,6 +129,44 @@ describe("the Pro pricing card", () => {
     // which knows the real price.
     expect(screen.getByText(/unlimited foundations/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /start with pro/i })).toBeInTheDocument();
+  });
+
+  it("strikes through the list price beside the founding one", async () => {
+    // The offer has to read as a *discount*, not as a price: spec 179 showed only $119.99, which a
+    // visitor has no way to recognise as cheap. Both figures now, and the struck one is never the
+    // one charged (spec 182).
+    render(await Landing());
+
+    const struck = screen.getByText("$149.99");
+    expect(struck).toHaveClass("line-through");
+    // Named for anyone who cannot see a line through a number.
+    expect(struck).toHaveTextContent(/usual price/i);
+    expect(screen.getByText(/\$119\.99 per year/i)).toBeInTheDocument();
+  });
+
+  it("shows the founding price alone when the list price could not be read", async () => {
+    // `prices.ts`'s rule, unchanged: no number beats a wrong one, and an empty strikethrough beside
+    // a real price is worse than a saving nobody sees.
+    pricing.current = {
+      ...PRICED,
+      founding: { total: 100, remaining: 88, amount: "$119.99", listAmount: null }
+    };
+    render(await Landing());
+
+    expect(screen.getByText(/\$119\.99 per year/i)).toBeInTheDocument();
+    expect(screen.queryByText("$149.99")).not.toBeInTheDocument();
+  });
+
+  it("strikes nothing through once the founding places are gone", async () => {
+    // The list price is then simply the price. A line through the figure somebody is about to pay
+    // advertises a discount that no longer exists.
+    pricing.current = {
+      ...PRICED,
+      founding: { total: 100, remaining: 0, amount: "$119.99", listAmount: "$149.99" }
+    };
+    render(await Landing());
+
+    expect(screen.queryByText("$149.99")).not.toBeInTheDocument();
   });
 
   it("prices Pro with no founding offer configured at all", async () => {

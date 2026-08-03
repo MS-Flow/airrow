@@ -2,6 +2,8 @@
 import JSZip from "jszip";
 import { NextResponse } from "next/server";
 import { applyResolutions } from "@airrow/engine";
+import { distinctIdForOrg } from "@/features/analytics/events";
+import { capture } from "@/features/analytics/server";
 import { getSession } from "@/lib/auth";
 import {
   getImportSource,
@@ -44,6 +46,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const bytes = await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
 
   await recordDelivery(id, job.id, "zip");
+  // Beside the delivery row rather than instead of it: the row is the record, this is the funnel
+  // step (spec 182). Both are only reached once the bytes exist, so neither can claim a download
+  // that failed to build.
+  capture("zip_downloaded", distinctIdForOrg(session.org.id), { project: id });
 
   return new NextResponse(Buffer.from(bytes), {
     headers: {

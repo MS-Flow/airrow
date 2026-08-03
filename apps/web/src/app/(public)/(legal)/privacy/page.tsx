@@ -58,6 +58,13 @@ export default function PrivacyPage() {
           records.
         </li>
         <li>
+          <strong>PostHog</strong> receives product events — that an interview was started, that a
+          foundation was generated, that a subscription began — so we can see where people get stuck.
+          It receives no email address, no name, none of your interview answers and none of your
+          generated documents; what identifies an event is an opaque workspace identifier that means
+          nothing outside our database. Like the visit count above, it stores nothing on your device.
+        </li>
+        <li>
           <strong>Supabase</strong> provides the database, authentication and file storage where
           your projects live.
         </li>
@@ -68,8 +75,9 @@ export default function PrivacyPage() {
       </ul>
       <p>
         These are processors acting on our instructions. We add no advertising, profiling or
-        session-recording services, and the only analytics is the cookieless visit count described
-        above — nothing that follows you between sites, and nothing that identifies you.
+        session-recording services, and our analytics is cookieless throughout — the visit count and
+        the product events described above, nothing that follows you between sites, and nothing that
+        identifies you.
       </p>
       <p>
         <strong>Our own staff.</strong> A small number of Airrow personnel can access project data —

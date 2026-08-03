@@ -104,31 +104,64 @@ describe("upgradeAmounts", () => {
       { interval: "month" as const, amount: "$11.99" },
       { interval: "year" as const, amount: "$119.99" }
     ],
-    founding: { total: 100, remaining: 40, amount: "$95.99" }
+    founding: { total: 100, remaining: 40, amount: "$95.99", listAmount: "$119.99" }
   };
 
   it("bills yearly at the founding rate while places remain", async () => {
     expect(upgradeAmounts(pricing, ["month", "year"])).toEqual([
-      { interval: "month", amount: "$11.99" },
-      { interval: "year", amount: "$95.99" }
+      { interval: "month", amount: "$11.99", wasAmount: null },
+      { interval: "year", amount: "$95.99", wasAmount: "$119.99" }
     ]);
   });
 
   it("falls back to the list price once the offer is gone", async () => {
-    // Which is then what Checkout actually charges, because the coupon no longer applies.
-    const soldOut = { ...pricing, founding: { total: 100, remaining: 0, amount: "$95.99" } };
+    // Which is then what Checkout actually charges, because the coupon no longer applies — and
+    // there is nothing left to strike through, because that figure is now simply the price.
+    const soldOut = {
+      ...pricing,
+      founding: { total: 100, remaining: 0, amount: "$95.99", listAmount: "$119.99" }
+    };
 
-    expect(upgradeAmounts(soldOut, ["year"])).toEqual([{ interval: "year", amount: "$119.99" }]);
+    expect(upgradeAmounts(soldOut, ["year"])).toEqual([
+      { interval: "year", amount: "$119.99", wasAmount: null }
+    ]);
   });
 
   it("never discounts monthly, which the coupon does not cover", async () => {
-    expect(upgradeAmounts(pricing, ["month"])).toEqual([{ interval: "month", amount: "$11.99" }]);
+    expect(upgradeAmounts(pricing, ["month"])).toEqual([
+      { interval: "month", amount: "$11.99", wasAmount: null }
+    ]);
   });
 
   it("reports no amounts at all when Stripe could not be asked", async () => {
     expect(upgradeAmounts(NO_PRICING, ["month", "year"])).toEqual([
-      { interval: "month", amount: null },
-      { interval: "year", amount: null }
+      { interval: "month", amount: null, wasAmount: null },
+      { interval: "year", amount: null, wasAmount: null }
+    ]);
+  });
+
+  it("shows no strikethrough when the list price could not be read", async () => {
+    // The founding figure renders alone. An empty struck-through element beside a real price reads
+    // as a bug, and a missing saving reads as no offer — the second is merely less informative.
+    const noList = {
+      ...pricing,
+      founding: { total: 100, remaining: 40, amount: "$95.99", listAmount: null }
+    };
+
+    expect(upgradeAmounts(noList, ["year"])).toEqual([
+      { interval: "year", amount: "$95.99", wasAmount: null }
+    ]);
+  });
+
+  it("shows no strikethrough when the coupon discounts nothing", async () => {
+    // A zero-value coupon is not an offer, and `$119.99 was $119.99` is a sentence nobody believes.
+    const noSaving = {
+      ...pricing,
+      founding: { total: 100, remaining: 40, amount: "$119.99", listAmount: "$119.99" }
+    };
+
+    expect(upgradeAmounts(noSaving, ["year"])).toEqual([
+      { interval: "year", amount: "$119.99", wasAmount: null }
     ]);
   });
 });
