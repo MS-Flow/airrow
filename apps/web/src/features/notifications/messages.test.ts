@@ -8,8 +8,8 @@
 import { describe, it, expect } from "vitest";
 import {
   escapeSlack,
+  foundationGeneratedMessage,
   paidMessage,
-  projectCreatedMessage,
   userCreatedMessage
 } from "./messages";
 
@@ -66,27 +66,31 @@ describe("userCreatedMessage", () => {
   });
 });
 
-describe("projectCreatedMessage", () => {
-  it("distinguishes the three ways a project arrives", () => {
-    expect(projectCreatedMessage("Acme", "CRM", "new")).toContain("started a project");
-    expect(projectCreatedMessage("Acme", "CRM", "imported")).toContain("imported a project");
-    expect(projectCreatedMessage("Acme", "CRM", "claimed")).toContain("signed out");
-  });
-
+describe("foundationGeneratedMessage", () => {
   it("names both the workspace and the project", () => {
-    const message = projectCreatedMessage("Acme", "CRM", "new");
+    const message = foundationGeneratedMessage("Acme", "CRM", false);
 
     expect(message).toContain("Acme");
     expect(message).toContain("CRM");
+    expect(message).toContain("generated a foundation");
+  });
+
+  it("says plainly when it was a regeneration", () => {
+    // Founders regenerate constantly while tuning one answer. A channel that read the same either
+    // way would make a busy afternoon look like ten new customers.
+    const message = foundationGeneratedMessage("Acme", "CRM", true);
+
+    expect(message).toContain("regenerated");
+    expect(message).not.toContain("generated a foundation");
   });
 
   it("escapes the project name too, not only the workspace", () => {
-    expect(projectCreatedMessage("Acme", "<!here>", "new")).toContain("&lt;!here&gt;");
-    expect(projectCreatedMessage("Acme", "<!here>", "new")).not.toContain("<!here>");
+    expect(foundationGeneratedMessage("Acme", "<!here>", false)).toContain("&lt;!here&gt;");
+    expect(foundationGeneratedMessage("Acme", "<!here>", false)).not.toContain("<!here>");
   });
 
   it("treats a whitespace-only name as no name", () => {
-    expect(projectCreatedMessage("Acme", "   ", "new")).toContain("(unnamed)");
+    expect(foundationGeneratedMessage("Acme", "   ", false)).toContain("(unnamed)");
   });
 });
 
@@ -112,7 +116,7 @@ describe("what is never in a message", () => {
     // test that should make somebody stop and think about where it ends up.
     const all = [
       userCreatedMessage("Acme", "email"),
-      projectCreatedMessage("Acme", "CRM", "new"),
+      foundationGeneratedMessage("Acme", "CRM", false),
       paidMessage("Acme", "founding")
     ].join(" ");
 

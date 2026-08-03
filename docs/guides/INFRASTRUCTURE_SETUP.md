@@ -579,8 +579,8 @@ than by convention.
 
 ## 10. Slack notifications (spec 203)
 
-Three messages, in one channel: somebody signed up, somebody started a project, somebody bought Pro.
-About five minutes.
+Three messages, in one channel: somebody signed up, somebody generated a foundation, somebody bought
+Pro. About five minutes.
 
 1. **Create the channel** in Slack — `#posthog` or whatever you prefer. One channel; there is no
    routing to configure.
@@ -600,8 +600,11 @@ About five minutes.
 | When | Message |
 |---|---|
 | A new account | 🎉 New account — *Acme* signed up with GitHub. |
-| A project | 📁 *Acme* started a project: *CRM* — or *imported*, or finished one begun signed out |
+| A foundation | ✨ *Acme* generated a foundation: *CRM* — or 🔁 *Acme* regenerated *CRM* |
 | Pro | 💚 *Acme* bought Pro — a founding place. |
+
+The middle one fires on a **generated foundation**, not on a project being created: a project is made
+in seconds and can be abandoned before a single question is answered.
 
 **What is never sent: an email address.** A channel history is searchable by everyone in the
 workspace and retained by Slack; who someone is belongs in the admin console, behind a login. The

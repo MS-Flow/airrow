@@ -5,25 +5,37 @@
 // each caller remembering — which is the same reason `features/analytics/server.ts` is shaped this
 // way, and the same reason it survived a Stripe webhook.
 import type { PaidTier } from "@/features/analytics/events";
-import { getOrganization } from "@/lib/data/store";
+import { getOrganization, getProject } from "@/lib/data/store";
 import { notifySlack } from "@/lib/slack";
-import {
-  paidMessage,
-  projectCreatedMessage,
-  userCreatedMessage,
-  type ProjectOrigin
-} from "./messages";
+import { foundationGeneratedMessage, paidMessage, userCreatedMessage } from "./messages";
 
 export function notifyUserCreated(workspace: string | null, method: string): void {
   notifySlack(userCreatedMessage(workspace, method));
 }
 
-export function notifyProjectCreated(
-  workspace: string | null,
-  project: string | null,
-  origin: ProjectOrigin
-): void {
-  notifySlack(projectCreatedMessage(workspace, project, origin));
+/**
+ * Announce a finished foundation, looking both names up on the way.
+ *
+ * Takes ids and reads the names itself, like `notifyPaid` and for the same reason: the generation
+ * runner holds an organization id and a project id and nothing else, and threading names into it
+ * would put two database reads inside a job a founder is watching, to buy a nicer chat message.
+ * Here the reads are already past the point where anything can go wrong — the foundation is saved
+ * and the job is complete, so a failure costs the message rather than the generation.
+ */
+export function notifyFoundationGenerated(orgId: string, projectId: string, reused: boolean): void {
+  void (async () => {
+    try {
+      const [org, project] = await Promise.all([
+        getOrganization(orgId),
+        // Org-scoped like every other read (§II), even though the runner already established the
+        // organization — the scope is the authorization, not a formality.
+        getProject(orgId, projectId)
+      ]);
+      notifySlack(foundationGeneratedMessage(org?.name ?? null, project?.name ?? null, reused));
+    } catch {
+      // Deliberately silent, per the contract above.
+    }
+  })();
 }
 
 /**
