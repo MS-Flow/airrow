@@ -5,8 +5,10 @@ import {
   BookMarked,
   Boxes,
   Check,
+  EyeOff,
   FileCode2,
   GitBranch,
+  GitMerge,
   ShieldCheck,
   Sparkles,
   Workflow,
@@ -23,6 +25,7 @@ import { Card, CardBody } from "@/components/ui/card";
 import { SpecDrivenShowcase } from "@/features/landing/SpecDrivenShowcase";
 import {
   DELIVERABLES,
+  DELIVERY_MODES,
   HEADER,
   HERO,
   INCLUDED,
@@ -52,6 +55,11 @@ const deliverableIcons: Record<DeliverableIcon, LucideIcon> = {
   pipeline: Workflow,
   standards: ShieldCheck,
   prompts: BookMarked
+};
+
+const deliveryModeIcons: Record<(typeof DELIVERY_MODES)[number]["key"], LucideIcon> = {
+  integrated: GitMerge,
+  hidden: EyeOff
 };
 
 async function landingSignOutAction() {
@@ -208,6 +216,38 @@ export default async function Landing() {
             </ul>
           </div>
           <SpecDrivenShowcase foundation={foundation} />
+        </section>
+
+        {/* Already have a project (spec 196). Immediately above Pricing, so the two ways a
+            foundation lands and the tier that buys them read as one thought: both modes are Pro.
+            Two cards, same size and same treatment, integrated first: this is a choice about what a
+            founder's team sees, not a headline with a footnote under it. */}
+        <section id="existing-project" className="scroll-mt-20 border-t border-border py-24">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-2xl font-semibold tracking-tight text-fg">
+              {SECTIONS.existingProject.title}
+            </h2>
+            <Badge tone="accent">{SECTIONS.existingProject.badge}</Badge>
+          </div>
+          <p className="mt-3 max-w-2xl text-base leading-relaxed text-fg-muted">
+            {SECTIONS.existingProject.body}
+          </p>
+          <div className="mt-10 grid gap-4 md:grid-cols-2">
+            {DELIVERY_MODES.map(({ key, title, lead, body }) => {
+              const Icon = deliveryModeIcons[key];
+              return (
+                <Card key={key} interactive>
+                  <CardBody className="p-6">
+                    <Icon className="size-4 text-fg-faint" />
+                    <h3 className="mt-3 text-md font-semibold text-fg">{title}</h3>
+                    <p className="mt-1.5 text-base font-medium text-fg">{lead}</p>
+                    <p className="mt-2 text-base leading-relaxed text-fg-muted">{body}</p>
+                  </CardBody>
+                </Card>
+              );
+            })}
+          </div>
+          <p className="mt-6 text-sm text-fg-faint">{SECTIONS.existingProject.note}</p>
         </section>
 
         {/* Pricing. Two cards, both real: free is the whole first foundation and Pro is purchasable

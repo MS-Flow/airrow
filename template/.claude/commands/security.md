@@ -74,7 +74,7 @@ are — the places where something outside this codebase reaches inside it.
   of those is untrusted until something validates it.
 - **The secrets**: where they are kept, which ones the client bundle can see, and how they reach
   the deployed environment.
-- **The pipeline**: `{{CI_FILE}}`, what it runs, what it has access to, and what it prints.
+- **The pipeline**: {{CI_TARGET}}, what it runs, what it has access to, and what it prints.
 
 Write the map down in your report before you go looking. The map is what tells you which of the
 findings below actually matter here.
@@ -140,7 +140,7 @@ output.
 
 **Dependencies and pipeline.** Known advisories in the lockfile (run the project's own audit command
 if it has one — see limit 2 above). Install-time scripts from packages nobody vetted. Unpinned or
-mutable-tag actions in `{{CI_FILE}}`. Secrets printed by a pipeline step. Build steps that fetch a
+mutable-tag actions in {{CI_TARGET}}. Secrets printed by a pipeline step. Build steps that fetch a
 script from the internet and run it. Storage buckets or object stores that are public when they
 should not be.
 

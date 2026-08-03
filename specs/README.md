@@ -79,4 +79,7 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | A way back in, and credentials you can change | [171-forgot-password.md](171-forgot-password.md) | ✅ Done |
 | Curated directions that install real code | [165-installable-ui-directions.md](165-installable-ui-directions.md) | ✅ Done |
 | A real price on the Pro card, and a founding-member deal | [179-pro-price-founding-offer.md](179-pro-price-founding-offer.md) | ✅ Done |
+| Hidden integration: the foundation in one folder nobody else sees | [187-hidden-import-integration.md](187-hidden-import-integration.md) | 🔄 In progress |
+| A download button that downloads | [188-download-routing.md](188-download-routing.md) | 🔄 In progress |
+| The landing page tells a founder who already has code | [196-landing-import-modes.md](196-landing-import-modes.md) | ✅ Done |
 | Knowing where people fall out | [182-posthog-funnel.md](182-posthog-funnel.md) | 🔄 In progress |

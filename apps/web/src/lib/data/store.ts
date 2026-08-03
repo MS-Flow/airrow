@@ -11,6 +11,7 @@ import { pickFlaggedAnswers } from "@airrow/schemas";
 import type {
   AnswerId,
   ConflictResolution,
+  DeliveryLayout,
   GenerationResult,
   ImportAnalysis,
   ImportedFileDigest,
@@ -807,6 +808,8 @@ export interface ImportSourceRecord {
   filesAnalyzed: number;
   filesIgnored: number;
   analysis: ImportAnalysis;
+  /** How the foundation lands in this project — integrated, or hidden under a folder (spec 187). */
+  delivery: DeliveryLayout;
   /** Which pepper version the digests were hashed with; 0 = raw SHA-256 (spec 68). */
   digestVersion: number;
   createdAt: string;
@@ -822,6 +825,8 @@ interface ImportSourceRow {
   files_ignored: number;
   /** As stored: rows written before `stackDetected` existed (spec 91) have no answer to it. */
   analysis: Omit<ImportAnalysis, "stackDetected"> & Partial<Pick<ImportAnalysis, "stackDetected">>;
+  delivery_layout: DeliveryLayout["kind"];
+  hidden_folder: string;
   digest_version: number;
   created_at: string;
 }
@@ -837,9 +842,34 @@ const toImportSource = (r: ImportSourceRow): ImportSourceRecord => ({
   // them was a real project archive, and calling an unmeasured one empty would hand its founder
   // `/start` — the one command that does not fit a repository which already has code.
   analysis: { ...r.analysis, stackDetected: r.analysis.stackDetected ?? true },
+  // The two columns are one fact, so they are read back as the union the rest of the code uses
+  // rather than as a flag plus a string that could contradict it (§I). The check constraint keeps
+  // the pair honest in the database; this keeps it honest in TypeScript.
+  delivery:
+    r.delivery_layout === "hidden"
+      ? { kind: "hidden", folder: r.hidden_folder }
+      : { kind: "integrated" },
   digestVersion: r.digest_version,
   createdAt: r.created_at
 });
+
+/**
+ * Record how the foundation should land (spec 187). Set on the import review screen, after the
+ * analysis has proven there is a codebase to hide it in and before generation runs.
+ */
+export async function setDeliveryLayout(
+  importSourceId: string,
+  delivery: DeliveryLayout
+): Promise<void> {
+  const res = await db()
+    .from("import_sources")
+    .update({
+      delivery_layout: delivery.kind,
+      hidden_folder: delivery.kind === "hidden" ? delivery.folder : ""
+    })
+    .eq("id", importSourceId);
+  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
+}
 
 /**
  * Record an import and the digest manifest of what it contained. Only paths, sizes and digests are
