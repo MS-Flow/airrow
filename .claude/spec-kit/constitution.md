@@ -42,6 +42,16 @@ Every feature, screen, and generated file is judged against these.
   documents to describe it. Its ceiling is narrower — it changes no code and deletes nothing. A
   foundation ships exactly one of the two, decided by where the project came from. Airrow's servers
   still never write application code, and ZIP delivery is still a complete foundation on its own.
+  **An imported foundation lands one of two ways, and the founder picks which**
+  ([spec 187](../../specs/187-hidden-import-integration.md)): *integrated*, taking its own paths in
+  the founder's tree as it always has, or *hidden* — the whole foundation nested under one folder the
+  founder names, which `/cleanup` tells git to ignore in `.git/info/exclude`, so a developer can bring
+  Airrow into a codebase they share without changing a line their team will see. Hidden narrows
+  `/cleanup` further still: nothing outside that folder may change — not a document, not a branch, not
+  the team's own instruction files — and no CI ships, because a workflow in an ignored folder can
+  never run. The committed `.gitignore` line is offered and never written without a yes. Hiding files
+  from a repository is all it does: it is not concealment from an employer, and it grants no access
+  anybody did not already have.
   **`/security` ships with every foundation, whatever its origin, and is the third command that may
   touch code** — narrowly: it reviews the whole repository for vulnerabilities and fixes only what
   changes nothing a user can see, proposing everything else and waiting for the founder's yes. It

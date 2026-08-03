@@ -148,9 +148,36 @@ export const importedFileSchema = z.object({
  * no answer at all. A missing field must fail here and be defaulted deliberately by the caller, not
  * arrive in the engine as `undefined` and silently pick a command.
  */
+/**
+ * The name of the folder a hidden delivery nests itself under (spec 187).
+ *
+ * It is concatenated into every delivered path, so it is validated as exactly one path segment and
+ * nothing else: no separator that would let it address a second directory, no `..` that would climb
+ * out of the tree, no leading dot that would hide the folder from the founder who has to work in it,
+ * and nothing but the characters a slug is made of. Same rule the imported archive's own paths are
+ * held to (spec 63) — a name the founder typed is untrusted input like any other.
+ */
+export const hiddenFolderSchema = z
+  .string()
+  .min(1)
+  .max(48)
+  .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, "Use lowercase letters, numbers and dashes.");
+
+/** Integrated, or hidden under a folder the founder named (spec 187). */
+export const deliveryLayoutSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("integrated") }),
+  z.object({ kind: z.literal("hidden"), folder: hiddenFolderSchema })
+]);
+
 export const projectOriginSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("new") }),
-  z.object({ kind: z.literal("imported"), stackDetected: z.boolean() })
+  z.object({
+    kind: z.literal("imported"),
+    stackDetected: z.boolean(),
+    // Imports predating spec 187 carry no layout, and every one of them was delivered integrated —
+    // so the default is what actually happened to them, not a guess.
+    delivery: deliveryLayoutSchema.default({ kind: "integrated" })
+  })
 ]);
 
 export const conflictResolutionSchema = z.enum(["keep_existing", "use_generated"]);
