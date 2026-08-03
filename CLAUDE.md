@@ -68,6 +68,18 @@ passes it in.
   API call per visitor (spec 179). It is called straight from the landing RSC, writes nothing, and is
   still server-side. Never from client components; never from `packages/engine` or `packages/schemas`
   directly.
+- **Analytics runs on both sides, and is write-only on both.** Not a new exception to §I: spec 153
+  already beacons to Vercel from a client component, because §I's rule is about the calls carrying our
+  data and our credentials — Claude, Supabase, the GitHub App. This carries neither, and can read
+  nothing. `features/analytics/` sends product events to PostHog from both sides: `server.ts` (the only
+  importer of `posthog-node`) carries `signup`, `foundation_generated`, `zip_downloaded`,
+  `checkout_started` and `paid`, so a content blocker cannot delete the bottom of the funnel;
+  `client.tsx` carries `pageview` and the interview steps, and **imports `posthog-js` dynamically after
+  the key check** — 228 kB that a deployment measuring nothing must not download. The complete list of
+  what may leave the process is `events.ts` — enforced at runtime by `sanitize`, not by convention. The browser
+  side runs `persistence: "memory"`: **no cookie, no device storage, and therefore still no consent
+  banner** (spec 153's promise, kept by spec 182). Changing that one option makes the cookie policy
+  false and a banner mandatory.
 - **Archer** is mounted from the two layouts — `app/(public)/layout.tsx` and `app/app/layout.tsx` — and
   therefore renders on every public page *and* every `/app` screen (spec 159, which lifted spec 158's
   deliberate `/app` exclusion). Pages never import `ChatWidget` themselves. When it cannot answer, or
@@ -132,3 +144,7 @@ passes it in.
   `plan_grants` row with `source = 'support'`, written already-started so it never queues behind
   anything, refused when Stripe is already paying, and ended by closing its window rather than deleting
   it. Still never `organizations.plan` — a write there would be reconciled away by the next webhook.
+  The public card and `/app/upgrade` show the founding rate **beside the list price it discounts from**,
+  struck through (spec 182, narrowing spec 179's rule that the list price must never appear: the figure
+  presented as payable is still always the founding one). Both come from Stripe; when the list price
+  cannot be read the founding figure renders alone.
