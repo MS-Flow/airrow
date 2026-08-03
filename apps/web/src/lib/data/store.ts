@@ -251,6 +251,22 @@ const toJob = (r: JobRow): JobRecord => ({
 
 /* ── Organization resolution (identity comes from Supabase Auth, in lib/auth.ts) ── */
 
+/**
+ * One organization by its id. Null when there is no such row.
+ *
+ * Added for the Slack notification that names a workspace (spec 203): its callers hold an id and
+ * nothing else. Deliberately narrow — `name` and `plan` — because that is all anything asking by id
+ * has needed so far, and a `select *` here would be a standing invitation to widen it.
+ */
+export async function getOrganization(
+  orgId: string
+): Promise<{ id: string; name: string; plan: OrgPlan } | null> {
+  const row = maybe<{ id: string; name: string; plan: OrgPlan | null }>(
+    await db().from("organizations").select("id, name, plan").eq("id", orgId).maybeSingle()
+  );
+  return row ? { id: row.id, name: row.name, plan: row.plan ?? "free" } : null;
+}
+
 /** The organization a user belongs to (their personal org). Null if none yet. */
 export async function getOrgForUser(userId: string): Promise<OrgRecord | null> {
   const memberships = rows<{ organization_id: string }>(

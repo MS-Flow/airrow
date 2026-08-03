@@ -546,6 +546,49 @@ than by convention.
 
 ---
 
+## 10. Slack notifications (spec 203)
+
+Three messages, in one channel: somebody signed up, somebody started a project, somebody bought Pro.
+About five minutes.
+
+1. **Create the channel** in Slack — `#posthog` or whatever you prefer. One channel; there is no
+   routing to configure.
+2. **Create an incoming webhook.** <https://api.slack.com/apps> → **Create New App** → *From
+   scratch* → name it `Airrow` and pick the workspace → **Incoming Webhooks** → toggle *Activate
+   Incoming Webhooks* on → **Add New Webhook to Workspace** → choose the channel → **Allow**.
+   Copy the URL; it looks like `https://hooks.slack.com/services/T…/B…/…`.
+3. **Set it in Vercel** as `SLACK_WEBHOOK_URL`, **Production only**, then redeploy.
+
+   The URL *is* the credential — anyone holding it can post to that channel — so it is server-only
+   and never carries a `NEXT_PUBLIC_` prefix. It is rejected unless it starts with
+   `https://hooks.slack.com/`, so a value pasted into the wrong variable cannot send workspace names
+   to somebody else's server.
+
+**What each message says:**
+
+| When | Message |
+|---|---|
+| A new account | 🎉 New account — *Acme* signed up with GitHub. |
+| A project | 📁 *Acme* started a project: *CRM* — or *imported*, or finished one begun signed out |
+| Pro | 💚 *Acme* bought Pro — a founding place. |
+
+**What is never sent: an email address.** A channel history is searchable by everyone in the
+workspace and retained by Slack; who someone is belongs in the admin console, behind a login. The
+complete list of what may be sent is
+`apps/web/src/features/notifications/messages.ts` — one readable file, the same shape `events.ts` has
+for PostHog.
+
+**Nothing depends on Slack.** Unreachable, slow, rate-limited or unconfigured: the signup completes,
+the project is created, and the Stripe webhook still answers 200. A launch spike is exactly when
+Slack rate-limits a webhook, and that must never become an outage.
+
+**Why not PostHog's own Slack destination?** It was tried first. The analytics events carry only
+opaque ids by design, so the message reads `foundation_generated · project 8f3a1c… · reused false`.
+Adding names to those events to make Slack nicer would make the privacy policy false — so the
+readable version is assembled from Postgres instead, which is what this is.
+
+---
+
 ## Notes & constraints
 
 - **Free tier:** the Supabase project pauses after ~1 week of inactivity and has row/storage caps —
