@@ -57,8 +57,8 @@ _Filled in during `/implement`, grounded in `file:line`._
   ([`zip/route.ts`](../apps/web/src/app/api/projects/%5Bid%5D/zip/route.ts)) always works, needs no
   browser state, and already respects the founder's conflict decisions through `applyResolutions`.
   `ImportSourceRecord.kind` already records `zip` vs `repo`, which is the fact the routing turns on.
-  Spec 187 adds `ImportSourceRecord.delivery` for the hidden cell, but lives on `feature/pro` and has
-  not reached `develop` — see _Implementation notes_.
+  Spec 187 adds `ImportSourceRecord.delivery` for the hidden cell, but has not landed on the shared
+  feature branch yet — see _Implementation notes_.
 
 ---
 
@@ -129,7 +129,7 @@ _What "done" means. Every line is something a reviewer can check._
       merge is still what they asked for.
 - [ ] A **hidden** delivery (spec 187) downloads the foundation directly whatever the import source
       — including a ZIP import whose archive *is* cached. The layout decides, not the source.
-      **Deferred:** spec 187 lives on `feature/pro` and has not reached `develop`, so
+      **Deferred:** spec 187 has not landed on `feature/import-existing-projects` yet, so
       `ImportSourceRecord.delivery` does not exist on this branch. See _Implementation notes_.
 - [x] A project that was never imported is unaffected — still the plain link.
 - [x] A repo import offers **no** merge path at all: one button, and it downloads.
@@ -261,11 +261,16 @@ is still said through the toaster, which is spec 68's own answer to exactly this
 
 ### Hidden layout: deferred, not forgotten
 
-Spec 187 lives on `feature/pro` and has not reached `develop`, so `ImportSourceRecord.delivery` does
-not exist on this branch and the hidden cell of the routing matrix cannot be written here. The
-routing is a single `if` on `source.kind` in one function, so wiring it is one condition and one test
-case once the branches meet — **whichever of the two merges into `develop` second owns that wiring**,
-and this note is the record that it is owed.
+Spec 187 adds `ImportSourceRecord.delivery`, which does not exist on this branch, so the hidden cell
+of the routing matrix cannot be written here. The routing is a single `if` on `source.kind` in one
+function, so wiring it is one condition and one test case.
+
+The two specs were cut from different feature branches — 187 from `feature/pro`, this one from
+`feature/import-existing-projects` — which would have meant waiting for both to reach `develop`.
+Spec 187 has since **moved to `feature/import-existing-projects`**, because importing is already Pro
+and every line it touches is import code. So the two now share a feature branch and meet a step
+earlier: **whichever of them merges there second owns the wiring**, and this note is the record that
+it is owed.
 
 ### `/analyze` — 2026-08-03: three findings, all fixed
 
