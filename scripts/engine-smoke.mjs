@@ -136,6 +136,34 @@ const fixtures = [
       repoProvider: "github",
       team: "solo"
     }
+  },
+  {
+    // Spec 187: the same import, delivered hidden. Everything lands under one folder git is told to
+    // ignore, and no pipeline ships — a workflow in an ignored folder could never run. The point of
+    // the fixture is that nothing else about the foundation changes.
+    name: "Keystone Ops",
+    description: "An internal operations dashboard a developer wants to bring Airrow into quietly.",
+    origin: {
+      kind: "imported",
+      stackDetected: true,
+      delivery: { kind: "hidden", folder: "notes" }
+    },
+    answers: {
+      productType: "internal_tool",
+      vision: "See every overnight job in one place. Long-term, nobody opens a terminal to find out what broke.",
+      audience: "internal",
+      coreEntities: "A Team owns Services; a Service runs Jobs; a Job produces Runs.",
+      tenancy: "internal",
+      authModel: ["sso"],
+      capabilities: ["admin"],
+      dataSensitivity: "standard",
+      scale: "validate",
+      framework: "nextjs",
+      database: "postgres",
+      hosting: "self_host",
+      repoProvider: "github",
+      team: "small_team"
+    }
   }
 ];
 
@@ -152,6 +180,18 @@ for (const fx of fixtures) {
   const paths = new Set(files.map((f) => f.path));
   const text = files.map((f) => f.content).join("\n");
 
+  // Spec 187: a hidden delivery moves the whole foundation under one folder, so every path below is
+  // asked for through the layout rather than assumed to sit at the root.
+  const folder =
+    fx.origin?.kind === "imported" && fx.origin.delivery?.kind === "hidden"
+      ? fx.origin.delivery.folder
+      : null;
+  const at = (p) => (folder === null ? p : `${folder}/${p}`);
+  if (folder !== null) {
+    const escaped = files.filter((f) => !f.path.startsWith(`${folder}/`));
+    if (escaped.length > 0) fail(`${escaped.length} file(s) delivered outside ${folder}/`);
+  }
+
   // Not every template file ships in every project: GitHub Actions and Azure Pipelines are
   // alternatives, so each project gets one set and never the other.
   const expected = TEMPLATE.filter((f) => shipsPath(model, f.path)).length;
@@ -165,21 +205,21 @@ for (const fx of fixtures) {
 
   // The onboarding path and the vision must always ship.
   for (const required of ["START_HERE.md", "docs/VISION.md", "specs/README.md"]) {
-    if (!paths.has(required)) fail(`missing required file: ${required}`);
+    if (!paths.has(at(required))) fail(`missing required file: ${at(required)}`);
   }
 
   // Personalization: the answers, not a template, drive the content.
-  const readme = files.find((f) => f.path === "README.md");
+  const readme = files.find((f) => f.path === at("README.md"));
   if (!readme?.content.includes(fx.name)) fail("README not personalized with project name");
-  const vision = files.find((f) => f.path === "docs/VISION.md");
+  const vision = files.find((f) => f.path === at("docs/VISION.md"));
   if (!vision?.content.includes(fx.answers.vision)) fail("VISION.md missing the long-term vision");
   
 
   // Spec 91: exactly one first-run command, and it is the one this project's origin calls for. Both
   // would be worse than neither — one of them would be wrong about the repository it is sitting in.
   const imported = fx.origin?.kind === "imported" && fx.origin.stackDetected;
-  const expectedCommand = `.claude/commands/${imported ? "cleanup" : "start"}.md`;
-  const wrongCommand = `.claude/commands/${imported ? "start" : "cleanup"}.md`;
+  const expectedCommand = at(`.claude/commands/${imported ? "cleanup" : "start"}.md`);
+  const wrongCommand = at(`.claude/commands/${imported ? "start" : "cleanup"}.md`);
   if (!paths.has(expectedCommand)) fail(`missing first-run command: ${expectedCommand}`);
   if (paths.has(wrongCommand)) fail(`ships the wrong first-run command: ${wrongCommand}`);
   if (text.includes(imported ? "/start" : "/cleanup")) {
@@ -188,30 +228,35 @@ for (const fx of fixtures) {
 
   // Spec 157: /security has no alternative to pair it with — a project started from nothing and one
   // that arrived with years of code both have holes to find, so every foundation ships it.
-  if (!paths.has(".claude/commands/security.md")) fail("missing /security command");
+  if (!paths.has(at(".claude/commands/security.md"))) fail("missing /security command");
 
   // Spec 66: the commands the documents tell the founder to run have to be the ones `/start` sets
   // up. A foundation whose START_HERE names `pnpm test` while `/start` wires `npm test` is the same
   // broken first experience as having no commands at all, just harder to spot.
-  const start = files.find((f) => f.path === ".claude/commands/start.md")?.content ?? "";
+  const start = files.find((f) => f.path === at(".claude/commands/start.md"))?.content ?? "";
   if (!imported && !start) fail("missing /start command");
   const run = fx.answers.framework === "vite" ? "npm run" : "pnpm";
-  const here = files.find((f) => f.path === "START_HERE.md")?.content ?? "";
+  const here = files.find((f) => f.path === at("START_HERE.md"))?.content ?? "";
   const azure = fx.answers.repoProvider === "azure_devops";
   const ciPath = azure ? "azure-pipelines.yml" : ".github/workflows/ci.yml";
   const ci = files.find((f) => f.path === ciPath)?.content ?? "";
-  if (!ci) fail(`missing CI definition: ${ciPath}`);
+  // Spec 187: a hidden foundation ships no pipeline at all — one inside an ignored folder is never
+  // pushed and never runs, so shipping it would be a check that only looks like it is happening.
+  if (folder === null && !ci) fail(`missing CI definition: ${ciPath}`);
+  if (folder !== null && ci) fail("a hidden foundation must ship no CI definition");
   for (const script of ["dev", "typecheck", "lint", "test"]) {
     const command = `${run} ${script}`;
     // Only /start wires the toolchain; /cleanup measures the one that is already there.
     if (!imported && !start.includes(command)) fail(`/start does not set up \`${command}\``);
     if (!here.includes(command)) fail(`START_HERE.md does not name \`${command}\``);
   }
-  for (const script of ["typecheck", "lint", "test"]) {
-    if (!ci.includes(`${run} ${script}`)) fail(`${ciPath} does not run \`${run} ${script}\``);
+  if (folder === null) {
+    for (const script of ["typecheck", "lint", "test"]) {
+      if (!ci.includes(`${run} ${script}`)) fail(`${ciPath} does not run \`${run} ${script}\``);
+    }
+    const gate = azure ? "dependencies.detect.outputs" : "needs.detect.outputs.ready";
+    if (!ci.includes(gate)) fail(`${ciPath} is not gated on there being a stack to verify`);
   }
-  const gate = azure ? "dependencies.detect.outputs" : "needs.detect.outputs.ready";
-  if (!ci.includes(gate)) fail(`${ciPath} is not gated on there being a stack to verify`);
   // A foundation must never describe someone else's tooling.
   if (azure && text.includes("GitHub")) fail("GitHub named in an Azure DevOps project");
   if (!azure && text.includes("Azure DevOps")) fail("Azure DevOps named in a GitHub project");
@@ -222,7 +267,7 @@ for (const fx of fixtures) {
   if (fx.answers.database !== "supabase" && text.includes("Supabase")) fail("Supabase named for a non-Supabase project");
 
   // Exactly one spec brief per selected capability — no more, no fewer.
-  const specs = files.find((f) => f.path === "specs/README.md")?.content ?? "";
+  const specs = files.find((f) => f.path === at("specs/README.md"))?.content ?? "";
   const briefs = (specs.match(/^### /gm) ?? []).length;
   if (briefs !== model.features.length) {
     fail(`expected ${model.features.length} capability briefs, got ${briefs}`);

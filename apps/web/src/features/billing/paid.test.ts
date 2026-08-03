@@ -18,6 +18,12 @@ vi.mock("@/features/analytics/server", () => ({
   }
 }));
 
+const slack = vi.hoisted(() => ({ sent: [] as string[] }));
+vi.mock("@/lib/slack", () => ({ notifySlack: (text: string) => slack.sent.push(text) }));
+vi.mock("@/lib/data/store", () => ({
+  getOrganization: async () => ({ id: "org1", name: "Acme", plan: "pro" })
+}));
+
 import { capturePaid, isNewConversion, paidTier } from "./paid";
 
 /** Only the fields `paidTier` reads. The cast keeps the fixture to the shape under test. */
@@ -39,7 +45,11 @@ const pro: SubscriptionState = {
 
 beforeEach(() => {
   analytics.captures = [];
+  slack.sent = [];
 });
+
+/** The Slack send resolves a workspace name first, so it settles a tick after the event. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("paidTier", () => {
   it("reads a discounted yearly subscription as a founding place", () => {
@@ -105,5 +115,20 @@ describe("capturePaid", () => {
     capturePaid("org1", { status: "active" }, pro, subscription("month"));
 
     expect(analytics.captures).toEqual([]);
+  });
+
+  // Both channels behind one transition rule, so they can never disagree about who is new (spec 203).
+  it("names the workspace in Slack, where PostHog gets only an id", async () => {
+    capturePaid("org1", null, pro, subscription("year", ["di_1"]));
+    await settle();
+
+    expect(slack.sent).toEqual(["💚 *Acme* bought Pro — a founding place."]);
+  });
+
+  it("stays quiet in Slack too on a renewal or a redelivery", async () => {
+    capturePaid("org1", { status: "active" }, pro, subscription("month"));
+    await settle();
+
+    expect(slack.sent).toEqual([]);
   });
 });

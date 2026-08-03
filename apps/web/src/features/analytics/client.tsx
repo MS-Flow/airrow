@@ -83,7 +83,15 @@ export const POSTHOG_OPTIONS = {
   capture_pageleave: false,
   // Session recording would reach interview answers, which are customer IP (§II). Never on.
   disable_session_recording: true,
-  autocapture: false
+  autocapture: false,
+  // **A separate switch from `autocapture`, and on by default.** It sends `$web_vitals` carrying the
+  // full URL — which meant workspace paths like `/app/projects/<id>` reaching PostHog from the one
+  // place we had carefully excluded, while `autocapture: false` sat right above it looking like it
+  // covered this. Found by reading the live feed after the first real deploy, not by a test.
+  capture_performance: false,
+  capture_heatmaps: false,
+  capture_dead_clicks: false,
+  rageclick: false
 } as const;
 
 /**
@@ -148,15 +156,17 @@ export function FunnelAnalytics(): null {
   const pathname = usePathname();
 
   useEffect(() => {
-    // A workspace path is nobody's business to record, and it carries a project id in it. The funnel
-    // inside `/app` is measured by named events with deliberate properties instead — the same
-    // decision spec 153 made for the same reason, asked of the same predicate.
-    if (isPrivatePath(pathname)) return;
     // `window.location.search` rather than `useSearchParams`: that hook opts the whole tree into
     // client-side rendering at the root, which would cost every public page its static shell for a
     // value this reads exactly once.
     void initAnalytics(window.location.search).then((started) => {
-      if (started) captureClient("pageview", { path: pathname });
+      // **Only the pageview is suppressed inside `/app`, never the initialisation.** A workspace path
+      // is nobody's business to record and carries a project id in it — but the named events *inside*
+      // `/app` (`interview_started`, `interview_step`) still need the library started, and a founder
+      // who signs in arrives there on a full page load with no public page in between. Returning
+      // early here instead left them queued forever: the interview measured nothing at all, which is
+      // exactly the half of the funnel the drop-off curve is made of.
+      if (started && !isPrivatePath(pathname)) captureClient("pageview", { path: pathname });
     });
   }, [pathname]);
 

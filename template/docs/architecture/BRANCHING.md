@@ -30,9 +30,7 @@ Issue branches are named `<nr>-<short>` (issue number + short name), **without**
 > An issue is **never** PR'd directly to `develop` or `main`.
 
 ## CI / DEV deploy
-- Every push to `feature/<name>` **and** `develop` runs a DEV deploy to {{DEPLOY_TARGET}}
-  (see `{{DEPLOY_FILE}}`).
-- `<nr>-<short>` branches do not deploy — they are tested via their feature.
+{{BRANCHING_CI_SECTION}}
 
 ## Keep branches in sync
 - Update your issue against the feature often: `git merge feature/<name>`.

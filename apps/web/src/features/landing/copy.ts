@@ -166,13 +166,51 @@ export const INCLUDED = [
 /** What Pro adds. Deliberately short: most of this is unbuilt, and a long list would read as one. */
 export const PRO_INCLUDED = [
   "Unlimited generated foundations",
-  "Import an existing project",
+  "Import an existing project, integrated or hidden",
   "Push straight to a GitHub repository",
   "Regenerate as your product changes",
 ];
 
+/**
+ * The two ways an imported foundation lands (spec 196). The axis is what the founder's team sees,
+ * not which one is better, so each says what it means for their repository. Integrated is first
+ * because it is the default; leading with hidden would tip the section from "how this fits your
+ * repository" toward something Airrow does not sell.
+ *
+ * The words follow the import screen's own (`features/import/DeliveryLayoutChoice.tsx`), so a
+ * visitor who signs up meets the same two names rather than being taught this twice.
+ */
+export const DELIVERY_MODES: {
+  /** React key and icon lookup both. Resolved by the page, so this file stays plain data. */
+  key: "integrated" | "hidden";
+  title: string;
+  lead: string;
+  body: string;
+}[] = [
+  {
+    key: "integrated",
+    title: "Integrated",
+    lead: "Your team sees it, and it becomes how the project is worked on.",
+    body: "Airrow's files take their own paths in your repository, beside your own. Anything that collides with a file you already have becomes a conflict you decide, one at a time. This is what you push, and what everyone working on the project gets.",
+  },
+  {
+    key: "hidden",
+    title: "Hidden",
+    lead: "One folder git ignores, so the repository your team shares stays as it is.",
+    body: "Every generated file goes into a single folder you name, and git is told to ignore it on your machine, so nothing collides and your repository's diff stays empty. Nothing outside that folder changes: not your documents, not your branches, not a line anyone else will review. No CI comes with this one, because a workflow inside an ignored folder could never run.",
+  },
+];
+
 export const SECTIONS = {
   how: { title: "How it works" },
+  /* The heading is the only signal that reaches a skimmer, and the hero deliberately still speaks
+     to a project that does not exist yet, so the heading itself has to say "already". */
+  existingProject: {
+    title: "Already have a project?",
+    badge: "Pro",
+    body: "Airrow is not only for the first line of code. Point it at a repository that already runs and the foundation is written around the stack that is there: architecture, specifications and AI context describing your project as it actually is. Your application code is never touched. What you choose is how the foundation lands.",
+    note: "Importing a project you have already started is part of Pro, and both ways of landing come with it.",
+  },
   features: {
     title: "Everything before the first line of code",
     body: "Airrow doesn't build your app. It builds the foundation that makes AI-assisted development consistent, correct and fast.",

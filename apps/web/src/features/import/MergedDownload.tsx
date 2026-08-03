@@ -130,7 +130,7 @@ export function MergedDownload({
   }
 
   return (
-    <>
+    <span className="inline-flex items-center gap-3">
       <Button
         variant="secondary"
         onClick={download}
@@ -140,6 +140,24 @@ export function MergedDownload({
         <Download className="size-4" />
         {working ? "Preparing…" : "Download project"}
       </Button>
+
+      {/* A way past the picker, for a founder whose archive is on their other machine (spec 188).
+          Secondary and secondary only: they uploaded a ZIP and asked for the merge, so handing them
+          the foundation alone by default would short-change them. But "ask, or nothing" leaves them
+          in the same dead end this spec exists to remove, one step later — so the answer to "I do
+          not have that archive here" is never "then you get nothing".
+
+          A compact link on the same line, not a paragraph beneath: every placement of this component
+          is a row of buttons, and a row cannot hold a paragraph (spec 68). Why the picker opens at
+          all is said by `PICK_PROMPT` through the toaster, which is that rule's own answer. */}
+      {archive === "missing" ? (
+        <a
+          href={`/api/projects/${projectId}/zip`}
+          className="text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+        >
+          Foundation only
+        </a>
+      ) : null}
 
       <input
         ref={picker}
@@ -151,6 +169,6 @@ export function MergedDownload({
           if (file) void build(file);
         }}
       />
-    </>
+    </span>
   );
 }

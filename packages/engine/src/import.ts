@@ -21,9 +21,12 @@ import type {
   ImportEvidence,
   ImportLimits,
   InterviewAnswers,
+  ProjectModel,
   RepoProvider,
   Tenancy
 } from "../../schemas/src/types.ts";
+
+import { deliveredPath } from "./model.ts";
 
 /** Directories excluded from the limits and from analysis — dependencies and build output. */
 export const IGNORED_IMPORT_DIRECTORIES = ["node_modules", ".git", "dist", ".next"] as const;
@@ -527,6 +530,26 @@ export function sidecarPath(path: string): string {
   const dot = name.lastIndexOf(".");
   const renamed = dot <= 0 ? `${name}.airrow` : `${name.slice(0, dot)}.airrow${name.slice(dot)}`;
   return path.slice(0, slash + 1) + renamed;
+}
+
+/**
+ * Move a whole delivery to where the layout says it goes (spec 187).
+ *
+ * Integrated, nothing moves. Hidden, every file moves under the one folder — *every* file, which is
+ * what makes the mode worth having: a foundation half in the folder and half at the root is neither
+ * hidden nor integrated, and would leave the founder explaining the half their team can see.
+ *
+ * Applied once, during generation, so what is stored is already what will be delivered. Everything
+ * downstream then needs no idea the mode exists: the diff finds nothing colliding because nothing
+ * shares a path any more, `applyResolutions` has nothing to resolve, and the preview tree draws the
+ * folder like any other. Zero conflicts in hidden mode is a consequence of where the files are, not
+ * a rule anybody has to remember to apply.
+ */
+export function nestUnder<T extends { path: string }>(
+  files: ReadonlyArray<T>,
+  model: ProjectModel
+): T[] {
+  return files.map((f) => ({ ...f, path: deliveredPath(model, f.path) }));
 }
 
 /**

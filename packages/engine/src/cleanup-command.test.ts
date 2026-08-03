@@ -56,8 +56,16 @@ const BASE: InterviewAnswers = {
 };
 
 const NEW: ProjectOrigin = { kind: "new" };
-const IMPORTED: ProjectOrigin = { kind: "imported", stackDetected: true };
-const IMPORTED_EMPTY: ProjectOrigin = { kind: "imported", stackDetected: false };
+const IMPORTED: ProjectOrigin = {
+  kind: "imported",
+  stackDetected: true,
+  delivery: { kind: "integrated" }
+};
+const IMPORTED_EMPTY: ProjectOrigin = {
+  kind: "imported",
+  stackDetected: false,
+  delivery: { kind: "integrated" }
+};
 
 function model(origin: ProjectOrigin, answers: InterviewAnswers = BASE) {
   return resolveProjectModel({

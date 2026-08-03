@@ -26,6 +26,7 @@ import {
   databaseLabel,
   featureLabel,
   frameworkLabel,
+  hiddenFolder,
   hostingName,
   isCustomStack,
   productTypeName,
@@ -509,8 +510,17 @@ const FIRST_RUN_COMMANDS = [".claude/commands/start.md", ".claude/commands/clean
  * `THIRD_PARTY_NOTICES.md` ships only where there is something to attribute (spec 165): a foundation
  * whose stack the founder named themselves installs no library of ours, and a notice for code that
  * was never installed is a file they cannot explain.
+ *
+ * A **hidden** delivery ships no pipeline at all (spec 187). Both CI files are discovered by
+ * location — `.github/workflows/` for Actions, the repository root for Azure — and a hidden
+ * foundation is neither of those places, nor is it ever pushed. The file could not run if it wanted
+ * to. Shipping one anyway would be a workflow that looks like it guards the project and guards
+ * nothing, which is the failure spec 66 exists to prevent; the team's own pipeline is the one that
+ * matters, and the documents say so instead.
  */
 export function shipsPath(model: ProjectModel, path: string): boolean {
+  const ci = path.startsWith(".github/") || path.startsWith("azure-pipelines");
+  if (ci && hiddenFolder(model) !== null) return false;
   if (path.startsWith(".github/")) return !usesAzureRepos(model);
   if (path.startsWith("azure-pipelines")) return usesAzureRepos(model);
   if (FIRST_RUN_COMMANDS.includes(path)) return path === commandPath(model);
@@ -1389,6 +1399,21 @@ function cliSetupStep(model: ProjectModel): string {
 
 function repoAndCiSection(model: ProjectModel): string {
   const vocab = provider(model);
+  // Hidden: the repository is the team's and this foundation never reaches it (spec 187). Naming a
+  // pipeline it does not ship would be the defect spec 66 exists to prevent — a document describing
+  // a check that is not happening.
+  if (hiddenFolder(model) !== null) {
+    return [
+      "## 3. Git integration",
+      "",
+      `This foundation is not part of the repository. It sits in \`${hiddenFolder(model)}/\`, which git ignores, so`,
+      "nothing here is committed, pushed or reviewed, and no pipeline ships with it.",
+      "",
+      `Your team's repository keeps its own branch rules and its own CI. Work the way they already work —`,
+      "the spec loop below runs on top of that, not instead of it, and the verification bar in this guide",
+      "is a set of commands you run yourself before you open a pull request."
+    ].join("\n");
+  }
   if (usesAzureRepos(model)) {
     return [
       "## 3. Git integration",
@@ -1414,11 +1439,17 @@ function verifyEndToEndSection(model: ProjectModel): string {
     model.hosting === "self_host"
       ? "3. Deploy to your server and confirm the app reaches it."
       : "3. Merge, or push to `develop` per your deploy workflow — a preview or DEV deployment should appear within a few minutes.";
+  // A hidden foundation ships no pipeline, so "CI should go green" would be a step the founder
+  // cannot take. Their team's own build is what runs on that pull request (spec 187).
+  const ciLine =
+    hiddenFolder(model) === null
+      ? "2. Push to a branch and open a pull request — CI should run and go green."
+      : "2. Run the verification commands above yourself, then push to a branch and open a pull request — your team's own build is what judges it.";
   return [
     "## 4. Verify end to end",
     "",
     `1. \`${run} dev\` locally — the app should start and reach the database.`,
-    "2. Push to a branch and open a pull request — CI should run and go green.",
+    ciLine,
     deployLine,
     "",
     "If any of these three fails, stop there rather than guessing further down the list — the earlier",
@@ -1450,9 +1481,14 @@ function afterEachCommand(model: ProjectModel): string {
   const first = shipsCleanup(model)
     ? `| \`/cleanup\` | These documents now describe the code that is really here. Next: \`/createspec "<the first thing you want to change>"\`. |`
     : `| \`/start\` | ${model.name} runs. Next: step 2 of [START_HERE.md](START_HERE.md) — the ${databaseLabel(model)} and ${hostingName(model)} accounts only they can create — or \`/createspec "<your first change>"\` if they would rather build something first. |`;
-  const merge = usesAzureRepos(model)
-    ? `Run the \`${vocab.cliPrCreate}\` line it printed, then in **Azure DevOps → Repos → Pull requests**: wait for the build policy to go green, then **Complete** the PR (squash, and delete the source branch).`
-    : `Run the \`${vocab.cliPrCreate}\` line it printed, then on **${host} → Pull requests**: wait for the CI check to go green, then **Squash and merge**, and delete the branch when it offers.`;
+  // A hidden foundation ships no pipeline, so "wait for the CI check" would name a check that is not
+  // this project's. The team's own build is what gates their pull request (spec 187).
+  const merge =
+    hiddenFolder(model) !== null
+      ? `Run the \`${vocab.cliPrCreate}\` line it printed, then on **${host} → Pull requests**: wait for your team's own checks, and merge the way this project merges.`
+      : usesAzureRepos(model)
+        ? `Run the \`${vocab.cliPrCreate}\` line it printed, then in **Azure DevOps → Repos → Pull requests**: wait for the build policy to go green, then **Complete** the PR (squash, and delete the source branch).`
+        : `Run the \`${vocab.cliPrCreate}\` line it printed, then on **${host} → Pull requests**: wait for the CI check to go green, then **Squash and merge**, and delete the branch when it offers.`;
   return [
     "End every command with one short line: what to do next, and only that. Not a summary of what you",
     "just did — the founder watched that happen.",
@@ -1509,7 +1545,16 @@ function firstStep(model: ProjectModel): string {
           "any of them before you start."
         ]),
     "",
-    "Then open Claude Code in this repository and run:",
+    // A hidden foundation does not own the repository root, and Claude Code finds `CLAUDE.md` and
+    // `.claude/commands/` from where the session starts (spec 187). Told once, here, in the first
+    // file anyone opens — a founder who starts at the root gets "unknown command" and no reason why.
+    ...(hiddenFolder(model) === null
+      ? ["Then open Claude Code in this repository and run:"]
+      : [
+          `Then open Claude Code **in \`${hiddenFolder(model)}/\`** — this foundation lives there, and`,
+          "that is where its commands and rules are found. Starting at the repository root instead",
+          "leaves them undiscovered, and the command below will not exist. Then run:"
+        ]),
     "",
     "```",
     commandName(model),
@@ -1607,7 +1652,27 @@ function cleanupClaim(commands: Commands, stackName: string): string {
  * actually ships. The exclusions are the load-bearing half: the founder's own documents are theirs,
  * and a command allowed to rewrite the constitution is a command that can widen its own limits.
  */
-function cleanupScope(): string {
+function cleanupScope(model: ProjectModel): string {
+  const folder = hiddenFolder(model);
+  if (folder !== null) {
+    return [
+      `**Yours to rewrite** — every document this foundation shipped, all of which are under`,
+      `\`${folder}/\`: \`${folder}/README.md\`, \`${folder}/START_HERE.md\`, \`${folder}/CLAUDE.md\`,`,
+      `everything under \`${folder}/docs/\`, and \`${folder}/specs/README.md\`.`,
+      "",
+      "**Read, never rewrite:**",
+      "",
+      `- **Everything outside \`${folder}/\`.** The whole project. Read as much of it as you need —`,
+      "  that is how you learn what to write — and change none of it. There are no `.airrow` files to",
+      "  reconcile here: nothing this foundation shipped shares a path with anything the project has.",
+      `- \`${folder}/.claude/spec-kit/constitution.md\` and \`${folder}/.claude/spec-kit/spec-template.md\`.`,
+      "  The constitution governs every other file, including this command; a command that edits it can",
+      "  widen its own limits.",
+      `- \`${folder}/.claude/commands/\`. These are the workflow itself.`,
+      `- Existing specs in \`${folder}/specs/\`. They are decisions that were made, not documentation to`,
+      "  correct."
+    ].join("\n");
+  }
   return [
     "**Yours to rewrite** — every document this foundation shipped: `README.md`, `START_HERE.md`,",
     "`CLAUDE.md`, everything under `docs/`, and `specs/README.md` — including any that arrived as",
@@ -1622,6 +1687,269 @@ function cleanupScope(): string {
     "  limits.",
     "- `.claude/commands/`. These are the workflow itself.",
     "- Existing specs in `specs/`. They are decisions that were made, not documentation to correct."
+  ].join("\n");
+}
+
+/**
+ * What `/cleanup` is allowed to touch, which is the whole difference between the two layouts
+ * (spec 187).
+ *
+ * Integrated, it works across the founder's tree: documents that arrived beside theirs, the branch
+ * model, the instruction files they accumulated. Hidden, the foundation lives in one folder that git
+ * ignores, and the point of the mode is that nothing outside it changes — so the command's job stops
+ * at the folder's edge and turns into making sure what is inside it actually works.
+ */
+function cleanupMode(model: ProjectModel): string {
+  const folder = hiddenFolder(model);
+  if (folder === null) {
+    return [
+      "**Where this foundation shipped a document the project already had**, both are on disk — theirs",
+      "at its own path, this foundation's beside it as `.airrow` (section 4).",
+      "",
+      "It does create the local branches this workflow runs on (section 5) — never renaming or deleting",
+      "one, never rewriting history, never pushing."
+    ].join("\n");
+  }
+  return [
+    `**This foundation is hidden.** Everything it ships lives under \`${folder}/\`, which git is told`,
+    "to ignore, so none of it is ever pushed and nobody else on this project sees it.",
+    "",
+    `**Nothing outside \`${folder}/\` may change.** Not a document, not a branch, not a config file,`,
+    "not the team's own `CLAUDE.md`, `.cursorrules` or `AGENTS.md` — those belong to everyone working",
+    "here, and rewriting them is exactly the visible change this layout exists to avoid. Read them for",
+    "context; leave every one of them alone.",
+    "",
+    "**The branch model is already theirs.** Do not create `develop`, do not create a `feature/`",
+    "branch, do not touch the trunk. This project has a workflow and a team using it; the foundation",
+    "adapts to that, not the other way round."
+  ].join("\n");
+}
+
+/**
+ * `BRANCHING.md`'s CI/deploy section (spec 187).
+ *
+ * Integrated, this foundation's own workflows deploy from the branches it describes. Hidden, none of
+ * those branches is ever pushed and no workflow ships — so the honest section says what actually
+ * happens to a branch here, which is whatever this project already does with one.
+ */
+function branchingCiSection(model: ProjectModel, vocab: ProviderVocabulary): string {
+  if (hiddenFolder(model) !== null) {
+    return [
+      `- This foundation ships no pipeline and is never pushed, so nothing here deploys anything.`,
+      `- Your branches run whatever checks this project already runs on a branch. The branch model`,
+      `  above is how *your* work is organised; the build that judges it is your team's.`
+    ].join("\n");
+  }
+  return [
+    `- Every push to \`feature/<name>\` **and** \`develop\` runs a DEV deploy to ${hostingName(model)}`,
+    `  (see \`${vocab.deployFile}\`).`,
+    "- `<nr>-<short>` branches do not deploy — they are tested via their feature."
+  ].join("\n");
+}
+
+/**
+ * Section 3's command bullets — where the two layouts disagree about whether a pipeline exists.
+ *
+ * Integrated, `/cleanup` has to reconcile the documents *and* flag a CI file it may not edit
+ * (spec 91's manual-run finding). Hidden ships no CI at all, so the same paragraph would send the
+ * assistant looking for a file this foundation deliberately did not deliver — and the honest
+ * instruction is the opposite one: the team's pipeline is theirs, so leave it alone.
+ */
+function cleanupCommandsRule(model: ProjectModel, ciFile: string, commands: Commands): string {
+  const { CMD_DEV, CMD_BUILD, CMD_TYPECHECK, CMD_LINT, CMD_TEST } = commands;
+  const named = `\`${CMD_DEV}\`, \`${CMD_BUILD}\`, \`${CMD_TYPECHECK}\`, \`${CMD_LINT}\` and\n  \`${CMD_TEST}\``;
+  if (hiddenFolder(model) !== null) {
+    return [
+      `- **The commands.** ${named} appear across these documents. Replace each one with the`,
+      "  command that actually works here. If a project has no typecheck or no tests at all, say so plainly",
+      "  in the document rather than naming a command that does not exist — and note it in your report.",
+      "- **This foundation ships no CI, and the project's own pipeline is not yours to touch.** A hidden",
+      "  foundation is never pushed, so a workflow in it could never run and none was delivered. The",
+      "  project almost certainly has its own — read it, so the documents describe the verification that",
+      "  really happens here, and change nothing in it. The same goes for the verification bar named in",
+      "  `.claude/spec-kit/constitution.md`, which you may also only read."
+    ].join("\n");
+  }
+  return [
+    `- **The commands.** ${named} appear across these documents and in \`${ciFile}\`. Replace each one with the`,
+    "  command that actually works here. If a project has no typecheck or no tests at all, say so plainly",
+    "  in the document rather than naming a command that does not exist — and note it in your report.",
+    `- **CI names those commands too, and you may not edit it.** \`${ciFile}\` runs the same verification`,
+    "  bar on every push, and it is pipeline configuration — out of bounds for this command. If the",
+    "  commands there do not exist in this project, the first push will fail. Do not quietly fix it and do",
+    "  not quietly ignore it: put it at the top of your report, with the two ways out — add the missing",
+    "  scripts to this project, or edit the workflow — and let the founder choose. The same goes for the",
+    "  verification bar named in `.claude/spec-kit/constitution.md`, which you may also only read."
+  ].join("\n");
+}
+
+/**
+ * Sections 4–6 as they have always read, for a foundation that takes the tree as its own (spec 91).
+ *
+ * `ciFile` is interpolated here rather than left as a `{{CI_FILE}}` token: substitution is one pass
+ * over the template, so a token inside a substituted value is never reached and would ship to the
+ * founder as an unresolved marker.
+ */
+function integratedRepoWork(ciFile: string): string {
+  return `## 4. The \`.airrow\` files: where this project already had one
+
+Where this foundation ships a document the project already had, the founder's file keeps its path and
+this foundation's version arrives beside it as \`<name>.airrow.md\` — \`README.airrow.md\`,
+\`CLAUDE.airrow.md\`, \`docs/architecture/SYSTEM_OVERVIEW.airrow.md\`. Both are on disk on purpose, and
+the name says which is which: **the \`.airrow\` file is this foundation's version; the plain one is the
+founder's.**
+
+**Start by finding all of them** — \`git ls-files '*.airrow.md'\`, or a glob for \`**/*.airrow.md\` if
+this is not a git repository. There may be one, there may be a dozen; the number depends on how much
+of this foundation the project already had. List them in your report before you touch any, and work
+through every single one. An \`.airrow\` file left untailored is a document that describes someone
+else's project.
+
+For each of them:
+
+1. **Treat the \`.airrow\` file as one of the documents in section 3.** It is this foundation's, so
+   tailor it to this project like the rest — that is what makes it worth adopting.
+2. **Read the founder's version for what only they know.** Anything in it that is true and not in the
+   \`.airrow\` file — how the project is deployed, why something is the way it is, what a reader needs
+   to know — belongs in the tailored version. Say in your report what you carried across.
+3. **Leave the founder's file alone.** Do not rewrite it, do not delete it, do not rename it. Their
+   \`README.md\` is theirs.
+4. **Tell them the swap is theirs to make**, in plain words: their file is untouched,
+   \`README.airrow.md\` is the version the workflow reads, and when they are happy with it they rename
+   it over their own — \`git mv README.airrow.md README.md\`. Nothing here does that for them.
+
+If an \`.airrow\` file is missing for a document this project already had, the founder chose to keep
+theirs during the import review. Respect it: say so once in the report and move on.
+
+**Only documents arrive this way.** Where this foundation would have shipped a *non*-document the
+project already had — a workflow file most likely — nothing was delivered, because a second live
+pipeline sitting next to theirs is worse than none. If this foundation's \`${ciFile}\` is missing
+while the project has its own, that is why. Say so in the report, alongside the command mismatch from
+section 3, and leave the founder to decide.
+
+## 5. The branch model
+
+The workflow this foundation ships runs on branches — \`/createspec\` cuts one, \`/pr-check\` opens a
+pull request into the one above it, and the CI and deploy rules key off their names. An imported
+project usually arrives without them, so set them up. Locally, and only what is missing.
+
+1. **No \`.git\` here at all?** Then \`git init -b main\`, stage everything and make the first commit —
+   this project as it stands today, before anything else happens. Say in your report exactly what
+   went into it.
+2. **Find the trunk**, if there is a repository already: the branch that is checked out, or what
+   \`git symbolic-ref refs/remotes/origin/HEAD\` reports. **Do not rename it.** A trunk called
+   \`master\` stays \`master\`: renaming it breaks branch protection, open pull requests and every CI
+   trigger pointing at the old name, and none of that is yours to break.
+3. **Create what is missing**, and nothing else: \`develop\` from the trunk, then the first
+   \`feature/<name>\` from \`develop\` — see [BRANCHING.md](../../docs/architecture/BRANCHING.md). A
+   branch that already exists is left exactly where it is.
+4. **Make the documents say the real name.** [BRANCHING.md](../../docs/architecture/BRANCHING.md)
+   and \`CLAUDE.md\` are written around \`main\`. If this project's trunk is called something else,
+   rewrite them to name the branch that exists — the *shape* is the rule
+   (trunk ← \`develop\` ← \`feature/<name>\` ← issue branch), the trunk's name is a fact about this
+   repository.
+
+**The limits are the same as everywhere else in this command.** No remote: no \`push\`, no
+\`remote add\`, no branch created anywhere but here. No history rewritten — never \`rebase\`, never
+\`reset --hard\`, never \`--force\`. No branch renamed and none deleted. And do not commit the founder's
+working tree beyond the one first commit in case 1: whatever is uncommitted is theirs to look at
+before it goes in.
+
+## 6. Old assistant instructions
+
+Projects that have been worked on with AI accumulate instruction files — \`.cursorrules\`, an older
+\`AGENTS.md\`, \`.github/copilot-instructions.md\`, half-finished notes to a model that are now years of
+context out of date. Two of them saying different things is worse than neither, and this foundation's
+\`CLAUDE.md\` is about to be a third.
+
+**Find them, report them, delete nothing.** For each one: where it is, what it says that contradicts
+this foundation or the code, and what would be lost by removing it. Where it holds something still
+true and still useful, fold that into \`CLAUDE.md\` — attributed, so the founder can see what moved —
+and say the original is now redundant. The founder decides what to remove.`;
+}
+
+/**
+ * Sections 4–6: the work that depends on the layout (spec 187).
+ *
+ * One seam rather than three conditionals inside three sections: integrated and hidden do genuinely
+ * different jobs here, and interleaving them would produce a command whose reader has to work out
+ * which half applies to them before they can follow either.
+ */
+function cleanupRepoWork(model: ProjectModel, ciFile: string): string {
+  const folder = hiddenFolder(model);
+  if (folder === null) return integratedRepoWork(ciFile);
+  return [
+    `## 4. Make git ignore \`${folder}/\``,
+    "",
+    "This is the one thing that keeps the foundation out of everyone else's way, and it is the first",
+    "thing to check on every run.",
+    "",
+    `1. **Is it already ignored?** \`git check-ignore -v ${folder}\`. If it prints a rule, this step is`,
+    "   done — say which file the rule came from and move on.",
+    "2. **Otherwise add it to `.git/info/exclude`** — append the line `" + folder + "/`. That file is",
+    "   per-clone: it is never committed, never pushed, and never seen by anyone else. The repository's",
+    "   diff stays empty, which is the whole point.",
+    "3. **No `.git` directory here?** Then there is nothing to exclude into. Say so, and offer the",
+    "   `.gitignore` line below instead. Do **not** run `git init` — this is somebody else's checkout.",
+    "4. **Is anything under the folder already tracked?**",
+    `   \`git ls-files --error-unmatch ${folder} 2>/dev/null\`. An ignore rule does not untrack a file`,
+    "   that is already in the index, so if this finds anything, the foundation is one commit away from",
+    `   being pushed. Report it with the fix — \`git rm -r --cached ${folder}\` — and **do not run it**:`,
+    "   it stages a deletion, and staging anything in a shared repository is the founder's call.",
+    "",
+    "**The committed alternative, offered and never taken on your own.** `.git/info/exclude` protects",
+    "this clone and no other — a second machine, or a teammate who ends up with the folder, is not",
+    `covered. Adding \`${folder}/\` to \`.gitignore\` covers everyone, but it is a change to a file the`,
+    "team owns and it *does* get pushed. Explain both, in one short paragraph, and write it only if the",
+    "founder says yes.",
+    "",
+    "## 5. Check the foundation can actually be used from here",
+    "",
+    "A foundation in a subfolder is one an assistant may not find. `CLAUDE.md`, `.claude/` and the",
+    "commands are discovered from wherever a session starts, and that is now the folder, not the",
+    "repository root. Verify it rather than assuming:",
+    "",
+    `1. **Confirm the layout.** \`${folder}/CLAUDE.md\`, \`${folder}/START_HERE.md\`,`,
+    `   \`${folder}/.claude/commands/\` and \`${folder}/docs/\` all exist and sit together.`,
+    "2. **Confirm the documents point inside the folder.** Every relative link between them still",
+    "   resolves — they all moved together, so they should. Fix any that does not.",
+    "3. **Confirm `START_HERE.md` says where to start a session**, and that what it says is true for",
+    `   this folder's actual name. If it names a different folder, the founder renamed it — rewrite the`,
+    "   document to match the repository, never the other way round.",
+    "4. **Report what a session against the repository root would miss**, in one line, so the founder",
+    "   knows why the instruction exists rather than just being told to follow it.",
+    "",
+    "## 6. What this layout does not ship",
+    "",
+    "No CI file was delivered, deliberately: a workflow inside an ignored folder is never pushed and",
+    "never runs, so it could only ever look like a check that was happening. This project's own",
+    "pipeline is the one that matters.",
+    "",
+    "Say this once in the report, and make sure no document you rewrote in section 3 claims otherwise.",
+    "Where a document describes the verification bar, it describes commands the founder runs by hand —",
+    "not a pipeline this foundation set up."
+  ].join("\n");
+}
+
+/** Report items 3–5, which name the work `cleanupRepoWork` actually did (spec 187). */
+function cleanupReportItems(model: ProjectModel): string {
+  if (hiddenFolder(model) === null) {
+    return [
+      "3. Which `.airrow` files you tailored, what you carried across from the founder's version, and that",
+      "   renaming one over their own is theirs to do.",
+      "4. Which branches existed already and which you created, and — if the trunk is not `main` — that the",
+      "   documents now name the branch this repository actually has.",
+      "5. Which old instruction files you found, and what you recommend for each."
+    ].join("\n");
+  }
+  const folder = hiddenFolder(model);
+  return [
+    `3. Whether \`${folder}/\` is ignored, which file the rule is in, and whether you added it or found`,
+    "   it already there. If anything under it is tracked, say so first — that is the one state where",
+    "   this foundation is about to become visible.",
+    "4. That nothing outside the folder was changed, and that you checked rather than assumed.",
+    "5. Where the founder should start an assistant session for the commands to be found, and what a",
+    "   session at the repository root would miss."
   ].join("\n");
 }
 
@@ -1715,7 +2043,24 @@ export function deriveScaffoldValues(
     FIRST_STEP: firstStep(model),
     COMMAND_RULE: commandRule(model),
     CLEANUP_CLAIM: cleanupClaim(command, stackName),
-    CLEANUP_SCOPE: cleanupScope(),
+    CLEANUP_SCOPE: cleanupScope(model),
+    // `/security` reviews the whole repository, so it still has a pipeline to look at in hidden
+    // mode — the project's own. What it must not do is name a path this foundation never shipped.
+    CI_TARGET:
+      hiddenFolder(model) === null
+        ? `\`${vocab.ciFile}\``
+        : "this project's own CI configuration, wherever it is defined",
+    BRANCHING_CI_SECTION: branchingCiSection(model, vocab),
+    // A hidden foundation ships no pipeline, so listing CI among the parts it brought would be the
+    // README's very first sentence claiming something the repository does not have (spec 187).
+    FOUNDATION_PARTS:
+      hiddenFolder(model) === null
+        ? "spec workflow, constitution, branch model, CI"
+        : "spec workflow, constitution, branch model",
+    CLEANUP_MODE: cleanupMode(model),
+    CLEANUP_COMMANDS_RULE: cleanupCommandsRule(model, vocab.ciFile, command),
+    CLEANUP_REPO_WORK: cleanupRepoWork(model, vocab.ciFile),
+    CLEANUP_REPORT_ITEMS: cleanupReportItems(model),
     FIRST_SPEC_HINT: firstSpecHint(model),
     DEPLOY_TARGET: hosting,
     CI_SETUP_STEPS: ciSetupSteps(model, stackName, inferred),
@@ -2010,6 +2355,18 @@ function setupSteps(model: ProjectModel, stackName: string): string {
 function repoSetupSteps(model: ProjectModel, from: number): string[] {
   const vocab = provider(model);
   const n = (offset: number) => from + offset;
+
+  // A hidden foundation is never pushed and ships no pipeline, so every step below it would be a
+  // lie: there is no repository to create, nothing to register, and the branch rules belong to the
+  // team that already works here (spec 187). What is left is the one thing that *is* true — the
+  // founder still needs a CLI and a deploy target of their own if they are going to use them.
+  if (hiddenFolder(model) !== null) {
+    return [
+      `${n(0)}. **Nothing to push, and nothing to protect.** This foundation lives in \`${hiddenFolder(model)}/\` on this machine only — git is told to ignore it, so it never reaches ${repoLabel(model)}. The repository, its branch rules and its pipeline are your team's and stay exactly as they are.`,
+      `${n(1)}. **Verification is yours to run.** No CI ships with a hidden foundation — a workflow inside an ignored folder could never run. The commands below are the bar; run them before you open a pull request, and let your team's own pipeline judge the result.`,
+      `${n(2)}. ${cliSetupStep(model)}`
+    ];
+  }
   // An imported project already has its code somewhere, and `/cleanup` initialises nothing — so the
   // instruction is to make the branch model true where the code already lives, not to push a
   // `develop` branch a command created.

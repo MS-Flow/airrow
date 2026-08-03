@@ -13,7 +13,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const analytics = vi.hoisted(() => ({
   captures: [] as { name: string; distinctId: string; properties: Record<string, unknown> }[]
 }));
-const getOrgForUser = vi.hoisted(() => vi.fn(async (): Promise<{ id: string } | null> => ({ id: "org1" })));
+const getOrgForUser = vi.hoisted(() =>
+  vi.fn(async (): Promise<{ id: string; name: string } | null> => ({ id: "org1", name: "Acme" }))
+);
 
 vi.mock("./server", () => ({
   capture: (name: string, distinctId: string, properties: Record<string, unknown>) => {
@@ -21,6 +23,9 @@ vi.mock("./server", () => ({
   }
 }));
 vi.mock("@/lib/data/store", () => ({ getOrgForUser }));
+// The transport only; `messages.ts` is real, so what Slack would actually read is asserted.
+const slack = vi.hoisted(() => ({ sent: [] as string[] }));
+vi.mock("@/lib/slack", () => ({ notifySlack: (text: string) => slack.sent.push(text) }));
 
 import { captureSignup } from "./signup";
 
@@ -32,7 +37,31 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(now);
   analytics.captures = [];
-  getOrgForUser.mockResolvedValue({ id: "org1" });
+  slack.sent = [];
+  getOrgForUser.mockResolvedValue({ id: "org1", name: "Acme" });
+});
+
+// Slack gets the name, PostHog gets the id — both behind the same freshness guard (spec 203).
+describe("the Slack notification", () => {
+  it("names the workspace, which is the whole reason it is not a PostHog destination", async () => {
+    await captureSignup({ id: "u1", createdAt: ago(5_000) }, "github");
+
+    expect(slack.sent).toEqual(["🎉 New account — *Acme* signed up with GitHub."]);
+  });
+
+  it("stays quiet for a returning founder, exactly like the event does", async () => {
+    await captureSignup({ id: "u1", createdAt: ago(30 * 24 * 60 * 60_000) }, "google");
+
+    expect(slack.sent).toEqual([]);
+  });
+
+  it("stays quiet when the workspace does not exist yet", async () => {
+    getOrgForUser.mockResolvedValue(null);
+
+    await captureSignup({ id: "u1", createdAt: ago(5_000) }, "github");
+
+    expect(slack.sent).toEqual([]);
+  });
 });
 
 describe("captureSignup", () => {

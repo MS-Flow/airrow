@@ -75,14 +75,33 @@ picked from a list (spec 67). Both are read server-side, then:
    A conflict is only ever written when the founder picks it on `/app/projects/[id]/import`;
    an undecided conflict keeps their file.
 
+**Integrated or hidden (spec 187).** The founder chooses on the same review screen, before generating,
+and the choice is stored on `import_sources` (`delivery_layout` + `hidden_folder`, one check
+constraint keeping the pair honest) rather than re-derived from anything. It travels to the pure
+engine on `ProjectModel.origin`'s imported arm and is applied **once, in `generate()`** — `nestUnder`
+prefixes every path with the folder before validation, so what is stored is already what will be
+delivered. Every stage after that is unchanged and unaware: nothing shares a path with the founder's
+tree any more, so step 4 finds zero conflicts, `applyResolutions` has nothing to resolve, and no
+`.airrow.md` sidecar is ever produced. `shipsPath` drops both CI files, because a workflow inside an
+ignored folder is never pushed and never runs. The folder is offered only when the analysis found a
+code signal, and only `/cleanup` — on the founder's machine — writes the ignore rule.
+
 5. **Show** — `mergePreviewFiles` + `buildPreviewTree` put those paths in the *preview* tree next to
    Airrow's own files, each row tagged with where it comes from. Shape only: the founder's files are
    listed by name, never opened, because their content was never stored.
-6. **Deliver** — the download is assembled **in the browser**: `MergedDownload` overlays Airrow's
-   files onto the founder's own archive, cached in IndexedDB at import time. The server sends only
-   what `applyResolutions` deemed safe to write, so the overlay is correct by construction. If this
-   browser no longer holds the archive, the founder is asked to pick it again rather than handed a
-   silent additions-only ZIP.
+6. **Deliver** — `DownloadProject` picks between two downloads, on whether a merge is *possible and
+   wanted* rather than on whether the project was imported (spec 188). Only an uploaded **ZIP** meets
+   that bar: Airrow holds the sole copy of those files, so `MergedDownload` overlays Airrow's output
+   onto the founder's own archive **in the browser**, cached in IndexedDB at import time. The server
+   sends only what `applyResolutions` deemed safe to write, so the overlay is correct by
+   construction. If this browser no longer holds the archive the founder is asked to pick it again —
+   with a secondary "Foundation only" link, so a second machine is never a dead end.
+
+   A **repository** import gets the foundation on its own, from the plain ZIP route: their code is in
+   a repository they control and already have checked out, and nothing ever cached an archive for it,
+   because the files were read server-side. Routing it to the merge is what made that button
+   permanently demand an archive that never existed. Wherever the download is the foundation alone
+   the button says **"Download foundation"**, so it is never mistaken for the whole project.
 
 **Only digests are stored.** `import_files` holds path, size and an **HMAC-SHA256** of each imported
 file, keyed by a pepper that lives in the app environment and never in the database

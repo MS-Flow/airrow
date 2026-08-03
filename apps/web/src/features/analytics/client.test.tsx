@@ -6,9 +6,8 @@
 // typecheck or a code review reliably catches `persistence` going back to its default — so this
 // file does, and it is the reason a config object is read back rather than trusted.
 //
-// The second thing asserted here is that the library is not downloaded at all without a key: it is
-// 228 kB on the critical path of the landing page, and "we only initialise it when configured" is
-// not the same claim as "we only fetch it when configured".
+// A `.tsx` file because it renders a component: `environmentMatchGlobs` in `vitest.config.ts` gives
+// jsdom to `*.test.tsx` only, and `FunnelAnalytics` needs a DOM to mount into.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const posthog = vi.hoisted(() => ({
@@ -29,9 +28,12 @@ vi.mock("posthog-js", () => ({
   }
 }));
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+const route = vi.hoisted(() => ({ pathname: "/" }));
+vi.mock("next/navigation", () => ({ usePathname: () => route.pathname }));
 
+import { render } from "@testing-library/react";
 import {
+  FunnelAnalytics,
   POSTHOG_OPTIONS,
   analyticsReady,
   captureClient,
@@ -41,10 +43,14 @@ import {
 
 const KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 
+/** The dynamic import is a microtask; a macrotask tick is past it. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 beforeEach(() => {
   posthog.config = null;
   posthog.captures = [];
   posthog.inits = 0;
+  route.pathname = "/";
   resetClientAnalyticsForTests();
   process.env.NEXT_PUBLIC_POSTHOG_KEY = "phc_test";
 });
@@ -66,6 +72,16 @@ describe("the options PostHog is started with", () => {
     // Session recording would capture interview answers, which are customer IP (§II).
     expect(POSTHOG_OPTIONS.disable_session_recording).toBe(true);
     expect(POSTHOG_OPTIONS.autocapture).toBe(false);
+  });
+
+  it("sends nothing PostHog collects on its own, whatever it calls the switch", () => {
+    // `autocapture: false` does *not* cover performance capture. `$web_vitals` arrived anyway,
+    // carrying the full URL — so workspace paths reached PostHog from the one place we excluded.
+    // Every self-collecting feature is now named explicitly rather than assumed to be off.
+    expect(POSTHOG_OPTIONS.capture_performance).toBe(false);
+    expect(POSTHOG_OPTIONS.capture_heatmaps).toBe(false);
+    expect(POSTHOG_OPTIONS.capture_dead_clicks).toBe(false);
+    expect(POSTHOG_OPTIONS.rageclick).toBe(false);
   });
 
   it("are the options actually handed to init", async () => {
@@ -95,6 +111,42 @@ describe("initAnalytics", () => {
 
     expect(posthog.inits).toBe(1);
     expect(analyticsReady()).toBe(true);
+  });
+});
+
+describe("FunnelAnalytics", () => {
+  it("counts a public page view", async () => {
+    render(<FunnelAnalytics />);
+    await settle();
+
+    expect(posthog.captures).toEqual([{ event: "pageview", properties: { path: "/" } }]);
+  });
+
+  it("does not record a workspace path", async () => {
+    // It carries a project id, and what happens inside `/app` is measured by named events instead.
+    route.pathname = "/app/projects/abc/interview";
+    render(<FunnelAnalytics />);
+    await settle();
+
+    expect(posthog.captures).toEqual([]);
+  });
+
+  it("still starts analytics on a workspace path, so the events inside it can be sent", async () => {
+    // The regression this test exists for. Returning early on `/app` skipped `init` as well as the
+    // pageview — so a founder who signed in, arriving on `/app` in a full page load with no public
+    // page in between, had `interview_started` and every `interview_step` queued and never sent. The
+    // interview measured nothing at all, which is the half of the funnel the drop-off curve is
+    // made of. Found by walking the funnel in production and seeing an empty live feed.
+    route.pathname = "/app/projects/abc/interview";
+    render(<FunnelAnalytics />);
+    await settle();
+
+    expect(analyticsReady()).toBe(true);
+
+    captureClient("interview_started", { mode: "account" });
+    expect(posthog.captures).toEqual([
+      { event: "interview_started", properties: { mode: "account" } }
+    ]);
   });
 });
 
