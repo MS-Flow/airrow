@@ -1,10 +1,11 @@
 // The pricing section's Pro action sent everyone to the new-project form, including the founder who
 // had just spent their free foundation — pressing "Start with Pro" and being handed the one screen
-// that cannot sell them Pro. These four cases are the whole rule.
+// that cannot sell them Pro. The signed-out case had the same shape (the guest interview) until
+// amendment 2 of spec 179. These cases are the whole rule.
 import { describe, it, expect } from "vitest";
 import type { Entitlement } from "@/features/generation/allowance";
 import { GUEST_INTERVIEW_PATH } from "@/features/interview/guest-route";
-import { NEW_PROJECT_PATH, UPGRADE_PATH, proCtaHref } from "./pro-cta";
+import { NEW_PROJECT_PATH, SIGNUP_PATH, UPGRADE_PATH, proCtaHref } from "./pro-cta";
 
 const untouched: Entitlement = {
   allowed: true,
@@ -34,8 +35,13 @@ const pro: Entitlement = {
 };
 
 describe("proCtaHref", () => {
-  it("sends a signed-out visitor to the interview, which is the only thing they can do", () => {
-    expect(proCtaHref(null)).toBe(GUEST_INTERVIEW_PATH);
+  it("asks a signed-out visitor for an account, which is what Pro actually needs", () => {
+    expect(proCtaHref(null)).toBe(SIGNUP_PATH);
+  });
+
+  it("never sends a signed-out visitor into the guest interview from the Pro card", () => {
+    // The regression this replaces: pressing a priced card started a free foundation instead.
+    expect(proCtaHref(null)).not.toBe(GUEST_INTERVIEW_PATH);
   });
 
   it("sends a founder with nothing generated to their free foundation", () => {

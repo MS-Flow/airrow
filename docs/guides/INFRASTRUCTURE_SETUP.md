@@ -286,26 +286,38 @@ value below has a live twin that has to be created and pasted once.
    anyone: the failure looks like a payment that vanished.
 2. **Product and price, in live mode.** Recreate the monthly product and copy the live `price_…`.
    Optional yearly likewise. No amount lives in this repository, so the figure is only ever right in
-   one place.
-3. **Keys, in Vercel → Production.** `STRIPE_SECRET_KEY` (`sk_live_…`), `STRIPE_PRICE_MONTHLY`,
+   one place — and since spec 179 the landing card reads it back out of Stripe rather than being told
+   it, so a price edited here changes the site within the hour with no deploy.
+3. **The founding-member offer (spec 179), live mode.** Products → Coupons → create one with
+   **`max_redemptions: 100`** and **`duration: forever`**, and put its id in
+   `STRIPE_COUPON_FOUNDING`. `forever` is not a preference: the card promises the founding rate
+   "stays that rate for as long as you keep it", and a `once` coupon would renew the second year at
+   the list price — the card would then be advertising something Stripe does not do. It is applied to
+   the **yearly** price only, server-side at Checkout. Stripe owns the count, which is the point: two
+   founders checking out at the same moment cannot both take the hundredth place, and the "places
+   left" counter on the landing card is read from the same coupon rather than from anything we tally.
+   Leave the variable unset to run no offer. A redemption is never given back — cancelling does not
+   free a place, which is the honest reading of "the first 100 customers".
+4. **Keys, in Vercel → Production.** `STRIPE_SECRET_KEY` (`sk_live_…`), `STRIPE_PRICE_MONTHLY`,
    `STRIPE_WEBHOOK_SECRET`. Names and values are both checked at runtime (prefix + trim) — get one
    wrong and the deploy shows a disabled Upgrade button with the reason on the page and the variable
-   named in the log, rather than a broken checkout.
-4. **Webhook endpoint, live mode.** Developers → Webhooks → Add endpoint →
+   named in the log, rather than a broken checkout. `STRIPE_COUPON_FOUNDING` is checked for presence
+   only; a coupon id has no prefix to verify.
+5. **Webhook endpoint, live mode.** Developers → Webhooks → Add endpoint →
    `https://airrow.app/api/stripe/webhook`, subscribed to `checkout.session.completed`,
    `customer.subscription.created`, `customer.subscription.updated`,
    `customer.subscription.deleted`. Its signing secret is the `STRIPE_WEBHOOK_SECRET` above — the
    test-mode one will reject every live delivery, which looks exactly like nothing happening.
-5. **Business settings Stripe requires of you, not of the code:** company details and statement
+6. **Business settings Stripe requires of you, not of the code:** company details and statement
    descriptor, a support email or URL on the receipt, and the customer portal enabled with
    cancellation on (Settings → Billing → Customer portal) — `Manage billing` opens it and a portal
    that is not configured 400s.
-6. **VAT / Tax.** Selling a subscription from Sweden to consumers means VAT, and Airrow does not
+7. **VAT / Tax.** Selling a subscription from Sweden to consumers means VAT, and Airrow does not
    compute it: Checkout is created without `automatic_tax`. Either enable **Stripe Tax** and add
    `automatic_tax: { enabled: true }` (plus address collection) in `startCheckoutAction`, or price
    inclusive and account for it yourself. This is a decision to make deliberately before launch, not
    a default to inherit.
-7. **Terms and refunds.** `/terms` and `/privacy` exist; make sure they say what the subscription is,
+8. **Terms and refunds.** `/terms` and `/privacy` exist; make sure they say what the subscription is,
    when it renews and how to cancel, because the portal is where people will look for it.
 
 **Then prove it with one real payment**, and use a real card rather than a test one — live mode has no

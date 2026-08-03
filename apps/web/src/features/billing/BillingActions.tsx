@@ -28,7 +28,25 @@ const INTERVAL_LABEL: Record<string, string> = {
   year: "Upgrade yearly"
 };
 
-export function UpgradeButtons({ intervals }: { intervals: string[] }) {
+const INTERVAL_PERIOD: Record<string, string> = {
+  month: "a month",
+  year: "a year"
+};
+
+/**
+ * One purchasable interval, and what pressing it costs.
+ *
+ * `amount` is already formatted and already discounted where a coupon applies, because the price this
+ * screen shows has to be the price Checkout charges — a button reading one figure and billing another
+ * is worse than a button reading none (spec 179, amendment 1). It is `null` whenever Stripe could not
+ * be asked, and the button then reads exactly as it did before prices were shown at all.
+ */
+export interface UpgradeOption {
+  interval: string;
+  amount: string | null;
+}
+
+export function UpgradeButtons({ options }: { options: UpgradeOption[] }) {
   const [state, action] = useActionState<BillingRedirect, FormData>(
     async (_prev, formData) => startCheckoutAction(formData),
     {}
@@ -39,7 +57,7 @@ export function UpgradeButtons({ intervals }: { intervals: string[] }) {
     <div className="mt-4 space-y-3">
       {state.error ? <InlineError>{state.error}</InlineError> : null}
       <div className="flex flex-wrap gap-2">
-        {intervals.map((interval, i) => (
+        {options.map(({ interval, amount }, i) => (
           <form action={action} key={interval}>
             <input type="hidden" name="interval" value={interval} />
             <SubmitButton
@@ -48,6 +66,7 @@ export function UpgradeButtons({ intervals }: { intervals: string[] }) {
               pendingLabel="Opening Stripe…"
             >
               {INTERVAL_LABEL[interval] ?? "Upgrade"}
+              {amount ? ` — ${amount} ${INTERVAL_PERIOD[interval] ?? ""}`.trimEnd() : ""}
             </SubmitButton>
           </form>
         ))}

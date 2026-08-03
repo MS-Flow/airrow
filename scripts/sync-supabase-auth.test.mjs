@@ -205,9 +205,26 @@ describe("the templates committed in the repo", () => {
   });
 
   it("keeps the logo small enough for an inbox", () => {
-    const bytes = readFileSync("apps/web/public/brand/airrow-lockup-email.png").length;
+    const bytes = readFileSync("apps/web/public/brand/airrow-mark-email.png").length;
 
     expect(bytes).toBeLessThan(50_000);
+  });
+
+  /*
+   * One mark across all three, which is what made this worth asserting.
+   *
+   * The mark-alone decision landed on `feature/infrastructure` two minutes after PR #119 squashed that
+   * branch into develop, so it never travelled — and the reset and email-change templates were then
+   * written against the lockup that was still there. Two mails branded one way and one the other is the
+   * kind of thing nobody notices until a founder has seen both.
+   */
+  it("uses the same logo in every mail", () => {
+    const sources = TEMPLATES.flatMap((t) => [
+      ...rendered(t.file).matchAll(/<img[^>]*\ssrc="([^"]*)"/g)
+    ]).map(([, src]) => src);
+
+    expect(sources).toHaveLength(TEMPLATES.length);
+    expect(new Set(sources).size).toBe(1);
   });
 
   it("gives every image alt text, since clients block images by default", () => {
