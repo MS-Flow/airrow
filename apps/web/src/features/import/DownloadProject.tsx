@@ -35,14 +35,30 @@ export async function DownloadProject({
     return <FoundationDownload projectId={projectId} />;
   }
 
-  // Imported from a repository: the founder's code is in a repository they control and have checked
-  // out. Handing them the foundation to unzip into it is the useful answer — asking them for a ZIP
-  // of what they already own is not.
-  if (source.kind !== "zip") {
+  // Two ways to reach the same answer, and the layout is checked first because it outranks the
+  // source (spec 187):
+  //
+  // - **Hidden delivery** — every generated file sits under one folder that shares no path with the
+  //   founder's tree, so there is nothing to merge. This holds even for a ZIP import whose archive
+  //   is cached: they are working in their real checkout, and rebuilding a copy of it around the
+  //   folder is not what they asked for.
+  // - **Repository import** — the founder's code is in a repository they control and have checked
+  //   out. Handing them the foundation to unzip into it is the useful answer; asking them for a ZIP
+  //   of what they already own is not.
+  // Kept as the narrowed arm rather than a boolean, so the folder name is reachable below without a
+  // second check that could disagree with this one (§I).
+  const hidden = source.delivery.kind === "hidden" ? source.delivery : null;
+  if (hidden !== null || source.kind !== "zip") {
     return (
       <FoundationDownload
         projectId={projectId}
-        hint={explain ? "Unzip it into your project — nothing of yours is touched." : null}
+        hint={
+          explain
+            ? hidden !== null
+              ? `Unzip it into your project — everything lands in ${hidden.folder}/, which git ignores.`
+              : "Unzip it into your project — nothing of yours is touched."
+            : null
+        }
       />
     );
   }

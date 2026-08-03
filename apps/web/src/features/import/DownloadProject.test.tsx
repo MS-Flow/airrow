@@ -6,7 +6,7 @@
 // of ever having an archive was being handed to it in the first place.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import type { ImportSourceKind } from "@airrow/schemas";
+import type { DeliveryLayout, ImportSourceKind } from "@airrow/schemas";
 
 const getImportSource = vi.hoisted(() => vi.fn());
 const listImportFiles = vi.hoisted(() => vi.fn());
@@ -22,9 +22,11 @@ import { Toaster } from "@/components/ui/toast";
 import { DownloadProject } from "./DownloadProject";
 
 /** Just enough of the record for the routing decision; the rest never reaches this component. */
-function source(kind: ImportSourceKind) {
-  return { id: "src1", projectId: "p1", kind, originalName: "loop-crm.zip" };
+function source(kind: ImportSourceKind, delivery: DeliveryLayout = { kind: "integrated" }) {
+  return { id: "src1", projectId: "p1", kind, delivery, originalName: "loop-crm.zip" };
 }
+
+const HIDDEN: DeliveryLayout = { kind: "hidden", folder: "notes" };
 
 async function renderFor(imported: ReturnType<typeof source> | null, explain = false) {
   getImportSource.mockResolvedValue(imported);
@@ -84,6 +86,29 @@ describe("DownloadProject", () => {
     await renderFor(null);
     expect(foundationButton()).toBeInTheDocument();
     expect(mergedButton()).not.toBeInTheDocument();
+  });
+
+  // Spec 187: a hidden delivery shares no path with the founder's tree, so there is nothing to
+  // merge — and that holds even where the archive is sitting right there in the browser.
+  it("gives a hidden delivery the foundation, even for a ZIP import with a cached archive", async () => {
+    await renderFor(source("zip", HIDDEN));
+    expect(foundationButton()).toBeInTheDocument();
+    expect(mergedButton()).not.toBeInTheDocument();
+  });
+
+  it("gives a hidden repo import the foundation too — the layout agrees with the source", async () => {
+    await renderFor(source("repo", HIDDEN));
+    expect(foundationButton()).toBeInTheDocument();
+  });
+
+  it("names the folder the founder chose, so they know where the archive lands", async () => {
+    await renderFor(source("zip", HIDDEN), true);
+    expect(screen.getByText(/everything lands in notes\/, which git ignores/)).toBeInTheDocument();
+  });
+
+  it("still merges a ZIP import delivered integrated — the layout is what changed the answer", async () => {
+    await renderFor(source("zip"));
+    expect(mergedButton()).toBeInTheDocument();
   });
 
   it("never explains where to unzip when the project was never imported", async () => {

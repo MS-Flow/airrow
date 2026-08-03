@@ -396,9 +396,20 @@ Free to move, and worth recording why: both feature branches had been synced to 
 cherry-pick, no history rewritten — only the PR's base changes. `feature/pro` never contained this
 work, so nothing is stranded there.
 
-The move also pays off for [188](188-download-routing.md): the two now share a feature branch, so the
-hidden cell of that spec's routing matrix can be wired as soon as the second of them lands there,
-instead of waiting for both to reach `develop`.
+The move also paid off for [188](188-download-routing.md), immediately. That spec fixed a download
+button that routed on *was this imported* rather than *is a merge possible*, and left one cell of its
+matrix open because `ImportSourceRecord.delivery` did not exist on its branch — the rule being
+whichever of the two merged into the feature branch second owned the wiring.
+
+188 merged there first (PR #191), so this branch merged it back in and wired it: `DownloadProject`
+checks the layout **before** the source, because a hidden delivery shares no path with the founder's
+tree whatever the import was. The case that decides the rule is a ZIP import whose archive is
+cached — the merge would work, and a hidden delivery still gets the foundation alone, because the
+founder is in their real checkout and did not ask for a copy of it rebuilt around the folder. The
+foundation-only hint names the folder they chose, so they know where the archive lands.
+
+Had the two stayed on separate feature branches this would have waited for `develop`, and the cell
+would have been wired by whoever noticed the note.
 
 ### `/analyze` — 2026-08-03: three findings, all fixed
 
