@@ -289,8 +289,11 @@ value below has a live twin that has to be created and pasted once.
    one place — and since spec 179 the landing card reads it back out of Stripe rather than being told
    it, so a price edited here changes the site within the hour with no deploy.
 3. **The founding-member offer (spec 179), live mode.** Products → Coupons → create one with
-   **`max_redemptions: 100`**, and put its id in `STRIPE_COUPON_FOUNDING`. It is applied to the
-   **yearly** price only, server-side at Checkout. Stripe owns the count, which is the point: two
+   **`max_redemptions: 100`** and **`duration: forever`**, and put its id in
+   `STRIPE_COUPON_FOUNDING`. `forever` is not a preference: the card promises the founding rate
+   "stays that rate for as long as you keep it", and a `once` coupon would renew the second year at
+   the list price — the card would then be advertising something Stripe does not do. It is applied to
+   the **yearly** price only, server-side at Checkout. Stripe owns the count, which is the point: two
    founders checking out at the same moment cannot both take the hundredth place, and the "places
    left" counter on the landing card is read from the same coupon rather than from anything we tally.
    Leave the variable unset to run no offer. A redemption is never given back — cancelling does not

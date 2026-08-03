@@ -204,6 +204,27 @@ describe("readPricing", () => {
     expect((await readPricing()).founding?.amount).toBeNull();
   });
 
+  it("keeps the prices when the coupon is gone, and drops only the offer", async () => {
+    // Found live: `STRIPE_COUPON_FOUNDING` held an id no longer in the Stripe account, so the coupon
+    // read threw and took both list prices with it — a pricing card with no figure anywhere on it
+    // because a promotion was misconfigured. A stale coupon id must read as "no offer running".
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    couponRetrieve.mockRejectedValue(new Error("No such coupon: 'gone'"));
+
+    const pricing = await readPricing();
+
+    expect(pricing.prices).toEqual([
+      { interval: "month", amount: "$14.99" },
+      { interval: "year", amount: "$149.99" }
+    ]);
+    expect(pricing.founding).toBeNull();
+    expect(logged).toHaveBeenCalledWith(
+      expect.stringMatching(/coupon read failed/i),
+      "No such coupon: 'gone'"
+    );
+    logged.mockRestore();
+  });
+
   it("shows nothing at all when Stripe is not configured", async () => {
     // And asks Stripe nothing: an unconfigured deployment should not construct a client, let alone
     // occupy a cache entry with the answer "no".

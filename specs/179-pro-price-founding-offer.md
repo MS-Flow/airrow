@@ -107,9 +107,10 @@ the Checkout action's rule that the price is chosen from the configured list and
 - [x] Typecheck passes; lint adds no new issues; tests green (one known pre-existing failure, below).
 - [x] **Dashboard, not code:** the monthly and annual prices exist in Stripe ($11.99 / $119.99 USD,
       created 2026-08-03) and are purchasable through the existing Checkout path.
-- [ ] **Dashboard, not code:** the founding coupon exists with `max_redemptions: 100` and its id is in
-      `STRIPE_COUPON_FOUNDING`. Until it does, the card prices Pro and shows no founding offer — which
-      is the designed behaviour for a deployment running no promotion, not a failure.
+- [x] **Dashboard, not code:** the founding coupon exists with `max_redemptions: 100` and its id is in
+      `STRIPE_COUPON_FOUNDING`. Done 2026-08-03 — see _Amendment 3_. Where it is absent, the card
+      prices Pro and shows no founding offer, which is the designed behaviour for a deployment running
+      no promotion, not a failure.
 - [ ] **Dashboard, not code:** Checkout → webhook → plan flip verified end-to-end in Stripe test mode,
       for both the monthly and the founding annual price.
 
@@ -243,6 +244,86 @@ to be identical on both or the two screens would quote different figures for the
 
 ---
 
+## Amendment 2 — the signed-out Pro button asked for nothing (2026-08-03)
+
+_A defect on the card this spec exists to fix, found by using it._
+
+Pressing **"Start with Pro"** while signed out opened `/start` — the guest interview — so the visitor
+who had just read a price, a founding badge and a seat count was handed thirty questions and a **free**
+foundation. Nowhere on that path is there a way to pay. `proCtaHref`'s own comment defended it ("Pro
+cannot be bought without an account, so the interview is the honest answer"), but the two halves do not
+join: that Pro needs an account is a reason to **ask for the account**, not a reason to start something
+else. With a real figure now on the card the mismatch is worse than it was — the card makes a
+commercial promise and the button silently declines it.
+
+Signed out, the CTA now goes to **`/signup`**. Not `/app/upgrade`: `middleware.ts` matches `/app/:path*`
+and would bounce a signed-out visitor to `/login` with the reason stripped (`url.search = ""`), so the
+screen they land on would explain nothing. Signup is the actual next step, and it links to sign-in for
+anyone who already has an account.
+
+**Unchanged:** the free card and the hero still open `/start` through `startCtaHref` — the guest
+interview is exactly right for the free action, and it is the priced card that must not lead there.
+The signed-in branches of `proCtaHref` are untouched.
+
+### Added acceptance criteria
+
+- [x] Signed out, the pricing section's Pro action goes to `/signup`, never to the guest interview.
+- [x] The free card's action and the page's other CTAs still go to the guest interview when signed out.
+
+### Amendment verification
+
+- **Extended** — `pro-cta.test.ts` (5): the signed-out destination is `/signup`, plus a test asserting
+  it is *not* `GUEST_INTERVIEW_PATH`. The second one is not a duplicate of the first: it names the
+  regression, so a later change that repoints signup elsewhere cannot quietly restore the old bug.
+- **Updated** — `smoke.test.tsx`: the signed-out landing render asserts `/signup` on the Pro link.
+- `pnpm -r typecheck` clean · `pnpm --filter web lint` clean · `pnpm --filter web test` **953 passed,
+  103 skipped, 0 failed**.
+
+---
+
+## Amendment 3 — the founding coupon exists, and a stale id no longer costs the card its price (2026-08-03)
+
+**1. The coupon.** Created in live mode: id `founding-100`, **25 % off**, `duration: forever`,
+`max_redemptions: 100`. Against the $119.99 annual price that is **$89.99 a year** — the figure the
+offer was decided at. Percent rather than a fixed `amount_off` so the founding rate stays proportional
+if the list price is ever edited in the dashboard, which is the property the whole "no figure in the
+repo" design is protecting. `forever` rather than `once` because the card promises the rate "stays
+that rate for as long as you keep it"; a `once` coupon renews year two at the list price and would
+make that sentence false. It reaches the **yearly** price only — `actions.ts` attaches it on
+`interval === "year"` and nowhere else, so monthly is untouched by construction rather than by the
+coupon's own configuration.
+
+**2. A defect the coupon uncovered.** `STRIPE_COUPON_FOUNDING` already held `3RYluW9u` — an id no
+longer in the Stripe account. `readFounding` therefore threw, and the throw landed in `fetchPricing`'s
+single catch, which returns `NO_PRICING`: **both list prices disappeared from the landing card because
+a promotion was misconfigured.** The blast radius was wrong. A missing coupon is already a state this
+spec designed for ("absence of the offer is not a broken deployment"), and a coupon id — typed by
+hand, never prefix-checkable — is exactly the value most likely to go stale. The coupon read now has
+its own catch and yields `null`, so a bad id reads as "no offer running" and the prices survive it.
+
+### Added acceptance criteria
+
+- [x] The founding coupon exists in live Stripe with `max_redemptions: 100` and `duration: forever`,
+      discounting the annual price to $89.99.
+- [x] A `STRIPE_COUPON_FOUNDING` pointing at a coupon that does not exist yields no offer, and the
+      monthly and annual amounts still render.
+
+### Amendment verification
+
+- **New test** — `prices.test.ts` (28 total): the coupon read rejecting leaves `prices` intact and
+  `founding` null, with its own log line.
+- **Docs** — `.env.example` and `INFRASTRUCTURE_SETUP.md` now state `duration: forever` and why, and
+  record that a dangling id behaves as no offer.
+- `pnpm -r typecheck` clean · `pnpm --filter web lint` clean · `pnpm --filter web test` **954 passed,
+  103 skipped, 0 failed**.
+
+**Left for the first real purchase:** Stripe rounds a 25 % discount on $119.99 to the cent itself
+(2999.75 → $30.00 off), which agrees with `discounted`'s `Math.round`. Worth confirming against the
+first founding invoice that the charge reads $89.99 and not $90.00 — a one-cent disagreement between
+the card and the receipt is the same class of bug as the two this spec has already fixed.
+
+---
+
 ## Exact changes (file:line)
 
 _Expanded by `/implement`. Grounded in current code:_
@@ -325,6 +406,8 @@ calls, which is why the read is cached at one call per hour per deployment rathe
   page still renders.
 - **`STRIPE_COUPON_FOUNDING` unset** → no founding badge, no counter; the annual price still sells at
   its normal figure. Absence of the offer is not a broken deployment.
+- **`STRIPE_COUPON_FOUNDING` set to a coupon that does not exist** → identical to unset, since
+  amendment 3. It used to take both list prices off the card with it.
 - **All 100 founding seats taken** → the card reads as sold out and stops advertising the offer;
   monthly and annual both remain purchasable, annual at its undiscounted figure.
 - **A founding member cancels** → the seat does **not** return to the pool. A Stripe coupon counts

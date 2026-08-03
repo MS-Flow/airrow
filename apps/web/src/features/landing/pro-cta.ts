@@ -12,14 +12,19 @@
  * - A foundation already spent: the upgrade screen, directly. That is the screen the button is
  *   promising, and it handles the already-Pro case itself so it is never a dead end.
  *
- * Signed out we cannot know, and Pro cannot be bought without an account either way, so the guest
- * interview is both the honest answer and the one that leads somewhere.
+ * Signed out we cannot know what they have, but we do know Pro cannot be bought without an account —
+ * so the button asks for one. It used to open the guest interview instead, which meant pressing a
+ * priced card started a free foundation: the visitor who had just decided to pay was handed thirty
+ * questions and no way to pay, and the one action the card promised never appeared. Signup is the
+ * step that actually stands between them and Pro, and `/app/upgrade` is one link away from it.
  */
 import type { Entitlement } from "@/features/generation/allowance";
-import { GUEST_INTERVIEW_PATH } from "@/features/interview/guest-route";
 
 export const UPGRADE_PATH = "/app/upgrade";
 export const NEW_PROJECT_PATH = "/app/projects/new";
+/** Not `/app/upgrade`: the middleware would bounce a signed-out visitor to `/login`, losing the
+ *  reason they came. Asking for the account first says what is needed and why. */
+export const SIGNUP_PATH = "/signup";
 
 /**
  * @param allowance the signed-in organization's entitlement, or `null` when nobody is signed in.
@@ -29,6 +34,6 @@ export const NEW_PROJECT_PATH = "/app/projects/new";
  * what the founder is being told one section higher up the page.
  */
 export function proCtaHref(allowance: Entitlement | null): string {
-  if (!allowance) return GUEST_INTERVIEW_PATH;
+  if (!allowance) return SIGNUP_PATH;
   return allowance.used > 0 ? UPGRADE_PATH : NEW_PROJECT_PATH;
 }

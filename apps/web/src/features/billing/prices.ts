@@ -131,10 +131,28 @@ async function readFounding(yearly: RawPrice | undefined): Promise<FoundingOffer
   };
 }
 
+/**
+ * The offer, or none — a coupon that cannot be read must not cost the card its price.
+ *
+ * Its own catch, because the two reads fail independently. A deleted or mistyped
+ * `STRIPE_COUPON_FOUNDING` threw into `fetchPricing`'s catch and took the monthly amount down with
+ * it: a pricing card with no figure anywhere on it, because a *promotion* was misconfigured. An
+ * absent offer is a state the card already draws; an absent price is the bug this module exists to
+ * fix, and a coupon id is exactly the kind of value that goes stale in an environment file.
+ */
+async function foundingOrNone(yearly: RawPrice | undefined): Promise<FoundingOffer | null> {
+  try {
+    return await readFounding(yearly);
+  } catch (error) {
+    console.error("Stripe founding coupon read failed:", error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
 async function fetchPricing(): Promise<Pricing> {
   try {
     const raw = await readPrices();
-    const founding = await readFounding(raw.find((p) => p.interval === "year"));
+    const founding = await foundingOrNone(raw.find((p) => p.interval === "year"));
     // A price with no `unit_amount` is tiered or metered. We do not sell one, and guessing at a figure
     // for it would put a number on the card that nobody is actually charged.
     const prices = raw.flatMap(({ interval, unitAmount, currency }) =>
