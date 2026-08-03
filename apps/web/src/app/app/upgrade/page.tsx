@@ -15,6 +15,7 @@ import {
   ManageBillingButton,
   UpgradeButtons
 } from "@/features/billing/BillingActions";
+import { readPricing, upgradeAmounts } from "@/features/billing/prices";
 import { planWithStripe } from "@/features/billing/sync";
 import {
   FREE_GENERATION_LIMIT,
@@ -40,8 +41,14 @@ export default async function UpgradePage() {
   // it is the one thing this screen must never do, and a stale row is all it would take.
   const { plan } = await planWithStripe(org);
   const allowance = await checkAllowance({ orgId: org.id, plan, userId: user.id });
-  const intervals = stripePrices().map((p) => p.interval);
   const alreadyPro = plan === "pro";
+
+  // The figures, from Stripe and through the same cached read the landing card uses (spec 179,
+  // amendment 1).
+  const options = upgradeAmounts(
+    await readPricing(),
+    stripePrices().map((p) => p.interval)
+  );
 
   return (
     <PageContainer className="max-w-2xl py-16">
@@ -85,7 +92,7 @@ export default async function UpgradePage() {
           {alreadyPro ? (
             <ManageBillingButton />
           ) : stripeConfigured() ? (
-            <UpgradeButtons intervals={intervals} />
+            <UpgradeButtons options={options} />
           ) : (
             <BillingUnavailable />
           )}

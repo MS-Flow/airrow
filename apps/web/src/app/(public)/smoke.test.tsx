@@ -59,8 +59,9 @@ describe("public pages render without crashing", () => {
       "Your startup deserves a real engineering foundation."
     );
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
-    // Nobody is asked to pay before they have an account; the interview is where Pro starts too.
-    expect(screen.getByRole("link", { name: /start with pro/i })).toHaveAttribute("href", "/start");
+    // Pro needs an account, so the Pro card asks for one — it does not quietly start a free
+    // foundation, which is what pointing this at the guest interview used to do.
+    expect(screen.getByRole("link", { name: /start with pro/i })).toHaveAttribute("href", "/signup");
   });
 
   it("renders the landing page for a signed-in visitor", async () => {

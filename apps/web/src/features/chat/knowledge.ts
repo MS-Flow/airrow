@@ -79,7 +79,11 @@ export function buildKnowledge(): string {
     `FILES A FOUNDATION SHIPS\n${bullets(FOUNDATION_HIGHLIGHTS.map((f) => `${f.path}: ${f.reason}`))}`,
     `THE SPEC LOOP\n${SECTIONS.specDriven.loopNote} The commands are: ${SPEC_LOOP.join(", ")}.`,
     `WHY SPEC-DRIVEN\n${bullets(WHY_SDD)}`,
-    `PRICING\n${SECTIONS.pricing.body}\nFree (${SECTIONS.pricing.free.amount}): ${SECTIONS.pricing.free.note}\n${bullets(INCLUDED)}\nPro (${SECTIONS.pricing.pro.amount.toLowerCase()}, the exact amount is shown at checkout): ${SECTIONS.pricing.pro.note}\n${bullets(PRO_INCLUDED)}`,
+    // Archer still names no figure, and now for a sharper reason than before: since spec 179 the
+    // pricing card fetches the amount from Stripe per render, and this prompt is built from static
+    // copy. A number here could only ever be a second, staler source of truth for the one fact a
+    // visitor would act on. It points at the two places that are always right instead.
+    `PRICING\n${SECTIONS.pricing.body}\nFree (${SECTIONS.pricing.free.amount}): ${SECTIONS.pricing.free.note}\n${bullets(INCLUDED)}\nPro (${SECTIONS.pricing.pro.perMonth} or ${SECTIONS.pricing.pro.perYear}; the amount is on the pricing section of this page and at checkout): ${SECTIONS.pricing.pro.note}\n${bullets(PRO_INCLUDED)}`,
     `FACTS THE PAGE DOES NOT STATE\n${bullets(BEYOND_THE_PAGE)}`
   ].join("\n\n");
 }
