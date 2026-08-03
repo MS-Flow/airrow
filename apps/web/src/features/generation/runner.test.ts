@@ -28,7 +28,10 @@ const store = vi.hoisted(() => ({
   getJob: vi.fn(async (_jobId: string) => ({ id: "job1", projectId: "proj1" })),
   saveAuthoringProvenance: vi.fn(async (_jobId: string, _p: unknown) => {}),
   findAuthoredByInputs: vi.fn(async (): Promise<unknown> => null),
-  previousCompletedJob: vi.fn(async (): Promise<unknown> => null)
+  previousCompletedJob: vi.fn(async (): Promise<unknown> => null),
+  // Read by the Slack notification, which turns ids into names (spec 203).
+  getOrganization: vi.fn(async (): Promise<unknown> => ({ id: "org1", name: "Acme", plan: "free" })),
+  getProject: vi.fn(async (): Promise<unknown> => ({ id: "proj1", name: "CRM" }))
 }));
 
 vi.mock("@/lib/data/store", () => store);
@@ -59,6 +62,10 @@ vi.mock("@/features/analytics/server", () => ({
   }
 }));
 
+// The transport only; `messages.ts` is real, so what Slack would actually read is asserted.
+const slack = vi.hoisted(() => ({ sent: [] as string[] }));
+vi.mock("@/lib/slack", () => ({ notifySlack: (text: string) => slack.sent.push(text) }));
+
 import { runGenerationJob } from "./runner";
 
 const model = { name: "Acme" } as unknown as ProjectModel;
@@ -87,6 +94,9 @@ describe("runGenerationJob", () => {
     });
     generate.mockReturnValue({ files: [{ path: "README.md" }], manifest: { fileCount: 1 } });
     analytics.captures = [];
+    slack.sent = [];
+    store.getOrganization.mockResolvedValue({ id: "org1", name: "Acme", plan: "free" });
+    store.getProject.mockResolvedValue({ id: "proj1", name: "CRM" });
   });
 
   afterEach(() => {
@@ -140,6 +150,51 @@ describe("runGenerationJob", () => {
       await runToCompletion();
 
       expect(analytics.captures).toEqual([]);
+    });
+  });
+
+  // Slack gets the names, PostHog gets the ids — both from the same line (spec 203). Notifying on a
+  // *generated foundation* rather than on a project being created is deliberate: a project is made
+  // in seconds and can be abandoned before a single question is answered.
+  describe("the Slack notification", () => {
+    it("names the workspace and the project", async () => {
+      await runToCompletion();
+      await vi.runAllTimersAsync();
+
+      expect(slack.sent).toEqual(["✨ *Acme* generated a foundation: *CRM*"]);
+    });
+
+    it("says plainly when it was a regeneration", async () => {
+      store.findAuthoredByInputs.mockResolvedValue({
+        slots: { VISION: "A stored vision that is long enough to survive validation." }
+      });
+
+      await runToCompletion();
+      await vi.runAllTimersAsync();
+
+      expect(slack.sent).toEqual(["🔁 *Acme* regenerated *CRM*"]);
+    });
+
+    it("stays quiet when the generation failed", async () => {
+      generate.mockImplementation(() => {
+        throw new Error("engine exploded");
+      });
+
+      await runToCompletion();
+      await vi.runAllTimersAsync();
+
+      expect(slack.sent).toEqual([]);
+    });
+
+    it("does not fail the generation when the name lookup throws", async () => {
+      store.getOrganization.mockRejectedValue(new Error("database is down"));
+
+      await runToCompletion();
+      await vi.runAllTimersAsync();
+
+      // The job still completed; only the message was lost.
+      expect(slack.sent).toEqual([]);
+      expect(store.setProjectStatus).toHaveBeenCalledWith("proj1", "ready");
     });
   });
 

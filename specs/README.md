@@ -83,3 +83,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | A download button that downloads | [188-download-routing.md](188-download-routing.md) | 🔄 In progress |
 | The landing page tells a founder who already has code | [196-landing-import-modes.md](196-landing-import-modes.md) | ✅ Done |
 | Knowing where people fall out | [182-posthog-funnel.md](182-posthog-funnel.md) | 🔄 In progress |
+| The two moments worth interrupting someone for | [203-slack-notifications.md](203-slack-notifications.md) | ⏳ Not started |
