@@ -33,8 +33,7 @@ const fixtures = [
     description: "A lightweight CRM that helps small agencies track client relationships and follow-ups.",
     answers: {
       productType: "saas",
-      vision: "The system of record every independent agency runs its client relationships on.",
-      mvpFocus: "Let an agency log clients and never miss a follow-up.",
+      vision: "Let an agency log clients and never miss a follow-up. Long-term, the system of record every independent agency runs its client relationships on.",
       audience: "b2b",
       coreEntities: "Agencies own Clients; a Client has many Deals and Follow-ups.",
       tenancy: "organizations",
@@ -42,7 +41,6 @@ const fixtures = [
       roles: "simple",
       capabilities: ["payments", "email", "search", "ai", "audit_logs"],
       aiUsage: "rag",
-      integrations: "Stripe for billing, Resend for email.",
       dataSensitivity: "pii",
       scale: "validate",
       framework: "nextjs",
@@ -57,15 +55,13 @@ const fixtures = [
     description: "A marketplace where plant lovers buy, sell, and trade rare houseplants locally.",
     answers: {
       productType: "marketplace",
-      vision: "The go-to marketplace for rare houseplants, trusted for safe local trades.",
-      mvpFocus: "A buyer can find a plant nearby and complete a purchase.",
+      vision: "A buyer can find a plant nearby and complete a purchase. Long-term, the go-to marketplace for rare houseplants, trusted for safe local trades.",
       audience: "b2c",
       coreEntities: "Sellers list Plants; a Buyer places an Order for a Plant.",
       tenancy: "marketplace",
       authModel: ["email_password", "magic_link"],
       roles: "simple",
       capabilities: ["payments", "storage", "search", "notifications", "realtime"],
-      integrations: "Stripe Connect for seller payouts.",
       dataSensitivity: "standard",
       scale: "growth",
       framework: "nextjs",
@@ -80,8 +76,7 @@ const fixtures = [
     description: "An internal tool for the operations team to review and approve vendor requests.",
     answers: {
       productType: "internal_tool",
-      vision: "One console where operations runs every vendor decision with a full audit trail.",
-      mvpFocus: "Ops can approve or reject a vendor request with an audit trail.",
+      vision: "Ops can approve or reject a vendor request with an audit trail. Long-term, one console where operations runs every vendor decision with a full audit trail.",
       coreEntities: "Vendors submit Requests; an Operator reviews each Request and records a Decision.",
       tenancy: "internal",
       authModel: ["sso"],
@@ -102,8 +97,7 @@ const fixtures = [
     description: "A clinical documentation assistant that drafts visit notes for small practices.",
     answers: {
       productType: "ai_agent",
-      vision: "Every small practice ends the day with notes already written.",
-      mvpFocus: "Turn a recorded visit into a reviewable draft note.",
+      vision: "Turn a recorded visit into a reviewable draft note. Long-term, every small practice ends the day with notes already written.",
       audience: "b2b",
       coreEntities: "Practices employ Clinicians; a Clinician records Visits; each Visit yields a Note.",
       tenancy: "organizations",
@@ -111,7 +105,6 @@ const fixtures = [
       roles: "granular",
       capabilities: ["ai", "storage", "audit_logs", "admin"],
       aiUsage: "agents",
-      integrations: "Whisper for transcription, an EHR export endpoint.",
       dataSensitivity: "regulated",
       scale: "growth",
       framework: "nextjs",
@@ -129,14 +122,12 @@ const fixtures = [
     origin: { kind: "imported", stackDetected: true },
     answers: {
       productType: "saas",
-      vision: "The invoicing tool freelancers never have to think about.",
-      mvpFocus: "Send an invoice and know when it was paid.",
+      vision: "Send an invoice and know when it was paid. Long-term, the invoicing tool freelancers never have to think about.",
       audience: "b2b",
       coreEntities: "A Freelancer bills Clients; a Client receives Invoices; an Invoice has Payments.",
       tenancy: "single_user",
       authModel: ["email_password"],
       capabilities: ["payments", "email"],
-      integrations: "Stripe for payments.",
       dataSensitivity: "pii",
       scale: "validate",
       framework: "nextjs",
@@ -182,7 +173,7 @@ for (const fx of fixtures) {
   if (!readme?.content.includes(fx.name)) fail("README not personalized with project name");
   const vision = files.find((f) => f.path === "docs/VISION.md");
   if (!vision?.content.includes(fx.answers.vision)) fail("VISION.md missing the long-term vision");
-  if (!vision?.content.includes(fx.answers.mvpFocus)) fail("VISION.md missing the MVP focus");
+  
 
   // Spec 91: exactly one first-run command, and it is the one this project's origin calls for. Both
   // would be worse than neither — one of them would be wrong about the repository it is sitting in.

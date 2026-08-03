@@ -212,7 +212,9 @@ describe("what /security looks for and how it reports it", () => {
   });
 
   it("keeps the report out of version control, and says why", () => {
-    expect(security).toContain("SECURITY_AUDIT.md` is in\n`.gitignore`");
+    // Through `prose`, like every other assertion here that spans the file's hard wrap: the literal
+    // "\n" fails on a Windows checkout, where core.autocrlf makes it "\r\n".
+    expect(prose(security)).toContain("SECURITY_AUDIT.md` is in `.gitignore`");
     expect(prose(security)).toContain("a map handed to whoever finds the repository");
   });
 

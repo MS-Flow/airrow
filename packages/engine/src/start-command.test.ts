@@ -11,6 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveProjectModel } from "./model.ts";
 import { renderScaffold, type TemplateFile } from "./scaffold.ts";
+import { SHADCN_UI, uiKitFor } from "../../schemas/src/ui-kits.ts";
 import type { InterviewAnswers } from "../../schemas/src/types.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -35,6 +36,9 @@ function loadTemplate(): TemplateFile[] {
 
 const TEMPLATE = loadTemplate();
 const START = ".claude/commands/start.md";
+
+/** Collapse wrapping, so an assertion about a sentence survives the file being re-wrapped. */
+const prose = (text: string): string => text.replace(/\s+/g, " ");
 
 function render(answers: InterviewAnswers) {
   const model = resolveProjectModel({
@@ -144,7 +148,8 @@ describe("the bootstrap matches the framework the founder chose", () => {
     for (const answers of [nextjs, vite]) {
       const { start, byPath } = render(answers);
       expect(byPath("CLAUDE.md")).toContain("Tailwind + shadcn/ui");
-      expect(start).toContain("shadcn@latest init");
+      // Pinned as of spec 165 — this tool writes the theme every later `add` resolves against.
+      expect(start).toContain(`${SHADCN_UI.pkg}@${SHADCN_UI.version} init`);
       expect(start).toContain("Tailwind");
     }
     // create-vite ships neither; create-next-app ships Tailwind and stops there.
@@ -159,8 +164,9 @@ describe("the bootstrap matches the framework the founder chose", () => {
   });
 
   it("runs the one-off tools with the package manager the stack actually uses", () => {
-    expect(render(nextjs).start).toContain("pnpm dlx shadcn@latest");
-    expect(render(vite).start).toContain("npx shadcn@latest");
+    const cli = `${SHADCN_UI.pkg}@${SHADCN_UI.version}`;
+    expect(render(nextjs).start).toContain(`pnpm dlx ${cli}`);
+    expect(render(vite).start).toContain(`npx ${cli}`);
   });
 
   it("admits it cannot bootstrap a stack the founder described, rather than guessing", () => {
@@ -358,6 +364,28 @@ describe("START_HERE.md describes the real order", () => {
     const here = render(nextjs).byPath("START_HERE.md");
     expect(here).not.toContain("corepack enable");
   });
+
+  // Step 1 promises what section 5 of /start then does, so a founder who finds the command gone
+  // recognises it as the plan rather than as something having disappeared (spec 159).
+  it("says step 1 rewrites itself and the command stands down when it is done", () => {
+    const here = render(nextjs).byPath("START_HERE.md");
+    expect(here).toMatch(/Safe to run again if it stops early/);
+    expect(here).toMatch(/rewrites this\s+step to say so and removes itself/);
+  });
+
+  // /start installs everything this project needs — but it cannot install the thing that runs it.
+  // A founder who has to work that out from a `command not found` was let down by paragraph one.
+  it("names the one thing the founder installs before anything here can run", () => {
+    const here = render(nextjs).byPath("START_HERE.md");
+    expect(here).toMatch(/\*\*First, install \[Claude Code\]/);
+    expect(here).toContain("npm install -g @anthropic-ai/claude-code");
+    expect(here).toMatch(/That is the only thing you install by hand/);
+    // And it must not send them off to install what section 1 handles.
+    expect(here).toMatch(/are all step 1 of the command below/);
+    // Inside step 1, the install comes before the command it makes runnable.
+    const step1 = here.split("## 1. Get it running")[1]?.split("## 2.")[0] ?? "";
+    expect(step1.indexOf("Claude Code")).toBeLessThan(step1.indexOf("/start"));
+  });
 });
 
 describe("CI does not go red on a repo that has not run /start", () => {
@@ -416,19 +444,285 @@ describe("/start finishes what it builds", () => {
 
   it("removes itself only after the verification bar has actually passed", () => {
     const start = render(nextjs).start;
-    expect(start).toContain("## 5. Remove this command");
+    expect(start).toContain("## 6. Hand back, and remove this command");
     expect(start).toContain(".claude/commands/start.md");
     // The failure mode this must never have: a half-finished project with no way to finish it.
     expect(start).toMatch(/Only if all five commands above actually ran and passed/);
-    expect(start).toMatch(/leave this\s+file exactly where it is/);
+    expect(start).toMatch(/leave this\s+file and \[START_HERE\.md\]\([^)]+\) exactly as they are/);
     expect(start).toContain("Re-runnable until it succeeds");
+  });
+
+  // The command going quiet is only half the job: the file that told the founder to run it has to
+  // stop saying so, or step 1 of the first document anyone opens describes work that is already done.
+  it("rewrites START_HERE.md before it deletes itself, and names both places", () => {
+    const start = render(nextjs).start;
+    expect(start).toMatch(/Update \[START_HERE\.md\]\([^)]+\) so it no longer tells anyone to run this\s+command/);
+    expect(start).toContain('Step 1, "Get it running"');
+    expect(start).toContain('"How the commands work"');
+    // Order matters: an interruption must leave a runnable command, not orphaned instructions.
+    expect(start.indexOf("**6a.")).toBeLessThan(start.indexOf("**6b."));
+    expect(start).toMatch(/the guide first, the deletion second/);
+    // What must survive the rewrite: the block the founder comes back to, and the one paragraph in
+    // step 1 that is about every other command rather than about this one.
+    expect(start).toMatch(/the four commands with the \*\*verification bar\*\*/);
+    expect(start).toMatch(/the \*\*Claude Code\*\* paragraph that opens it/);
   });
 
   it("says the same things whichever stack it was rendered for", () => {
     for (const answers of [nextjs, vite, custom]) {
       const start = render(answers).start;
-      expect(start).toContain("## 5. Remove this command");
+      expect(start).toContain("## 6. Hand back, and remove this command");
       expect(start).toContain("Finish it");
     }
+  });
+});
+
+/* ── Six sections, the tools they need, and a bar that says where you are (spec 159) ─────────── */
+
+describe("/start is followable step by step", () => {
+  it("names its six sections once, in order, and numbers the headings to match", () => {
+    const start = render(nextjs).start;
+    const headings = (start.match(/^## \d\. .*/gm) ?? []).map((h) => h.replace(/^## /, ""));
+    expect(headings).toEqual([
+      "1. Tools",
+      "2. Stack and toolchain",
+      "3. Git, locally",
+      "4. The first screen",
+      "5. Verify, and report honestly",
+      "6. Hand back, and remove this command"
+    ]);
+  });
+
+  // A section that points at the wrong neighbour is how a founder ends up scaffolding twice.
+  it("has no cross-reference pointing at a section that moved", () => {
+    const start = render(nextjs).start;
+    expect(start).toContain("Skip to section 3.");
+    expect(start).toContain("shadcn/ui primitives section 2 installed");
+    expect(start).toMatch(/Once section 5 has passed in\s+full/);
+    expect(start).toMatch(/anything in section 4 was left as a `\[NEEDS CLARIFICATION\]`/);
+  });
+
+  it("tells the assistant to report progress, in a shape that cannot run ahead of the work", () => {
+    const start = render(nextjs).start;
+    expect(start).toContain("[██░░░░░░░░░░] 1/6 · Tools ✓");
+    expect(start).toContain("[░░░░░░░░░░░░] 0/6 · starting");
+    expect(start).toContain("[████████████] 6/6 · done");
+    expect(start).toMatch(/If a section fails, print the bar as far as you actually got/);
+    // An already-done section still counts — otherwise a second run reports 2/6 and looks stuck.
+    expect(start).toMatch(/\(already done\)/);
+  });
+
+  it("closes every section with what done looks like", () => {
+    const start = render(nextjs).start;
+    expect((start.match(/\*\*Done when:\*\*/g) ?? []).length).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("section 1 installs what the founder's machine is missing", () => {
+  it("checks for git, the runtime and the repo host's CLI before installing anything", () => {
+    const start = render(nextjs).start;
+    expect(start).toContain("**Check first, install only what is missing.**");
+    expect(start).toContain("`git --version`");
+    expect(start).toContain("`node --version`");
+    expect(start).toContain("`gh --version`");
+    expect(start).toContain("brew install git node gh");
+    expect(start).toContain("winget install --id GitHub.cli -e");
+  });
+
+  // pnpm ships with Node. A global install shadows the version the project pins, and the founder
+  // then debugs a lockfile mismatch that nothing in the repository explains.
+  it("enables pnpm through corepack rather than installing a second copy", () => {
+    expect(render(nextjs).start).toContain("corepack enable");
+    expect(render(nextjs).start).toContain("never `npm install -g pnpm`");
+    // Vite's toolchain here is npm, which comes with Node — nothing to enable.
+    expect(render(vite).start).not.toContain("corepack enable");
+  });
+
+  it("installs the CLI for the host the code will actually live on", () => {
+    const azure = render({ ...nextjs, repoProvider: "azure_devops" }).start;
+    expect(azure).toContain("`az --version`");
+    expect(azure).toContain("Microsoft.AzureCLI");
+    expect(azure).not.toContain("GitHub.cli");
+    // The Azure CLI cannot read a work item until its extension is added — an install that stops at
+    // the binary leaves `/createspec` broken in a way nothing else explains.
+    expect(azure).toContain("az extension add --name azure-devops");
+    expect(render(nextjs).start).not.toContain("Microsoft.AzureCLI");
+    // …and the table cell stays a name, not the extension instruction glued onto one.
+    expect(azure).toContain("| **the Azure CLI (`az`)** |");
+  });
+
+  it("names the runtime the described stack needs, not Node by default", () => {
+    const django = render({ ...BASE, framework: "custom", frameworkOther: "Django 5 with Python 3.12 and uv" }).start;
+    expect(django).toContain("`python3 --version`");
+    expect(django).not.toContain("`node --version`");
+
+    // Nothing recognised the stack, so no runtime is claimed — git and the CLI still are.
+    const unknown = render({ ...BASE, framework: "custom", frameworkOther: "something entirely of my own devising" }).start;
+    expect(unknown).toContain("`git --version`");
+    expect(unknown).toContain("`gh --version`");
+    expect(unknown).not.toMatch(/\| \*\*Node\.js|\| \*\*Python/);
+  });
+
+  // The machine boundary, at the one place this command now reaches past this directory.
+  it("installs tools but signs in to nothing, and never upgrades what is already there", () => {
+    const start = render(nextjs).start;
+    expect(start).toContain("**Sign in to nothing.**");
+    expect(start).toContain("`gh auth login` is the founder's own");
+    expect(start).toContain("**Never upgrade what is already there.**");
+    expect(start).toMatch(/do not\s+build from source/);
+    expect(start).toMatch(/pipe a script into a shell/);
+  });
+
+  it("stops rather than improvising when it cannot install something", () => {
+    const start = render(nextjs).start;
+    expect(start).toContain("**If an install fails, stop trying and say so.**");
+    expect(start).toContain("https://github.com/cli/cli#installation");
+    expect(start).toMatch(/a missing runtime stops section 2, a\s+missing `git` stops section 3/);
+  });
+
+  // The one failure that looks like a failed install and is not: a successful install the running
+  // shell cannot see yet. Reinstalling never fixes it, and editing a shell profile is not ours to do.
+  it("reads a stale PATH as a restart, not as a reason to install again", () => {
+    const start = render(nextjs).start;
+    expect(start).toMatch(/may not be on this shell's `PATH` yet/);
+    expect(start).toMatch(/restart their terminal/);
+    expect(start).toMatch(/do not edit their shell profile/);
+  });
+
+  // START_HERE.md's step 2 used to say "install the CLI and sign in". Section 1 does the install now.
+  it("leaves START_HERE.md asking only for the sign-in it cannot do", () => {
+    const here = render(nextjs).byPath("START_HERE.md");
+    expect(here).toContain("**Sign in:** `gh auth login`");
+    expect(here).not.toMatch(/Install the GitHub CLI \(`gh`\) and run/);
+  });
+});
+
+/* ── The picked direction installs, at the version the documents name (spec 165) ────────────── */
+
+describe("/start installs the theme the founder picked", () => {
+  const picked = { ...nextjs, uiKit: "bold_contrast" } satisfies InterviewAnswers;
+  const kit = uiKitFor("bold_contrast")!;
+
+  it("pins the CLI exactly, and never reaches for @latest", () => {
+    const start = render(picked).start;
+    expect(start).toContain(`${SHADCN_UI.pkg}@${SHADCN_UI.version} init`);
+    // The defect this replaces: an unpinned tool writing a theme that UI_ARCHITECTURE.md then names.
+    expect(start).not.toContain("shadcn@latest");
+  });
+
+  it("runs an init that cannot stop and ask a question", () => {
+    // Found by running it. `--yes` alone is not non-interactive — `init` still asks which component
+    // library and which preset, and an assistant cannot answer an arrow-key prompt; it just waits.
+    // There is also no `--base-color` flag in this version, which failed outright.
+    const start = render(picked).start;
+    expect(start).toContain("init --yes -b radix -p nova");
+    expect(start).not.toContain("--base-color");
+  });
+
+  it("names the theme's neutral family where it actually lives now", () => {
+    const start = render(picked).start;
+    expect(start).toContain(`\`tailwind.baseColor\` to \`${kit.baseColor}\``);
+  });
+
+  it("writes the theme's tokens into the stylesheet", () => {
+    const start = render(picked).start;
+    expect(start).toContain(kit.name);
+    expect(start).toContain(`--radius: ${kit.design.radius};`);
+    // Both themes, from the same record the interview drew its preview from.
+    expect(start).toContain(`--background: ${kit.light.bg};`);
+    expect(start).toContain(`--background: ${kit.dark.bg};`);
+  });
+
+  it("installs a theme and no layout at all", () => {
+    // The whole change: a direction is a visual language. Installing a shell would make a picked
+    // picture outrank what the founder wrote about their product — and it is what made this command
+    // slow, since every block drags its own component tree in behind it.
+    const start = render(picked).start;
+    expect(start).not.toMatch(/\badd sidebar-\d|\badd login-\d|\badd dashboard-\d/);
+    expect(start).toContain("That is the whole install");
+    expect(prose(start)).toContain("no component library beyond the primitives above, and no screens");
+  });
+
+  it("tells the build step the theme decides the look and the answers decide the screens", () => {
+    const start = render(picked).start;
+    expect(start).toContain(`**${kit.name}** theme section 2 installed`);
+    expect(prose(start)).toMatch(/What is on the screen is still theirs to have decided/);
+    expect(prose(start)).toMatch(/Never copy a layout from a swatch/);
+    expect(start).toMatch(/overriding the theme with hand-written colours is a bug/i);
+  });
+
+  it("carries the direction's design language, not a set of counts", () => {
+    const start = render(picked).start;
+    expect(start).toContain(kit.design.logo);
+    expect(start).toContain(kit.design.surfaces);
+    expect(start).toContain(kit.design.spacing);
+  });
+
+  it("installs no theme when the founder wrote their own words", () => {
+    const start = render(nextjs).start;
+    // Still pinned, and still non-interactive — neither is conditional on a pick.
+    expect(start).toContain(`${SHADCN_UI.pkg}@${SHADCN_UI.version} init --yes -b radix -p nova`);
+    // No theme means nothing to write into the stylesheet and no base colour to name.
+    expect(start).not.toContain("--radius:");
+    expect(start).not.toContain("`tailwind.baseColor`");
+  });
+
+  it("says nothing about a theme on a stack that cannot take one", () => {
+    // A described stack brings its own conventions; a second design system on top is not ours to add.
+    const start = render({ ...custom, uiKit: "bold_contrast" }).start;
+    expect(start).not.toContain(kit.name);
+    expect(start).not.toContain("--radius:");
+  });
+
+  it("names which half of a two-part answer is the ceiling", () => {
+    // The vision question asks what it must do first *and* where it is heading (spec 165), so the
+    // answer `/start` receives routinely contains both. Handing that over as "the core action to
+    // perform" without saying which half is buildable invites the assistant past the ceiling.
+    const start = render({
+      ...picked,
+      mvpFocus: undefined,
+      vision: "Let someone drop in a folder and get it back smaller. Long-term, the compression layer everything runs on."
+    }).start;
+
+    expect(start).toContain("Long-term, the compression layer everything runs on.");
+    expect(prose(start)).toMatch(/the first thing is the ceiling/);
+    expect(prose(start)).toMatch(/never a second thing to build/);
+    expect(prose(start)).toMatch(/build the smaller one/);
+  });
+
+  it("keeps the mvpFocus ceiling exactly where spec 123 put it", () => {
+    // A theme is presentation. It must not have quietly become permission to build a second feature.
+    const start = render(picked).start;
+    expect(start).toContain("Loop CRM");
+    expect(start).toMatch(/no second feature|not a second feature/i);
+    expect(start).toMatch(/\[NEEDS CLARIFICATION/);
+  });
+});
+
+describe("the repository carries the notice for the code it installs", () => {
+  const NOTICES = "THIRD_PARTY_NOTICES.md";
+
+  it("ships it with the licence in full, for a Tailwind stack", () => {
+    const notices = render({ ...nextjs, uiKit: "soft_minimal" }).byPath(NOTICES);
+    expect(notices).toContain(`${SHADCN_UI.pkg}/ui`);
+    expect(notices).toContain(SHADCN_UI.version);
+    expect(notices).toContain(`Copyright (c) 2023 ${SHADCN_UI.holder}`);
+    expect(notices).toContain("WITHOUT WARRANTY OF ANY KIND");
+    expect(notices).not.toMatch(/\{\{[A-Z0-9_]+\}\}/);
+  });
+
+  it("ships it even when no direction was picked — the install happens either way", () => {
+    // The obligation predates the picker: /start has installed shadcn/ui since spec 66.
+    expect(render(nextjs).byPath(NOTICES)).toContain("WITHOUT WARRANTY OF ANY KIND");
+  });
+
+  it("says the theme itself is not what is licensed", () => {
+    const notices = render({ ...nextjs, uiKit: "soft_minimal" }).byPath(NOTICES);
+    expect(notices).toContain("Airrow's own work and carries no third-party claim");
+  });
+
+  it("does not ship it to a stack that installs none of it", () => {
+    // A notice for code that was never installed is a file the founder cannot explain.
+    expect(render(custom).files.some((f) => f.path === NOTICES)).toBe(false);
   });
 });

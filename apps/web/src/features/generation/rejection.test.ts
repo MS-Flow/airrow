@@ -15,10 +15,10 @@ describe("rejectionMessage", () => {
   });
 
   it("names every flagged answer, as a sentence rather than a list", () => {
-    const message = rejectionMessage(["problem", "mvpFocus"]);
+    const message = rejectionMessage(["problem", "coreEntities"]);
 
     expect(message).toContain(titleOf("problem"));
-    expect(message).toContain(titleOf("mvpFocus"));
+    expect(message).toContain(titleOf("coreEntities"));
     expect(message).toContain(" and ");
   });
 
@@ -40,7 +40,7 @@ describe("rejectionMessage", () => {
 // Seven titles in one sentence beside seven marked rows is what this replaces.
 describe("rejectionSummary", () => {
   it("counts the answers instead of naming them", () => {
-    const summary = rejectionSummary(["problem", "vision", "mvpFocus"]);
+    const summary = rejectionSummary(["problem", "vision", "coreEntities"]);
 
     expect(summary).toContain("3 of your answers");
     expect(summary).not.toContain(titleOf("problem"));

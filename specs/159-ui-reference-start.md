@@ -154,7 +154,9 @@ the stack and then builds the product's core action — `mvpFocus` — for real"
 promise it replaces was about safety — a founder who runs it twice must lose nothing — and that is
 unchanged for every path except the one where there is nothing left to do. Removal happens only after
 all five verification commands have actually run and passed; an interrupted, partial or failing run
-leaves the command exactly where it was. `/cleanup` is untouched: it deletes nothing, including itself.
+leaves the command exactly where it was. Removing the command means removing the instruction to run
+it: `START_HERE.md`'s step 1 is rewritten **first**, the file deleted **second**, so the worst an
+interruption can produce is a command that is still there. `/cleanup` is untouched: it deletes nothing, including itself.
 
 ---
 
@@ -214,14 +216,73 @@ _What "done" means. Every line is something a reviewer can check._
       reading — asserted directly.
 - [x] No code fence, no command, no `{{TOKEN}}`; the unauthored path is the one the tests exercise.
 - [x] `DOCUMENT_MAX_CHARS` for the brief raised 5000 → 7000, sized to nine sections rather than four.
+      **Corrected by [spec 165](165-installable-ui-directions.md):** this was checked off here but
+      never landed — the code kept the four-section 5000 through this whole branch, so the brief has
+      been one long answer from silently falling back to its template. Spec 165 adds the tenth
+      section and makes the raise real. Recorded rather than quietly re-ticked, because a criterion
+      that was false is worth more as a record than as a clean checkbox.
 
 **`/start`**
 
 - [x] A "Finish it" section with the visual bar and a six-question self-check.
 - [x] Names the reference material and how to use it, and says the opposite when none was attached.
 - [x] The spec 123 ceiling is intact — asserted line by line in `start-command.test.ts`.
-- [x] Section 5 removes the command, gated on all five verification commands having actually passed;
+- [x] Section 6 removes the command, gated on all five verification commands having actually passed;
       `start.md`, constitution §0 and `CLAUDE.md` all carry the new wording.
+- [x] Section 6 rewrites `START_HERE.md` **before** deleting the command — step 1 stops telling
+      anyone to run it, and it leaves the list of commands the foundation ships. The four commands and
+      the verification-bar sentence under them survive untouched; nothing else in the file is edited.
+- [x] `START_HERE.md` says so at generation time: step 1 promises the rewrite and the stand-down, so
+      a founder who finds the command gone recognises it as the plan.
+
+**A command a founder on a fresh machine can actually follow**
+
+- [x] Six numbered sections — Tools, Stack, Git, The first screen, Verify, Hand back — asserted as an
+      ordered list of headings, with every cross-reference between them checked so none points at a
+      section that moved.
+- [x] A new **section 1** checks for git, this stack's runtime and the repo host's CLI, and installs
+      only what is missing: `brew` / `winget` lines plus each tool's own install page, never a build
+      from source, an installer downloaded into the repo, or a script piped into a shell.
+- [x] The runtime is the stack's, not Node by default — a Django foundation checks `python3`, and a
+      stack nothing recognised claims no runtime at all rather than guessing one.
+- [x] `gh` for GitHub, `az` for Azure DevOps — never both, asserted in each direction.
+- [x] `pnpm` is enabled through `corepack`, never installed globally; the npm stacks say nothing
+      about it.
+- [x] Nothing is upgraded and nothing is signed in to: `gh auth login` stays the founder's, in step 2
+      of `START_HERE.md`, which now asks only for the sign-in — `/start` did the install.
+- [x] A failed install is reported with the tool's page and the sections it blocks, not worked around.
+- [x] Progress is reported as a twelve-cell bar after each section (`[██░░░░░░░░░░] 1/6 · Tools ✓`),
+      an already-done section still counts, and a failed one prints the bar as far as it got and
+      stops — asserted, including the `0/6` and `6/6` ends.
+- [x] Every section ends with a **Done when:** line.
+
+- [x] `START_HERE.md`'s step 1 opens with the one thing the founder installs by hand — **Claude
+      Code**, with its install page and the npm alternative — and then says plainly that git, the
+      runtime, the package manager and the repo CLI are all step 1 of `/start`, so nothing else is
+      needed first. An imported project is told the truth for its own command instead: `/cleanup`
+      installs nothing.
+- [x] That paragraph survives section 6a's rewrite — it is about every command that follows, not
+      about `/start`.
+- [x] A tool that installed successfully but is not on the shell's `PATH` yet reads as a restart, not
+      as a failed install: no second attempt, and no editing the founder's shell profile.
+
+**The first session in a generated repo**
+
+- [x] `CLAUDE.md` opens with "Starting a chat here": six rows, in order, from the first-run command to
+      `/analyze → /push → /pr-check`, with the loop named as the thing that repeats.
+- [x] Row 1 is conditional on the command's file still existing, so it stops applying the moment
+      `/start` removes itself — and reads differently for an imported project, whose `/cleanup`
+      changes no code and stays put (asserted in `cleanup-command.test.ts`).
+- [x] The assistant is told what to do when a session opens with neither a spec nor a command: answer,
+      then offer `/createspec` rather than starting.
+- [x] `CLAUDE.md` also carries **"After a command finishes"**: one line per command saying what to do
+      next and nothing else — including the step that happens outside the terminal, where a pushed
+      branch is merged into its `feature/<name>`, in the vocabulary of this project's own host
+      (**Squash and merge** on GitHub, **Complete** on Azure DevOps, each with the right `pr create`
+      line). After `/start` the next move is the accounts step 2 names — this project's own database
+      and host — or the first spec.
+- [x] The table has a row for the command this project actually ships and no other, and a failed
+      command gets what would unblock it rather than a pointer at the next step.
 - [x] `/cleanup` still deletes nothing, including itself — its own test now says so.
 - [x] Stack-correct across Next.js, Vite and a custom stack.
 
@@ -323,11 +384,65 @@ _What "done" means. Every line is something a reviewer can check._
 > (spec 128's whole mechanism). It now derives from every question with a field in it, and
 > `authoring.test.ts` covers both directions.
 >
-> **Verification bar** (after both passes): `pnpm -r typecheck` clean · `pnpm -r lint` clean ·
-> `pnpm -r test` **1,200 passed** (87 schemas + 243 engine + 870 web, 95 files) · `pnpm test:scripts`
+> > **Third pass, same branch — the half of self-removal that was missing.** `/start` deleted itself
+> but left `START_HERE.md` telling the founder to run it: step 1 described work already done, and the
+> "how the commands work" list named a file that no longer existed. Section 5 is now two steps in a
+> fixed order — **5a** rewrites those two places in `START_HERE.md`, **5b** deletes the command — so
+> an interruption between them leaves a runnable command rather than instructions for a missing one.
+> The rewrite is bounded on purpose: the four commands and the verification-bar sentence stay
+> verbatim (that block is what the founder returns to), and no other section may be touched.
+> `firstStep()` now promises this in the generated file itself — "safe to run again if it stops early
+> … once it has finished and verified the result, it rewrites this step to say so and removes
+> itself" — so the disappearance reads as the plan rather than as something having gone wrong.
+> `/cleanup`'s step 1 is unchanged: it still deletes nothing and still says "safe to run again".
+>
+> **Fourth pass, same branch — the machine the founder is actually on.** Three changes, on explicit
+> direction after the third pass landed:
+> 1. **`/start` installs its own prerequisites.** Every version of this command assumed git, a
+>    runtime and a package manager were already there, so a founder on a fresh laptop met
+>    `pnpm: command not found` in the first instruction they followed. The new **section 1** checks
+>    each tool and installs only what is missing (`startTools()`, `START_TOOLS`), including the repo
+>    host's CLI — `gh` or `az`, whichever this project's answers chose. Four rules keep it inside §0's
+>    machine boundary: check before installing, never upgrade what is already there, stop and report
+>    rather than improvising an install, and **sign in to nothing** — `gh auth login` remains step 2
+>    of `START_HERE.md`, which now asks for the sign-in alone. The runtime is looked up from the same
+>    `InferredStack` the commands come from, so a Django project is told about `python3` and an
+>    unrecognised stack is told about no runtime at all.
+> 2. **Six sections and a progress bar.** The command was four sections of dense prose with no way to
+>    tell how far in you were. It is now six named sections, each ending in a **Done when:** line,
+>    with a fixed twelve-cell bar printed after each one. A real progress bar is not something
+>    instruction text can render — what is testable, and what this ships, is the *shape* of the line
+>    and the rules that stop it running ahead of the work: an already-done section counts, a failed
+>    one prints where it actually got to and stops.
+> 2b. **The one thing `/start` cannot install is the thing that runs it.** Section 1 installs Node —
+>    but a founder with no assistant cannot type `/start` to get there, and the guide never said so.
+>    `firstStep()` now opens with Claude Code (install page, plus the npm line for a machine that
+>    already has Node) and then states that everything else is step 1 of the command, so nobody
+>    installs by hand what the command was written to do. It survives the section 6a rewrite, being
+>    about every command rather than that one. Section 1 also gained a fifth rule for the failure that
+>    looks identical to a failed install and is not: a successful install the running shell cannot see
+>    yet is a restart, not a second `winget install`.
+> 2c. **And ends every command with the next move.** The eight-command workflow was documented as a
+>    loop but never as a handover: a founder who has just run `/push` is looking at a branch on a
+>    server, and the button that merges it is in a web interface this foundation never sees.
+>    `afterEachCommand()` gives the assistant one line per command — the next action only, in the
+>    provider's own words — and one rule that matters more than the table: a command that failed gets
+>    what would unblock it, never a pointer at the step after it.
+> 3. **`CLAUDE.md` opens with the first session.** The founder's first message in a generated repo
+>    was "what do I do now?", and `CLAUDE.md` is what the assistant reads before answering. Six rows,
+>    in order. Row 1 is conditional on the command's file still existing (`FIRST_COMMAND_PATH`), which
+>    is what keeps it true after `/start` deletes itself — the alternative was a seventh thing for
+>    section 6a to rewrite, and every extra file in that step is another chance to mangle one.
+>
+> **Verification bar** (after all four passes): `pnpm -r typecheck` clean · `pnpm -r lint` clean ·
+> `pnpm -r test` **1,221 passed** (87 schemas + 264 engine + 870 web, 95 files) · `pnpm test:scripts`
 > 88 passed · `pnpm engine:smoke` passed on all five fixtures. No pre-existing failures. The migration
 > was applied to local Supabase (`supabase migration up`) and the RLS suite ran against real Postgres
 > rather than being skipped.
+>
+> **Still owed a real run.** Sections 1 and 6 are the two the tests can only check the *text* of: no
+> test installs `gh` on a bare machine, and none watches an assistant rewrite `START_HERE.md`. Both
+> belong in the manual check below, on a machine that has neither git nor the runtime.
 
 - **New tests** — `packages/schemas/src/questions.test.ts`: exactly two UI questions; every direction
   carries a prefill inside the field's own cap and "my own words" carries none; the reference question
@@ -343,7 +458,17 @@ _What "done" means. Every line is something a reviewer can check._
   from a derived answer while asking for nothing when there is none.
 - **New tests** — `packages/engine/src/start-command.test.ts`: the rendered `/start` carries the
   visual bar, the reference material and the self-removal step, and still differs across the three
-  stack shapes.
+  stack shapes; section 6 names both places in `START_HERE.md`, keeps the verification-bar block, and
+  orders 6a before 6b; the rendered `START_HERE.md` promises the rewrite and the stand-down; the six
+  headings in order with every cross-reference between them; the progress bar's shape and its two
+  ends; section 1's checks, per-stack runtime, per-provider CLI, corepack over a global pnpm, no
+  sign-in, no upgrade, an honest failure, and a stale `PATH` read as a restart; `START_HERE.md` naming
+  Claude Code before the command, and section 6a keeping that paragraph.
+- **New tests** — `packages/engine/src/scaffold.test.ts` / `cleanup-command.test.ts`: `CLAUDE.md`'s
+  first-session table, in order, conditional on the command's file — and reading differently for an
+  imported project; the after-each-command table covering all six loop commands, the merge named in
+  each provider's own vocabulary, and an imported foundation carrying the `/cleanup` row and no
+  `/start` row.
 - **New tests** — `packages/engine/src/cleanup-command.test.ts`: `/cleanup` still deletes nothing and
   does not remove itself.
 - **New tests** — `apps/web/src/features/generation/author.test.ts`: images reach the UI call as
@@ -356,6 +481,9 @@ _What "done" means. Every line is something a reviewer can check._
 - **Manual** — one generation per input shape (prose only, image only, link only, curated pick), each
   `UI_ARCHITECTURE.md` read end to end, then `/start` run against a real assistant on one of them.
   Spec 123 descoped exactly this; it should not be descoped twice.
+- **Manual** — `/start` on a machine missing git, the runtime and the CLI: section 1 installs all
+  three, signs in to nothing, and the progress bar reaches `6/6`; then `START_HERE.md` no longer names
+  the command, the command is gone, and the four verification commands still run from the file.
 
 ---
 
@@ -385,13 +513,22 @@ _What "done" means. Every line is something a reviewer can check._
    `hostingName`, and `databaseLabel` rewritten to prefer the described value.
 6. **`src/scaffold.ts`** — the nine UI sections replacing four (`uiDirectionSummary` now reads one
    answer, `UI_EXAMPLE_DIRECTION` gone with the merged question); `startMinimum()` rewritten with the
-   visual bar, the reference material, the self-check and self-removal; `capabilitySpecBrief`'s
+   visual bar, the reference material, the self-check and self-removal; `startTools()` +
+   `RUNTIME_TOOLS` + the `ProviderVocabulary` install fields (`cliBin` / `cliBrew` / `cliWinget` /
+   `cliDocs` / `cliAuth` / `cliShort` / `cliExtra`) behind the new `START_TOOLS` token;
+   `cliSetupStep()`, so an origin that got the install from `/start` is asked only to sign in;
+   `firstCommandEffect()`, `FIRST_COMMAND_PATH` and `afterEachCommand()` for `CLAUDE.md`'s two new
+   sections; `firstStep()`'s new-project branch listing the six steps and
+   promising the `START_HERE.md` rewrite and the stand-down; `capabilitySpecBrief`'s
    `other` case; `postgresSetupSection` and `hostingSetupSection` branching on a named database and a
    named deploy target; `deployTargetSetup`'s verb; the token table.
 7. **`template/docs/architecture/UI_ARCHITECTURE.md`** — the new section skeleton and tokens.
-8. **`template/.claude/commands/start.md`** — "Re-runnable by design" rewritten
-   ([:12](../template/.claude/commands/start.md#L12)); the removal step after verification
-   ([:42](../template/.claude/commands/start.md#L42)).
+8. **`template/.claude/commands/start.md`** — rebuilt around six sections: a "How this runs" preamble
+   with the section table, the progress-bar rule and the rewritten "Re-runnable until it succeeds";
+   `{{START_TOOLS}}` as section 1; a **Done when:** line closing each section; section 6 after
+   verification: **6a** rewrites `START_HERE.md`, **6b** deletes the command.
+8b. **`template/CLAUDE.md`** — the "Starting a chat here" table, using `{{FIRST_COMMAND_EFFECT}}` and
+   `{{FIRST_COMMAND_PATH}}`, and "After a command finishes" (`{{AFTER_EACH_COMMAND}}`).
 9. **`template/.airrow-template.json`** — every new token documented.
 
 **App (`apps/web`)**
@@ -505,10 +642,26 @@ was already public and the panel sends nothing about the session.
   instead of reusing prose written without it.
 - Storage unreachable at generation time → the UI call runs without images, exactly like a founder who
   attached none. Never a failed generation.
-- `/start` interrupted, or a verification command fails → the command stays. It removes itself only
-  after all five pass.
-- Founder runs `/start` again after it removed itself → `START_HERE.md` and `CLAUDE.md` point at
-  `/createspec`, which is where they should be by then.
+- Machine has none of the tools → section 1 installs git, the runtime and the CLI, then carries on.
+- Machine has no Claude Code → nothing in the foundation can run, which is why step 1 of
+  `START_HERE.md` names it before anything else. `/start` cannot bootstrap the thing that runs it.
+- Tool installs, shell still says "not found" → reported as needing a restart. Not reinstalled, and
+  the founder's shell profile is not edited.
+- Machine has an old but working version → left alone. Which one and how old is reported; upgrading
+  someone's whole laptop to satisfy one project is not this command's call.
+- No `brew`, no `winget`, and apt too old → the install page for each missing tool, and an honest
+  report of which sections that blocks. No source builds, no installer downloaded into the repo, no
+  script piped into a shell.
+- `sudo` prompts for a password nobody can type → reported as a blocked step, not worked around.
+- Founder already signed in to `gh` → irrelevant; `/start` neither checks nor uses the session, and
+  step 2 of `START_HERE.md` is a no-op they will notice takes one command.
+- `/start` interrupted, or a verification command fails → the command stays, and so does the step 1
+  that names it. It removes itself only after all five pass.
+- Interrupted between 5a and 5b → `START_HERE.md` no longer names the command but the command is
+  still there. Harmless and re-runnable; the other order would leave a first-run guide pointing at a
+  file that does not exist.
+- Founder looks for `/start` after it removed itself → step 1 says the stack is already running and
+  `START_HERE.md`'s loop points at `/createspec`, which is where they should be by then.
 - Imported project (`shipsCleanup`) → gets `/cleanup`, which builds nothing and deletes nothing,
   including itself.
 - Generation with no `ANTHROPIC_API_KEY` → references ignored, deterministic brief, complete

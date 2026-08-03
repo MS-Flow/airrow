@@ -169,7 +169,7 @@ describe("staying alive through a long authoring call", () => {
 // The answers themselves being refused (spec 128). Everything here is about the run *stopping*: it
 // used to continue, hand over a deterministic foundation, and never say why.
 describe("refused answers", () => {
-  const rejected = { status: "rejected", answers: ["problem", "mvpFocus"] } as const;
+  const rejected = { status: "rejected", answers: ["problem", "coreEntities"] } as const;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -200,7 +200,7 @@ describe("refused answers", () => {
 
     expect(store.updateJob).toHaveBeenCalledWith(
       "job1",
-      expect.objectContaining({ status: "failed", rejectedAnswers: ["problem", "mvpFocus"] })
+      expect.objectContaining({ status: "failed", rejectedAnswers: ["problem", "coreEntities"] })
     );
   });
 

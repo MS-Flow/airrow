@@ -85,14 +85,29 @@ passes it in.
   user's scope-less OAuth identity. Never user PATs, and no repo credential is persisted.
 - **Product:** Airrow generates engineering *foundations* — never application code from our servers.
   The one exception is the `/start` command shipped **inside** a generated repo: the founder runs it
-  on their own machine, and it builds the product's core action (`mvpFocus`) for real, to the design in
-  `UI_ARCHITECTURE.md` — that is the ceiling, not a second feature, and everything past it goes
-  through the spec loop (spec 66, amended by spec 123). `/start` **removes itself** once its own
-  verification bar has passed; a failed or partial run leaves it in place (spec 159). An **imported**
+  on their own machine, where it installs the tools that machine lacks (git, the stack's runtime, the
+  repo host's CLI — signing in to none of them) and builds the product's core action (`mvpFocus`) for
+  real, to the design in `UI_ARCHITECTURE.md` — that is the ceiling, not a second feature, and
+  everything past it goes
+  through the spec loop (spec 66, amended by spec 123). `/start` rewrites `START_HERE.md`'s step 1 and
+  then **removes itself**, once its own verification bar has passed — in that order; a failed or
+  partial run leaves both untouched (spec 159). An **imported**
   project gets `/cleanup` in its place (spec 91): it reads the existing codebase and rewrites the
   foundation's documents to match, changes no code and deletes nothing — including itself. Exactly one
   of the two ships, decided by the project's origin. ZIP delivery must always work with no integration
   connected.
+- **Curated UI directions are a visual language, never a layout (spec 165).** Each of the three
+  directions on the design question points at a **theme** — palette, type, corner, spacing, surface,
+  motion — that `/start` installs on top of shadcn/ui at an **exact pinned version**, never `@latest`.
+  It installs **no screens and no layout blocks**: what is on a screen, and how someone moves between
+  screens, comes from the founder's own answers, and a picked picture must never outrank them. The
+  interview shows each direction as a *specimen* of the look, drawn from that same record (or a real
+  capture of it — `pnpm capture:ui-kits`), so the picture cannot drift from what gets installed. The
+  pick is **stored** (`uiKit`), not derived from the prose: editing the words must not cancel an
+  install. `UI_ARCHITECTURE.md` names the theme, version and licence, and every foundation that
+  installs the library ships `THIRD_PARTY_NOTICES.md` — a custom stack and an imported project
+  install nothing and get neither. Only permissive licences may be installed
+  (`PERMISSIVE_LICENCES`); a weekly workflow reports a stale pin and never bumps one.
 - **UI references:** the interview's design question accepts links and uploaded screenshots (spec 159).
   Links are an ordinary answer and are **never fetched**; images live in the private `ui-references`
   bucket with an org-scoped row each, are read only by the authoring provider's UI call, and never
