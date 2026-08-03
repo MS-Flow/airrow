@@ -22,12 +22,38 @@ Issue branches are named `<nr>-<short>` (issue number + short name), **without**
    git checkout feature/<name> && git pull
    git merge origin/develop && git push   # only if the feature is behind — `/createspec` does this for you
    git checkout -b <nr>-<short>
-3. **PR** `<nr>-<short>` → `feature/<name>`.
-4. When the feature is done: **PR** `feature/<name>` → `develop`.
-5. Release: **PR** `develop` → `main`.
+3. **PR** `<nr>-<short>` → `feature/<name>` — **squash**.
+4. When the feature is done: **PR** `feature/<name>` → `develop` — **merge commit**.
+5. Release: **PR** `develop` → `main` — **merge commit**.
 
 > The direction is strict and never skipped: `<nr>-<short>` → `feature/<name>` → `develop` → `main`.
 > An issue is **never** PR'd directly to `develop` or `main`.
+
+## Squash once, then never again
+
+> Amended 2026-08-03. The constitution said "squash-merge with a clean title" of **every** PR, with no
+> distinction between the three; this section is the amendment and the reason for it.
+
+Step 3 squashes and steps 4–5 must not, and the difference is whether the source branch dies on merge.
+An issue branch does, so a squash loses nothing and buys a clean one-line history in the feature. A
+`feature/*` branch lives on — and a squash puts its whole contents on `develop` as one *new* commit with
+no ancestry back to it. The next merge therefore starts from the same merge-base as the last one and sees
+both sides having rewritten the same files independently: conflict in every file that has since diverged,
+in a branch you have to keep using.
+
+It is not hypothetical. `feature/infrastructure` sat 52 commits behind `develop` with 14 add/add
+conflicts and spec 113's work present twice; `feature/ui` hit the same wall the moment anything landed on
+it after PR #173 squashed it into `develop`.
+
+You should not be able to get this wrong: `scripts/setup-branch-protection.sh` sets
+`allowed_merge_methods: ["merge"]` on `main` and `develop`, so GitHub offers no squash button there. The
+repository-wide squash setting stays on for step 3.
+
+**If it happens anyway** — the target already holds a squashed copy of the branch — do not resolve the
+conflicts file by file. Check what the two sides actually differ by (`git diff origin/develop feature/x`);
+if it is only work the target lacks, `git merge -s ours origin/develop` records the merge without touching
+the tree, and the next PR is clean. Verify the tree hash is unchanged afterwards, and never use it on a
+branch whose target holds work of its own — `-s ours` would discard it silently.
 
 ## The base branch is set for you
 

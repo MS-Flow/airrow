@@ -346,22 +346,36 @@ describe("hasPassword", () => {
 });
 
 describe("updatePassword", () => {
-  // The point of a reset: the password is usually changed because someone else may know it, and a
-  // session of theirs that outlived the change would make it decorative.
-  it("ends every other session once the password is replaced", async () => {
+  // The point of a change: the password is usually replaced because someone else may know it, and a
+  // session of theirs that outlived it would make the change decorative.
+  it("ends every other session when the founder is staying signed in", async () => {
     updateUserMock.mockResolvedValue({ error: null });
     signOutMock.mockResolvedValue({ error: null });
 
-    await expect(updatePassword("Hunter22x")).resolves.toEqual({ ok: true });
+    await expect(updatePassword("Hunter22x", "others")).resolves.toEqual({ ok: true });
 
     expect(updateUserMock).toHaveBeenCalledWith({ password: "Hunter22x" });
     expect(signOutMock).toHaveBeenCalledWith({ scope: "others" });
   });
 
+  /*
+   * After a reset, *this* session is the one that must not survive: it was created by clicking a link in
+   * an email, only so that Supabase would accept a new password. Leaving it alive is what made the first
+   * version of this feature sign the founder in automatically.
+   */
+  it("ends this session too when the caller asks for global", async () => {
+    updateUserMock.mockResolvedValue({ error: null });
+    signOutMock.mockResolvedValue({ error: null });
+
+    await updatePassword("Hunter22x", "global");
+
+    expect(signOutMock).toHaveBeenCalledWith({ scope: "global" });
+  });
+
   it("keeps every session when the update failed", async () => {
     updateUserMock.mockResolvedValue({ error: { message: "same as old password" } });
 
-    await expect(updatePassword("Hunter22x")).resolves.toEqual({
+    await expect(updatePassword("Hunter22x", "global")).resolves.toEqual({
       ok: false,
       message: "same as old password"
     });

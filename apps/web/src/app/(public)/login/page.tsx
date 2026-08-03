@@ -53,12 +53,23 @@ const ERRORS: Record<string, string> = {
   oauth: "That sign-in did not complete. Try again, or sign in with your email and password."
 };
 
+/**
+ * Why someone arrived here having just succeeded at something (spec 171).
+ *
+ * A reset ends its own session deliberately — the link is not a sign-in — so the founder lands on the
+ * sign-in screen a second after choosing a password. Without this line that reads as the reset having
+ * failed, which is the opposite of what happened.
+ */
+const STATUSES: Record<string, string> = {
+  "password-changed": "Password changed. Sign in with your new one — other devices have been signed out."
+};
+
 export default async function LoginPage({
   searchParams
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; status?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, status } = await searchParams;
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg px-6 py-16">
       <div className="w-full max-w-sm animate-slide-up">
@@ -73,6 +84,12 @@ export default async function LoginPage({
 
             {error ? (
               <InlineError className="mt-4">{ERRORS[error] ?? ERRORS.invalid}</InlineError>
+            ) : null}
+
+            {!error && status && STATUSES[status] ? (
+              <p className="mt-4 text-sm text-success" role="status">
+                {STATUSES[status]}
+              </p>
             ) : null}
 
             <form action={loginAction} className="mt-6 space-y-4">

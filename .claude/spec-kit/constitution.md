@@ -150,8 +150,20 @@ Every feature, screen, and generated file is judged against these.
   branch is **never** PR'd to `main` or `develop`. If unsure which feature an issue branched from,
   check `git merge-base` or ask. Full model: `BRANCHING.md`.
 - **Conventional Commits**, atomic and buildable: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`,
-  `test:` (scope by feature where useful). Small PRs — one coherent slice; squash-merge with a clean
-  title.
+  `test:` (scope by feature where useful). Small PRs — one coherent slice.
+- **How a PR is merged depends on which of the three it is, and it is not a preference.**
+  `NNN-kort` → `feature/<name>` is **squashed** with a clean title: one coherent slice, and the issue
+  branch dies on merge, so there is no history left to lose. `feature/<name>` → `develop` and
+  `develop` → `main` take a **merge commit**, never a squash. A squash lands the whole branch on the
+  target as one *new* commit with no ancestry back to it — and those two branches keep living
+  afterwards, so the next merge still has the old merge-base and sees both sides as having rewritten
+  the same files independently. The result is a conflict in every file that has since diverged, and it
+  compounds: `feature/infrastructure` reached 52 commits behind with 14 add/add conflicts and spec 113
+  duplicated, and `feature/ui` hit the same wall one PR after #173 squashed it. Enforced rather than
+  remembered — `scripts/setup-branch-protection.sh` allows only `merge` on `main`/`develop`, so
+  GitHub's squash button is absent exactly where it does damage. (Amended 2026-08-03; the previous
+  wording — "squash-merge with a clean title", applied to every PR — and how to dig a branch out when it
+  has already happened are recorded in [`BRANCHING.md`](../../docs/architecture/BRANCHING.md).)
 - **Decisions are recorded.** Any decision that would cost >1 day to reverse is written down — in the
   spec that introduces it or a short note under `docs/` — with or before the implementing PR, never
   reconstructed after the fact.

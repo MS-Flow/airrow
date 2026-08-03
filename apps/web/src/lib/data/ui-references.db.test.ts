@@ -12,15 +12,23 @@ import { Client } from "pg";
 const DB_URL =
   process.env.SUPABASE_DB_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
-// Own '15…' namespace so a parallel run cannot collide with the other suites.
-const ORG_A = "00000000-0000-0000-0000-000000000151";
-const ORG_B = "00000000-0000-0000-0000-000000000152";
-const USER_A = "00000000-0000-0000-0000-000000000153";
-const USER_B = "00000000-0000-0000-0000-000000000154";
-const PROJECT_A = "00000000-0000-0000-0000-000000000155";
-const PROJECT_B = "00000000-0000-0000-0000-000000000156";
-const REF_A = "00000000-0000-0000-0000-000000000157";
-const REF_B = "00000000-0000-0000-0000-000000000158";
+/*
+ * Own '16…' namespace so a parallel run cannot collide with the other suites.
+ *
+ * It said '15…' until spec 171, and so does `admin.db.test.ts` — the comment was copied here along with
+ * the ids, which made the claim false the moment it was written. Both suites seed `organizations` with
+ * the same two primary keys and delete them in `cleanup()`, so whichever ran second hit a duplicate key
+ * or found its rows gone. It only ever surfaced when Vitest happened to schedule them together, which is
+ * why it survived two specs: adding an unrelated test file elsewhere was enough to change that.
+ */
+const ORG_A = "00000000-0000-0000-0000-000000000161";
+const ORG_B = "00000000-0000-0000-0000-000000000162";
+const USER_A = "00000000-0000-0000-0000-000000000163";
+const USER_B = "00000000-0000-0000-0000-000000000164";
+const PROJECT_A = "00000000-0000-0000-0000-000000000165";
+const PROJECT_B = "00000000-0000-0000-0000-000000000166";
+const REF_A = "00000000-0000-0000-0000-000000000167";
+const REF_B = "00000000-0000-0000-0000-000000000168";
 
 async function reachable(): Promise<boolean> {
   const probe = new Client({ connectionString: DB_URL, connectionTimeoutMillis: 1500 });
