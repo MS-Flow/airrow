@@ -7,13 +7,35 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { interviewQuestions, type AnswerId, type InterviewAnswers } from "@airrow/schemas";
+import {
+  KEEP_EXISTING_UI,
+  interviewQuestions,
+  questionsFor,
+  type AnswerId,
+  type InterviewAnswers,
+  type ProjectOrigin
+} from "@airrow/schemas";
 import { InterviewRuntime } from "./InterviewRuntime";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 const direction = interviewQuestions.find((q) => q.id === "uiDirection");
 const preset = direction?.options?.find((o) => o.value === "soft_minimal");
+
+/** Seeded past every required question, so an interview opens on the design question itself. */
+const ANSWERED: InterviewAnswers = {
+  productType: "saas",
+  problem: "Agencies lose follow-ups between email and spreadsheets.",
+  vision: "The system of record every agency runs on.",
+  mvpFocus: "Log a client and never miss a follow-up.",
+  tenancy: "organizations",
+  authModel: ["email_password"],
+  capabilities: ["search"],
+  framework: "nextjs",
+  database: "supabase",
+  hosting: "vercel",
+  repoProvider: "github"
+};
 
 function renderInterview({
   persist = () => {},
@@ -30,20 +52,7 @@ function renderInterview({
       destroy={destroy}
       rejectedAnswers={rejectedAnswers}
       projectName="Pied Piper"
-      // Seeded past every required question, so the interview opens on the design question itself.
-      initialAnswers={{
-        productType: "saas",
-        problem: "Agencies lose follow-ups between email and spreadsheets.",
-        vision: "The system of record every agency runs on.",
-        mvpFocus: "Log a client and never miss a follow-up.",
-        tenancy: "organizations",
-        authModel: ["email_password"],
-        capabilities: ["search"],
-        framework: "nextjs",
-        database: "supabase",
-        hosting: "vercel",
-        repoProvider: "github"
-      }}
+      initialAnswers={ANSWERED}
       persist={persist}
       submit={submit}
       submitLabel="Generate"
@@ -234,5 +243,93 @@ describe("abandoning a project from the review screen", () => {
   it("offers nothing to delete on the guest path, where there is no project yet", () => {
     renderInterview();
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+  });
+});
+
+/**
+ * Spec 199. The same runtime, handed the imported phrasing instead of the greenfield one.
+ *
+ * Two behaviours are worth a test rather than a read-through, because both are easy to regress into
+ * something that still renders: the design question must open on one answer rather than five, and
+ * the founder must be able to get past it to the directions when the answer is no.
+ */
+const IMPORTED: ProjectOrigin = {
+  kind: "imported",
+  stackDetected: true,
+  delivery: { kind: "integrated" }
+};
+
+function renderImported({
+  persist = () => {},
+  initialAnswers = {}
+}: { persist?: (answers: InterviewAnswers) => void; initialAnswers?: InterviewAnswers } = {}) {
+  render(
+    <InterviewRuntime
+      projectName="Pied Piper"
+      questions={questionsFor(IMPORTED)}
+      initialAnswers={initialAnswers}
+      persist={persist}
+      submit={vi.fn(async () => undefined)}
+      submitLabel="Generate"
+      pendingLabel="Starting…"
+      back={{ href: "/app", label: "Back" }}
+    />
+  );
+}
+
+describe("the interview an imported project is given", () => {
+  it("asks how the foundation lands before anything else", () => {
+    renderImported();
+    expect(
+      screen.getByRole("heading", { name: "How should the foundation land in your project?" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Integrated")).toBeInTheDocument();
+    expect(screen.getByText("Hidden")).toBeInTheDocument();
+  });
+
+  it("asks for a folder name only after the founder hides it", async () => {
+    renderImported();
+    await userEvent.click(screen.getByText("Integrated"));
+    expect(
+      screen.queryByRole("heading", { name: "What should the folder be called?" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the design question on keeping the look that is already there", async () => {
+    // Answered through, so the interview opens on review and the design question can be reached the
+    // way a founder reaches it.
+    renderImported({ initialAnswers: { ...ANSWERED, deliveryLayout: "integrated", existingDocs: "describe" } });
+    await userEvent.click(screen.getByLabelText("Edit How should it look and feel?"));
+
+    expect(screen.getByText("Keep the look we already have")).toBeInTheDocument();
+    // The five specimens are behind that answer, not beside it.
+    expect(screen.queryByText("Soft minimal")).not.toBeInTheDocument();
+    expect(screen.queryByText("Bold contrast")).not.toBeInTheDocument();
+  });
+
+  it("shows the directions once the founder says no, and records the pick", async () => {
+    const persist = vi.fn();
+    renderImported({ persist, initialAnswers: { ...ANSWERED, deliveryLayout: "integrated", existingDocs: "describe" } });
+    await userEvent.click(screen.getByLabelText("Edit How should it look and feel?"));
+    await userEvent.click(screen.getByRole("button", { name: /No, show me other directions/ }));
+
+    expect(screen.getByText("Soft minimal")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Soft minimal/ }));
+    await vi.waitFor(() =>
+      expect((persist.mock.calls.at(-1)?.[0] as InterviewAnswers)?.uiKit).toBe("soft_minimal")
+    );
+  });
+
+  it("records keeping the existing look as an answer, not as an absence", async () => {
+    const persist = vi.fn();
+    renderImported({ persist, initialAnswers: { ...ANSWERED, deliveryLayout: "integrated", existingDocs: "describe" } });
+    await userEvent.click(screen.getByLabelText("Edit How should it look and feel?"));
+    await userEvent.click(screen.getByRole("button", { name: /Keep the look we already have/ }));
+
+    // Stored, so a founder who then rewrites every word of the prose has not cancelled the decision
+    // (the mirror of spec 165's assertion for a picked direction).
+    await vi.waitFor(() =>
+      expect((persist.mock.calls.at(-1)?.[0] as InterviewAnswers)?.uiKit).toBe(KEEP_EXISTING_UI)
+    );
   });
 });

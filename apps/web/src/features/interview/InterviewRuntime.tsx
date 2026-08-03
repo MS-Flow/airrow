@@ -8,7 +8,9 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Pencil } from "lucide-react";
 import {
   ANSWER_MAX_CHARS,
+  KEEP_EXISTING_UI,
   firstUnanswered,
+  interviewQuestions,
   isRecommendedOption,
   pruneHiddenAnswers,
   uiKitCaption,
@@ -40,6 +42,14 @@ import { UiReferences, type ReferenceUploads } from "./UiReferences";
 interface Props {
   projectName: string;
   initialAnswers: InterviewAnswers;
+  /**
+   * Which phrasing of the interview this project gets (spec 199).
+   *
+   * A project that already exists is asked about the code it has; one starting from nothing is asked
+   * what it was always asked. The set is chosen by `questionsFor(origin)` at the edge and passed in,
+   * so this runtime stays what it has always been: one screen that renders whatever set it is given.
+   */
+  questions?: Question[];
   /** The project already has a generated foundation — submitting replaces it. */
   regenerating?: boolean;
   /** Called (debounced) on every answer change with the pruned answer set. */
@@ -98,6 +108,7 @@ function answerLabel(q: Question, answers: InterviewAnswers): string {
 export function InterviewRuntime({
   projectName,
   initialAnswers,
+  questions = interviewQuestions,
   regenerating = false,
   persist: persistAnswers,
   submit: submitAnswers,
@@ -111,24 +122,33 @@ export function InterviewRuntime({
   const router = useRouter();
   // A resumed interview is seeded the same way a live one is, so where the founder left off is
   // measured against the answers they will actually see.
-  const seeded = useMemo(() => withSuggestions(initialAnswers), [initialAnswers]);
+  const seeded = useMemo(() => withSuggestions(initialAnswers, questions), [initialAnswers, questions]);
   const [answers, setAnswers] = useState<InterviewAnswers>(seeded);
   const [mode, setMode] = useState<"questions" | "review">(() =>
-    firstUnanswered(seeded) === null ? "review" : "questions"
+    firstUnanswered(seeded, questions) === null ? "review" : "questions"
   );
   const [cursor, setCursor] = useState<number>(() => {
-    const open = firstUnanswered(seeded);
+    const open = firstUnanswered(seeded, questions);
     if (!open) return 0;
-    const idx = visibleQuestions(seeded).findIndex((q) => q.id === open.id);
+    const idx = visibleQuestions(seeded, questions).findIndex((q) => q.id === open.id);
     return idx === -1 ? 0 : idx;
   });
+  /**
+   * The founder has asked to see the curated directions (spec 199).
+   *
+   * Only ever reached from the design question of an imported project, where keeping the look that
+   * is already there is the first answer and the five specimens sit behind it. Local state, because
+   * it is a state of the screen and not an answer: declining once and then picking nothing must not
+   * leave a decision recorded that the founder never made.
+   */
+  const [showDirections, setShowDirections] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [upgrade, setUpgrade] = useState(false);
   const [submitting, startSubmit] = useTransition();
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const visible = useMemo(() => visibleQuestions(answers), [answers]);
-  const complete = useMemo(() => firstUnanswered(answers) === null, [answers]);
+  const visible = useMemo(() => visibleQuestions(answers, questions), [answers, questions]);
+  const complete = useMemo(() => firstUnanswered(answers, questions) === null, [answers, questions]);
   const current = visible[Math.min(cursor, visible.length - 1)];
   const rejected = useMemo(() => new Set(rejectedAnswers ?? []), [rejectedAnswers]);
 
@@ -136,10 +156,10 @@ export function InterviewRuntime({
     (next: InterviewAnswers) => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
-        persistAnswers(pruneHiddenAnswers(next));
+        persistAnswers(pruneHiddenAnswers(next, questions));
       }, 350);
     },
-    [persistAnswers]
+    [persistAnswers, questions]
   );
 
   /**
@@ -155,12 +175,12 @@ export function InterviewRuntime({
       setAnswers((prev) => {
         // Suggestions are re-applied on every change, not once: one answer can suggest another, and
         // an earlier answer is editable from the review screen long after it was first given.
-        const next = withSuggestions({ ...prev, ...patch } as InterviewAnswers);
+        const next = withSuggestions({ ...prev, ...patch } as InterviewAnswers, questions);
         persist(next);
         return next;
       });
     },
-    [persist]
+    [persist, questions]
   );
 
   const setAnswer = useCallback(
@@ -170,19 +190,19 @@ export function InterviewRuntime({
 
   const advance = useCallback(() => {
     setAnswers((prev) => {
-      const vis = visibleQuestions(prev);
+      const vis = visibleQuestions(prev, questions);
       const idx = vis.findIndex((q) => q.id === current?.id);
       if (idx >= 0 && idx < vis.length - 1) setCursor(idx + 1);
       else setMode("review");
       return prev;
     });
-  }, [current]);
+  }, [current, questions]);
 
   const submit = () => {
     setError(null);
     setUpgrade(false);
     startSubmit(async () => {
-      const res = await submitAnswers(pruneHiddenAnswers(answers));
+      const res = await submitAnswers(pruneHiddenAnswers(answers, questions));
       if (res?.error) setError(res.error);
       if (res?.upgrade) setUpgrade(true);
     });
@@ -301,6 +321,21 @@ export function InterviewRuntime({
   const showReferences =
     answers.uiKit === undefined || String(answers.uiReferenceLinks ?? "").trim() !== "";
 
+  /**
+   * The design question of an imported project opens on one answer, not five (spec 199).
+   *
+   * Someone whose interface already exists is not choosing a look; they are deciding whether to keep
+   * the one they have. So the curated directions stay behind that answer until the founder asks for
+   * them — or has already taken one, which is the case a returning founder must not be walked back
+   * through.
+   */
+  const keepExisting = current.options?.find((o) => o.value === KEEP_EXISTING_UI);
+  const directionsHidden =
+    keepExisting !== undefined &&
+    !showDirections &&
+    (answers.uiKit === undefined || answers.uiKit === KEEP_EXISTING_UI);
+  const shownOptions = directionsHidden && keepExisting ? [keepExisting] : current.options;
+
   /* ── Question screen ─────────────────────────────────────────────────── */
   return (
     <PageContainer className="max-w-2xl py-12">
@@ -321,6 +356,18 @@ export function InterviewRuntime({
       </h1>
       {current.help ? (
         <p className="mt-2 animate-slide-up text-base leading-relaxed text-fg-muted">{current.help}</p>
+      ) : null}
+
+      {/* Changing how the foundation lands, after answers have been given, is allowed and costs
+          nothing — every answer survives it (spec 199). What it does change is what ships, so the
+          two consequences a founder cannot see from the labels are said here rather than discovered
+          at download: hidden brings no CI, and it leaves everything outside the folder alone. */}
+      {current.id === "deliveryLayout" && answers.deliveryLayout !== undefined ? (
+        <Notice role="status" className="mt-6">
+          {answers.deliveryLayout === "hidden"
+            ? "Hidden: no CI ships, and nothing outside your folder is touched. Switch back any time — your answers are kept either way."
+            : "Integrated: the foundation takes its own paths and your team sees it. Switch any time — your answers are kept either way."}
+        </Notice>
       ) : null}
 
       <div key={current.id} className="mt-6 animate-slide-up">
@@ -419,12 +466,16 @@ export function InterviewRuntime({
             the field; the founder then edits them, and what they end up with is the answer.
             As of spec 165 a pick is also a theme `/start` installs, so it is *stored* in `uiKit`
             rather than derived from the prose: editing the words must not cancel an install. */}
-        {current.type === "guided_text" && current.options ? (
+        {current.type === "guided_text" && shownOptions ? (
           <>
             <div className="grid gap-3 sm:grid-cols-2">
-              {current.options.map((o) => {
+              {shownOptions.map((o) => {
                 const kit = uiKitFor(o.value);
-                const selected = kit ? answers.uiKit === kit.id : answers.uiKit === undefined;
+                // What picking this option records: a curated direction records its theme, keeping
+                // the existing look records that, and "my own words" records nothing — which is
+                // still the only option that clears a pick (specs 165, 199).
+                const picks = kit?.id ?? (o.value === KEEP_EXISTING_UI ? KEEP_EXISTING_UI : undefined);
+                const selected = answers.uiKit === picks;
                 return (
                   <button
                     key={o.value}
@@ -432,8 +483,7 @@ export function InterviewRuntime({
                     onClick={() =>
                       applyAnswers({
                         [current.id]: o.prefill ?? "",
-                        // Only the "my own words" option clears the pick — see `InterviewAnswers.uiKit`.
-                        uiKit: kit?.id
+                        uiKit: picks
                       } as Partial<InterviewAnswers>)
                     }
                     className={cn(
@@ -464,6 +514,20 @@ export function InterviewRuntime({
                 );
               })}
             </div>
+            {/* The way past "keep what we have", and the only way the five specimens appear for a
+                project that already has an interface (spec 199). A button rather than a sixth card:
+                it is a different kind of answer, and putting it in the grid would make declining
+                look like one more look to choose between. */}
+            {directionsHidden ? (
+              <button
+                type="button"
+                onClick={() => setShowDirections(true)}
+                className="mt-3 cursor-pointer text-sm text-fg-muted underline-offset-4 transition-colors hover:text-fg hover:underline"
+              >
+                No, show me other directions
+              </button>
+            ) : null}
+
             <Textarea
               rows={4}
               className="mt-4"

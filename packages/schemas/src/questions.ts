@@ -1,7 +1,14 @@
 // Declarative interview schema v1. Pure data + pure evaluator — no runtime deps.
 // This is the single source of truth for the interview UI and engine resolution.
 
-import type { AnswerId, Framework, InterviewAnswers, ProductType } from "./types.ts";
+import type {
+  AnswerId,
+  Framework,
+  InterviewAnswers,
+  ProductType,
+  ProjectOrigin
+} from "./types.ts";
+import { KEEP_EXISTING_UI } from "./ui-kits.ts";
 
 export const INTERVIEW_SCHEMA_VERSION = "5";
 
@@ -129,7 +136,10 @@ export const ANSWER_MAX_CHARS = {
   capabilitiesOther: 300,
   databaseOther: 200,
   hostingOther: 200,
-  integrations: 300
+  integrations: 300,
+  // Matches `hiddenFolderSchema`'s ceiling, so the field cannot accept a name the store would refuse
+  // on length alone (spec 199).
+  hiddenFolder: 48
 } as const;
 
 /** How many products the founder may point at. Five is more than anyone needs to make a point. */
@@ -604,6 +614,208 @@ export const interviewQuestions: Question[] = [
   }
 ];
 
+/**
+ * The two answers an imported interview collects and never keeps (spec 199).
+ *
+ * They are asked as questions, so they arrive as answers — but `import_sources.delivery` is the one
+ * durable record of how a foundation lands, and the one the engine reads. The save writes them
+ * through to it and strips them here, because two copies of that decision would eventually disagree
+ * and the engine would read the wrong one.
+ */
+export const TRANSIENT_ANSWERS: readonly AnswerId[] = ["deliveryLayout", "hiddenFolder"];
+
+/**
+ * How the foundation lands — the first thing an imported project is asked (spec 199).
+ *
+ * First because it is the only answer that changes what the founder's *team* sees, and someone who
+ * needs hidden should learn it exists before spending ten minutes on the rest. The wording is the
+ * import screen's own (spec 187), so a founder meets one explanation of this choice rather than two.
+ *
+ * `hiddenFolder` follows it and is shown only for hidden — the one question in the set whose
+ * visibility is decided by the answer immediately above it.
+ */
+const deliveryQuestions: Question[] = [
+  {
+    id: "deliveryLayout",
+    title: "How should the foundation land in your project?",
+    help: "This is the one answer your team can see. Everything after it is about the project itself.",
+    type: "single",
+    required: true,
+    options: [
+      {
+        value: "integrated",
+        label: "Integrated",
+        recommended: true,
+        description:
+          "Airrow's files take their own paths beside your own. Anything that collides with a file you already have is a conflict you decide. This is what you push, and what your team sees."
+      },
+      {
+        value: "hidden",
+        label: "Hidden",
+        description:
+          "Everything goes into one folder you name, which git is told to ignore locally. Nothing collides and your repository's diff stays empty. No CI comes with this one: a workflow in an ignored folder could never run."
+      }
+    ]
+  },
+  {
+    id: "hiddenFolder",
+    title: "What should the folder be called?",
+    help: "Lowercase letters, numbers and dashes. Pick whatever reads as ordinary in your repository.",
+    type: "text",
+    required: true,
+    showIf: [{ questionId: "deliveryLayout", in: ["hidden"] }],
+    maxChars: ANSWER_MAX_CHARS.hiddenFolder,
+    placeholder: "notes"
+  }
+];
+
+/**
+ * The design question, for a project whose look already exists (spec 199).
+ *
+ * The five specimens are the wrong opening for someone who has a running interface: the honest first
+ * question is whether to keep it. So `KEEP_EXISTING_UI` leads and is the recommendation, and the
+ * curated directions stay in the list behind it for the founder who wants one.
+ *
+ * A picked direction here is **described, never installed** — an imported project installs nothing
+ * (spec 165) and `/cleanup` changes no code, so what a pick decides is what `UI_ARCHITECTURE.md`
+ * says. That is why the option's own words describe rather than promise: nothing about them may read
+ * as an offer to restyle a codebase Airrow will not touch.
+ */
+const KEEP_EXISTING_UI_OPTION: QuestionOption = {
+  value: KEEP_EXISTING_UI,
+  label: "Keep the look we already have",
+  recommended: true,
+  description: "Your interface stays exactly as it is. The foundation describes it instead of proposing one.",
+  prefill:
+    "Keep the visual language this project already has. The foundation should describe what is there — the palette, the type and the spacing already in the code — rather than introduce a new one."
+};
+
+/**
+ * What the imported phrasing says differently, question by question (spec 199).
+ *
+ * A table of differences rather than a second set written out in full: everything not named here is
+ * word for word the greenfield question, so the two phrasings cannot drift into two interviews.
+ *
+ * The shape of the change is the same everywhere — *decide* becomes *confirm*. A founder whose
+ * schema already implements a tenancy model is not choosing one; they are telling us which one their
+ * code already has, so the documents describe the project rather than a plan for it. None of this
+ * wording may suggest Airrow will change any of it: `/cleanup` reads the codebase and rewrites the
+ * foundation's documents, and touches no code at all.
+ */
+const IMPORT_WORDING: Partial<Record<AnswerId, Pick<Question, "title" | "help">>> = {
+  productType: {
+    title: "What is this project?",
+    help: "What it is today. This shapes the architecture, specifications and roadmap written around it."
+  },
+  problem: {
+    title: "What problem does it solve, and who has it?",
+    help: "The situation your project already addresses, and who it hurts. This is the single most useful thing you can tell your AI assistants."
+  },
+  vision: {
+    title: "Where is it going from here?",
+    help: "What it grows into next. Written down so a decision made now is not re-argued in three months."
+  },
+  coreEntities: {
+    title: "What are the main things in your data model?",
+    help: "The nouns your schema already has. Where the analysis could read them, they are filled in below to correct rather than to invent."
+  },
+  tenancy: {
+    title: "How is your data organized and isolated today?",
+    help: "Confirm what your code already does. This decides what the data documents describe, and it is the hardest thing to change later."
+  },
+  authModel: {
+    title: "How do people sign in today?",
+    help: "What is already implemented, not what you might add."
+  },
+  capabilities: {
+    title: "What does it already do?",
+    help: "The capabilities that exist. What comes next belongs in a spec, not here."
+  },
+  framework: {
+    title: "Which stack is it built in?",
+    help: "Confirm what the analysis found. Every command in every generated document is written for this answer, so a wrong one shows up everywhere."
+  },
+  database: {
+    title: "Which database does it use?",
+    help: "Confirm what was found in your project."
+  },
+  hosting: {
+    title: "Where is it deployed?",
+    help: "Confirm what was found, or say where it is going if nothing was."
+  },
+  repoProvider: {
+    title: "Where does the code live?",
+    help: "Decides which CLI the workflow documents use for pull requests."
+  }
+};
+
+/**
+ * The documents an imported project already has (spec 199).
+ *
+ * Asked only when the foundation lands integrated. A hidden one may change nothing outside its own
+ * folder, so `describe` would be the only answer available — and a question with one answer is not a
+ * question, it is a sentence pretending to be one (§0, adaptive never bureaucratic).
+ *
+ * No option here changes code. `adopt` means the foundation's documents take over as the source of
+ * truth for how the project is worked on; it does not mean anything of the team's is rewritten or
+ * deleted, which `/cleanup` is forbidden from doing either way (spec 91).
+ */
+const existingDocsQuestion: Question = {
+  id: "existingDocs",
+  title: "What should happen to the documents you already have?",
+  help: "A README, decision records, contributing notes, an assistant instruction file. Nothing is deleted or rewritten in your project whichever you pick.",
+  type: "single",
+  required: true,
+  showIf: [{ questionId: "deliveryLayout", in: ["integrated"] }],
+  options: [
+    {
+      value: "describe",
+      label: "Describe them",
+      recommended: true,
+      description: "The foundation points at what you already have and works around it."
+    },
+    {
+      value: "adopt",
+      label: "Build on them",
+      description: "The foundation's documents become where the project's decisions are recorded from here."
+    },
+    {
+      value: "leave",
+      label: "Leave them out of it",
+      description: "The foundation stands on its own and says nothing about your existing documents."
+    }
+  ]
+};
+
+/**
+ * The set for a project that already exists, derived from the greenfield one rather than written
+ * twice (spec 199).
+ *
+ * Derived, so a question added to `interviewQuestions` reaches both phrasings and cannot be
+ * forgotten here. What differs is stated as overrides: the delivery questions in front, and the
+ * design question's option list gaining the answer that only makes sense when there is already an
+ * interface to keep.
+ */
+export const importedQuestions: Question[] = [
+  ...deliveryQuestions,
+  ...interviewQuestions.map((q) =>
+    q.id === "uiDirection"
+      ? {
+          ...q,
+          title: "How should it look and feel?",
+          help: "Your project already has a look. Keep it and the foundation describes what is there; pick another and it describes that instead. Nothing is installed either way.",
+          options: [KEEP_EXISTING_UI_OPTION, ...(q.options ?? [])]
+        }
+      : { ...q, ...IMPORT_WORDING[q.id] }
+  ),
+  existingDocsQuestion
+];
+
+/** The question set for a project of this origin. One place decides, so nothing has to guess. */
+export function questionsFor(origin: ProjectOrigin): Question[] {
+  return origin.kind === "imported" ? importedQuestions : interviewQuestions;
+}
+
 /** Pure evaluator: is a question visible given current answers? */
 export function isQuestionVisible(q: Question, answers: InterviewAnswers): boolean {
   if (!q.showIf) return true;
@@ -640,9 +852,12 @@ export function isRecommendedOption(
  * cleared and replaced. Applied to every answer change rather than at one screen, because a
  * suggestion keys off an *earlier* answer and that answer can be edited from the review screen.
  */
-export function withSuggestions(answers: InterviewAnswers): InterviewAnswers {
+export function withSuggestions(
+  answers: InterviewAnswers,
+  questions: Question[] = interviewQuestions
+): InterviewAnswers {
   const next: InterviewAnswers = { ...answers };
-  for (const q of interviewQuestions) {
+  for (const q of questions) {
     if (q.type !== "text") continue;
     const current = next[q.id];
     if (typeof current === "string" && current.trim() !== "") continue;
@@ -652,16 +867,27 @@ export function withSuggestions(answers: InterviewAnswers): InterviewAnswers {
   return next;
 }
 
-/** Questions visible for the given answers, in order. */
-export function visibleQuestions(answers: InterviewAnswers): Question[] {
-  return interviewQuestions.filter((q) => isQuestionVisible(q, answers));
+/**
+ * Questions visible for the given answers, in order.
+ *
+ * The set defaults to the greenfield one, so every caller that predates the imported phrasing keeps
+ * exactly the behaviour it had and only the import path passes something else (spec 199).
+ */
+export function visibleQuestions(
+  answers: InterviewAnswers,
+  questions: Question[] = interviewQuestions
+): Question[] {
+  return questions.filter((q) => isQuestionVisible(q, answers));
 }
 
 /** Drop answers belonging to questions that are no longer visible. */
-export function pruneHiddenAnswers(answers: InterviewAnswers): InterviewAnswers {
+export function pruneHiddenAnswers(
+  answers: InterviewAnswers,
+  questions: Question[] = interviewQuestions
+): InterviewAnswers {
   const pruned: InterviewAnswers = {};
   const visible = new Set<AnswerId>();
-  for (const q of interviewQuestions) {
+  for (const q of questions) {
     if (!isQuestionVisible(q, answers)) continue;
     visible.add(q.id);
     const v = answers[q.id];
@@ -686,8 +912,11 @@ export function pruneHiddenAnswers(answers: InterviewAnswers): InterviewAnswers 
  * it if you're not sure yet" and could not be skipped. An optional question is still shown, in its
  * place in the order; it simply no longer blocks the way past it.
  */
-export function firstUnanswered(answers: InterviewAnswers): Question | null {
-  for (const q of visibleQuestions(answers)) {
+export function firstUnanswered(
+  answers: InterviewAnswers,
+  questions: Question[] = interviewQuestions
+): Question | null {
+  for (const q of visibleQuestions(answers, questions)) {
     if (!q.required) continue;
     const v = answers[q.id];
     if (v === undefined || (Array.isArray(v) && v.length === 0) || (typeof v === "string" && v.trim() === "")) {
@@ -697,6 +926,9 @@ export function firstUnanswered(answers: InterviewAnswers): Question | null {
   return null;
 }
 
-export function isInterviewComplete(answers: InterviewAnswers): boolean {
-  return firstUnanswered(answers) === null;
+export function isInterviewComplete(
+  answers: InterviewAnswers,
+  questions: Question[] = interviewQuestions
+): boolean {
+  return firstUnanswered(answers, questions) === null;
 }

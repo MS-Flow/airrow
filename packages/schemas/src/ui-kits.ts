@@ -319,6 +319,16 @@ export function uiKitCaption(kit: UiKit): string {
   return describeUiKit(kit);
 }
 
+/**
+ * The `uiKit` value an imported project uses to say the look is already there (spec 199).
+ *
+ * Deliberately not a kit: it names no palette, no type and no library, because the answer is that
+ * the founder's own code has all three. It is a value of `uiKit` rather than a flag beside it so
+ * that one field still decides the theme — and `uiKitFor` resolving it to null is what makes
+ * "described, never installed" true everywhere without a single extra branch.
+ */
+export const KEEP_EXISTING_UI = "existing";
+
 export function uiKitFor(id: string | undefined | null): UiKit | null {
   if (!id) return null;
   return UI_KITS.find((k) => k.id === id) ?? null;

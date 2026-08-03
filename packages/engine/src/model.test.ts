@@ -3,6 +3,7 @@
 import { describe, it, expect } from "vitest";
 import { resolveProjectModel } from "./model.ts";
 import type { ResolveInput } from "./model.ts";
+import { KEEP_EXISTING_UI, UI_KITS } from "../../schemas/src/ui-kits.ts";
 
 const base: ResolveInput = {
   name: "Loop CRM",
@@ -125,5 +126,47 @@ describe("resolveProjectModel — capability & identity projection", () => {
     expect(m.features).not.toContain("auth");
     expect(m.derived.multiTenant).toBe(false);
     expect(m.roles).toBe("none");
+  });
+});
+
+/**
+ * Spec 199. An imported project may answer the design question — including with the answer that its
+ * look is already there — and none of those answers may become an install.
+ *
+ * The rule predates this spec (`model.ts` nulls the kit for an imported project), but the spec added
+ * a new value to that field, and a new value is exactly how a rule like this gets bypassed by
+ * accident. So it is asserted rather than assumed.
+ */
+describe("what an imported project's design answer installs", () => {
+  const imported: ResolveInput = {
+    ...base,
+    origin: { kind: "imported", stackDetected: true, delivery: { kind: "integrated" } }
+  };
+
+  it("installs nothing when the founder keeps the look that is already there", () => {
+    const model = resolveProjectModel({
+      ...imported,
+      answers: { ...base.answers, uiKit: KEEP_EXISTING_UI }
+    });
+    expect(model.uiKit).toBeNull();
+  });
+
+  it("installs nothing even when the founder picks a curated direction", () => {
+    // Picking one describes a look in `UI_ARCHITECTURE.md`; it never adds a dependency to a codebase
+    // `/cleanup` is forbidden from changing.
+    const model = resolveProjectModel({
+      ...imported,
+      answers: { ...base.answers, uiKit: UI_KITS[0]!.id }
+    });
+    expect(model.uiKit).toBeNull();
+  });
+
+  it("still installs for a project that is starting from nothing", () => {
+    // The other half of the assertion: the rule is about imports, not about the answer.
+    const model = resolveProjectModel({
+      ...base,
+      answers: { ...base.answers, uiKit: UI_KITS[0]!.id }
+    });
+    expect(model.uiKit?.id).toBe(UI_KITS[0]!.id);
   });
 });

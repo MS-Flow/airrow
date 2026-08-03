@@ -2,7 +2,7 @@
 // output would do to the founder's project. Nothing here writes files; it records decisions.
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { diffAgainstExisting, hiddenFolderFrom } from "@airrow/engine";
+import { diffAgainstExisting } from "@airrow/engine";
 import type { GeneratedFile } from "@airrow/schemas";
 import { PageContainer } from "@/components/shell/page-container";
 import { Badge } from "@/components/ui/badge";
@@ -21,13 +21,13 @@ import {
 import { digestFor } from "@/features/import/digest";
 import { AnalysisEvidence, AnalysisNotes } from "@/features/import/AnalysisEvidence";
 import { ConflictRow } from "@/features/import/ConflictRow";
-import { DeliveryLayoutChoice } from "@/features/import/DeliveryLayoutChoice";
+import { DeliveryLayoutSummary } from "@/features/import/DeliveryLayoutSummary";
 
 export const metadata = { title: "Import review" };
 
 export default async function ImportReview({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { org, user } = await requireSession();
+  const { org } = await requireSession();
   const project = await getProject(org.id, id);
   if (!project) notFound();
 
@@ -64,18 +64,13 @@ export default async function ImportReview({ params }: { params: Promise<{ id: s
           <CardHeader>
             <CardTitle>How it lands in your project</CardTitle>
             <p className="mt-1 text-sm text-fg-muted">
-              Change this before you generate — it decides where every generated file goes.
+              Answered first in the interview, because it decides where every generated file goes.
             </p>
           </CardHeader>
           <CardBody>
-            <DeliveryLayoutChoice
+            <DeliveryLayoutSummary
               projectId={id}
-              current={source.delivery.kind}
-              folderPrefill={
-                source.delivery.kind === "hidden"
-                  ? source.delivery.folder
-                  : (hiddenFolderFrom(user.name) ?? "notes")
-              }
+              delivery={source.delivery}
               regenerateNeeded={artifact !== null}
             />
           </CardBody>

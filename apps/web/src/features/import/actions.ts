@@ -13,15 +13,13 @@
 // analysis, before the first write. On the free plan the founder still sees what Airrow made of
 // their code; they just cannot keep it as a project.
 import { revalidatePath } from "next/cache";
-import { analyzeImport, digestImported, hiddenFolderFrom, slugify } from "@airrow/engine";
+import { analyzeImport, digestImported, slugify } from "@airrow/engine";
 import {
   conflictDecisionSchema,
-  deliveryLayoutSchema,
   importCreateSchema,
   interviewAnswersSchema,
   pruneHiddenAnswers,
   repoSelectionSchema,
-  type DeliveryLayout,
   type ImportEvidence,
   type ImportSourceKind,
   type InterviewAnswers
@@ -38,7 +36,6 @@ import {
   latestJob,
   saveConflictResolution,
   saveInterviewAnswers,
-  setDeliveryLayout,
   type OrgRecord
 } from "@/lib/data/store";
 import { readArchive, type ArchiveRead } from "./archive";
@@ -240,65 +237,16 @@ export async function importRepoAction(
   return completeImport(org, parsed.data, `${owner}/${repo}`, read);
 }
 
-export interface LayoutFormState {
-  error?: string;
-  /** Set once the choice is stored, so the screen can say what changed rather than just redrawing. */
-  saved?: DeliveryLayout["kind"];
-}
-
-/**
- * Record how the foundation should land (spec 187).
+/*
+ * How the foundation lands is no longer written from here (spec 199).
  *
- * Offered only where it means something: an import whose analysis found no code has no team codebase
- * to disappear into, and gets `/start`, which scaffolds a stack — something an ignored folder cannot
- * usefully hold. The gate is here rather than only in the UI, because a screen that hides a control
- * has not prevented the request behind it.
- *
- * There is no Pro check: importing is already Pro (`completeImport`), so a founder who reached an
- * import source has already passed it. A second gate would be a second place deciding the same
- * thing, and the two would eventually disagree (§IV).
+ * `setDeliveryLayoutAction` lived at this point in the file and backed a form on the import review
+ * screen. The interview asks the question now, first, and writes the answer through in
+ * `features/interview/actions.ts` — carrying the same rules it always had: normalised with
+ * `hiddenFolderFrom` before validation, checked as a single path segment by `deliveryLayoutSchema`,
+ * and refused for an import whose analysis found no code. Two writers to one column was the thing
+ * worth removing, not the rules.
  */
-export async function setDeliveryLayoutAction(
-  _previous: LayoutFormState,
-  formData: FormData
-): Promise<LayoutFormState> {
-  const { org } = await requireSession();
-  const projectId = String(formData.get("projectId") ?? "");
-  const project = await getProject(org.id, projectId);
-  if (!project) return { error: "That project could not be found." };
-
-  const source = await getImportSource(projectId);
-  if (!source) return { error: "That project was not imported." };
-  if (!source.analysis.stackDetected) {
-    return {
-      error:
-        "Hidden delivery needs an existing codebase to sit inside — this import had no code in it."
-    };
-  }
-
-  const kind = String(formData.get("layout") ?? "");
-  if (kind === "integrated") {
-    await setDeliveryLayout(source.id, { kind: "integrated" });
-    revalidatePath(`/app/projects/${projectId}/import`);
-    return { saved: "integrated" };
-  }
-
-  // Normalised before validation rather than after a rejection: the founder typed a folder name,
-  // not a slug, and bouncing "My Notes" back for them to retype as "my-notes" is a rule we can apply
-  // ourselves. A name with nothing usable in it is still refused, never quietly replaced by one they
-  // did not choose — which is why this is `hiddenFolderFrom` and not `slugify`.
-  const folder = hiddenFolderFrom(String(formData.get("folder") ?? ""));
-  const parsed = deliveryLayoutSchema.safeParse({ kind: "hidden", folder });
-  if (!parsed.success) {
-    return {
-      error: "Give the folder a name of letters, numbers or dashes — for example, notes."
-    };
-  }
-
-  await setDeliveryLayout(source.id, parsed.data);
-  revalidatePath(`/app/projects/${projectId}/import`);
-  return { saved: "hidden" };
-}
 
 /**
  * Record one conflict decision. Only ever writes the founder's explicit choice — a file with no

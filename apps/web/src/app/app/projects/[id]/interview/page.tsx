@@ -4,6 +4,7 @@ import { getInterview, getProject, latestJob } from "@/lib/data/store";
 import { AllowanceNotice } from "@/features/generation/AllowanceNotice";
 import { checkAllowance } from "@/features/generation/allowance";
 import { AuthedInterview } from "@/features/interview/AuthedInterview";
+import { projectOrigin } from "@/features/import/origin";
 
 export const metadata = { title: "Interview" };
 
@@ -20,6 +21,9 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
   // last run refused these answers (spec 128). Read from the job, so it survives a refresh and cannot
   // be conjured by a link.
   const lastJob = await latestJob(id);
+  // Which questions this project is asked (spec 199). Resolved here, on the server, from the one
+  // record of where a project came from — the interview never guesses at its own origin.
+  const origin = await projectOrigin(id);
   // Said here so the founder knows before answering thirty questions, not after (spec 100). The
   // interview itself is never blocked — the wall is at generate, and only there.
   const allowance = await checkAllowance({
@@ -36,6 +40,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
         projectId={project.id}
         projectName={project.name}
         initialAnswers={interview?.answers ?? {}}
+        origin={origin}
         regenerating={project.status === "ready"}
         rejectedAnswers={lastJob?.rejectedAnswers ?? null}
       />

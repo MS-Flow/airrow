@@ -9,8 +9,10 @@ import {
   MAX_UI_REFERENCE_LINKS,
   SATELLITE_ANSWERS,
   STANDARD_STACK,
+  TRANSIENT_ANSWERS,
   firstUnanswered,
   interviewQuestions,
+  questionsFor,
   isQuestionVisible,
   isRecommendedOption,
   pruneHiddenAnswers,
@@ -21,6 +23,7 @@ import {
   type Question
 } from "./questions.ts";
 import {
+  KEEP_EXISTING_UI,
   PERMISSIVE_LICENCES,
   UI_KITS,
   describeUiKit,
@@ -488,5 +491,145 @@ describe("required means required, and optional means optional", () => {
     // saved and for what an import analysis derives, but nobody is asked to invent non-goals.
     expect(interviewQuestions.map((q) => q.id)).not.toContain("nonGoals");
     expect(ANSWER_MAX_CHARS.nonGoals).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Spec 199. An imported project is asked about the code it already has, and a greenfield one is
+ * asked exactly what it was asked before. The second half of that sentence is the one that needs a
+ * test: the imported phrasing is derived from the greenfield set, so a careless edit there reaches
+ * both, and "unchanged" is not something a reviewer can see by reading a diff of one file.
+ */
+describe("the imported phrasing of the interview", () => {
+  const imported = questionsFor({ kind: "imported", stackDetected: true, delivery: { kind: "integrated" } });
+
+  it("leaves the greenfield set exactly as it was", () => {
+    expect(questionsFor({ kind: "new" })).toBe(interviewQuestions);
+    // Not one question about how a foundation lands: a project that does not exist yet has no
+    // repository to land in, and nobody starting from nothing should meet this choice.
+    expect(interviewQuestions.map((q) => q.id)).not.toContain("deliveryLayout");
+    expect(interviewQuestions.map((q) => q.id)).not.toContain("hiddenFolder");
+    const design = interviewQuestions.find((q) => q.id === "uiDirection");
+    expect(design?.options?.map((o) => o.value)).not.toContain(KEEP_EXISTING_UI);
+  });
+
+  it("asks how the foundation lands before anything else", () => {
+    expect(imported[0]?.id).toBe("deliveryLayout");
+    expect(imported[0]?.options?.map((o) => o.value)).toEqual(["integrated", "hidden"]);
+    // Integrated is the default, and leading with hidden would sell something else entirely.
+    expect(imported[0]?.options?.[0]?.recommended).toBe(true);
+  });
+
+  it("asks for a folder name only when the foundation is hidden", () => {
+    const folder = imported.find((q) => q.id === "hiddenFolder");
+    expect(folder).toBeDefined();
+    expect(isQuestionVisible(folder!, { deliveryLayout: "integrated" })).toBe(false);
+    expect(isQuestionVisible(folder!, { deliveryLayout: "hidden" })).toBe(true);
+    expect(visibleQuestions({ deliveryLayout: "integrated" }, imported).map((q) => q.id)).not.toContain(
+      "hiddenFolder"
+    );
+  });
+
+  it("offers keeping the look that is already there, first and recommended", () => {
+    const design = imported.find((q) => q.id === "uiDirection");
+    expect(design?.options?.[0]?.value).toBe(KEEP_EXISTING_UI);
+    expect(design?.options?.[0]?.recommended).toBe(true);
+    // The curated directions are still there for the founder who wants one — behind the answer that
+    // costs them nothing, not instead of it.
+    expect(design?.options?.length).toBeGreaterThan(1);
+  });
+
+  it("promises no restyling of a codebase Airrow will not touch", () => {
+    // `/cleanup` changes no code, and an imported project installs nothing (specs 91, 165). The
+    // design options describe; a word like "restyle" here would sell the one thing that cannot happen.
+    const words = imported.flatMap((q) => [
+      q.title,
+      q.help ?? "",
+      ...(q.options ?? []).flatMap((o) => [o.label, o.description ?? "", o.prefill ?? ""])
+    ]);
+    const offenders = words.filter((w) =>
+      /rebuild|restructure|restyle|rewrite your|migrate your|convert your/i.test(w)
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("keeps every question the greenfield set has, so neither phrasing can drift", () => {
+    for (const q of interviewQuestions) {
+      expect(imported.map((i) => i.id)).toContain(q.id);
+    }
+  });
+
+  it("names the two answers that are asked but never kept", () => {
+    // They are written through to `import_sources.delivery`, which stays the one durable record.
+    expect([...TRANSIENT_ANSWERS].sort()).toEqual(["deliveryLayout", "hiddenFolder"]);
+    for (const id of TRANSIENT_ANSWERS) {
+      expect(imported.map((q) => q.id)).toContain(id);
+    }
+  });
+});
+
+describe("what the answer boundary does with an imported project's answers", () => {
+  it("carries the existing-look answer through, and installs nothing for it", () => {
+    // The whole point of storing it (spec 199): it must survive the boundary the way a picked
+    // direction does, or an imported project would silently fall back to being offered a theme.
+    expect(interviewAnswersSchema.parse({ uiKit: KEEP_EXISTING_UI }).uiKit).toBe(KEEP_EXISTING_UI);
+    // And resolve to no kit at all, which is what makes "described, never installed" true with no
+    // branch anywhere: nothing downstream can install a theme it was never handed.
+    expect(uiKitFor(KEEP_EXISTING_UI)).toBeNull();
+  });
+
+  it("validates how the foundation lands, even though it is never kept here", () => {
+    expect(interviewAnswersSchema.parse({ deliveryLayout: "hidden", hiddenFolder: "notes" })).toEqual({
+      deliveryLayout: "hidden",
+      hiddenFolder: "notes"
+    });
+    // "Stripped later" is not a reason to let an unchecked value through a boundary.
+    expect(() => interviewAnswersSchema.parse({ deliveryLayout: "somewhere-else" })).toThrow();
+    expect(() => interviewAnswersSchema.parse({ hiddenFolder: "x".repeat(200) })).toThrow();
+  });
+});
+
+describe("the imported phrasing asks about what is there", () => {
+  const imported = questionsFor({
+    kind: "imported",
+    stackDetected: true,
+    delivery: { kind: "integrated" }
+  });
+  const find = (id: string) => imported.find((q) => q.id === id);
+
+  it("asks the stack questions as confirmation rather than as a fresh choice", () => {
+    // The options are unchanged — the same stacks, the same recommendation. What changes is that the
+    // founder is being asked what their code already is, not what it should be.
+    expect(find("framework")?.title).toBe("Which stack is it built in?");
+    expect(find("framework")?.help).toMatch(/Confirm what the analysis found/);
+    expect(find("database")?.help).toMatch(/Confirm/);
+    expect(find("hosting")?.help).toMatch(/Confirm/);
+    expect(find("framework")?.options).toEqual(
+      interviewQuestions.find((q) => q.id === "framework")?.options
+    );
+  });
+
+  it("asks what the project already does, and what it already isolates", () => {
+    expect(find("capabilities")?.title).toBe("What does it already do?");
+    expect(find("tenancy")?.title).toMatch(/today/);
+    expect(find("authModel")?.title).toMatch(/today/);
+  });
+
+  it("asks about the documents the team already has, only when they would be touched", () => {
+    const docs = find("existingDocs");
+    expect(docs).toBeDefined();
+    // Hidden may change nothing outside its folder, so there is only one possible answer — and a
+    // question with one answer is not a question.
+    expect(isQuestionVisible(docs!, { deliveryLayout: "hidden" })).toBe(false);
+    expect(isQuestionVisible(docs!, { deliveryLayout: "integrated" })).toBe(true);
+    expect(docs?.help).toMatch(/Nothing is deleted or rewritten/);
+  });
+
+  it("asks a hidden foundation nothing about the team's own files", () => {
+    // Everything visible in hidden mode has to be answerable without touching a thing outside the
+    // folder. `existingDocs` is the only question that would not be, so it is the one that goes.
+    const hidden = visibleQuestions({ deliveryLayout: "hidden" }, imported).map((q) => q.id);
+    expect(hidden).not.toContain("existingDocs");
+    expect(hidden).toContain("deliveryLayout");
   });
 });
