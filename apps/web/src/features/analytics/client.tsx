@@ -148,15 +148,17 @@ export function FunnelAnalytics(): null {
   const pathname = usePathname();
 
   useEffect(() => {
-    // A workspace path is nobody's business to record, and it carries a project id in it. The funnel
-    // inside `/app` is measured by named events with deliberate properties instead — the same
-    // decision spec 153 made for the same reason, asked of the same predicate.
-    if (isPrivatePath(pathname)) return;
     // `window.location.search` rather than `useSearchParams`: that hook opts the whole tree into
     // client-side rendering at the root, which would cost every public page its static shell for a
     // value this reads exactly once.
     void initAnalytics(window.location.search).then((started) => {
-      if (started) captureClient("pageview", { path: pathname });
+      // **Only the pageview is suppressed inside `/app`, never the initialisation.** A workspace path
+      // is nobody's business to record and carries a project id in it — but the named events *inside*
+      // `/app` (`interview_started`, `interview_step`) still need the library started, and a founder
+      // who signs in arrives there on a full page load with no public page in between. Returning
+      // early here instead left them queued forever: the interview measured nothing at all, which is
+      // exactly the half of the funnel the drop-off curve is made of.
+      if (started && !isPrivatePath(pathname)) captureClient("pageview", { path: pathname });
     });
   }, [pathname]);
 
