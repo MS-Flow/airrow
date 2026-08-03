@@ -7,10 +7,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const signUpMock = vi.fn();
 const signInMock = vi.fn();
 const oauthMock = vi.fn();
+const resetMock = vi.fn();
+const updateUserMock = vi.fn();
+const signOutMock = vi.fn();
+const getUserMock = vi.fn();
 
 vi.mock("@/lib/data/supabase-server", () => ({
   supabaseServer: async () => ({
-    auth: { signUp: signUpMock, signInWithPassword: signInMock, signInWithOAuth: oauthMock }
+    auth: {
+      signUp: signUpMock,
+      signInWithPassword: signInMock,
+      signInWithOAuth: oauthMock,
+      resetPasswordForEmail: resetMock,
+      updateUser: updateUserMock,
+      signOut: signOutMock,
+      getUser: getUserMock
+    }
   })
 }));
 vi.mock("@/lib/data/store", () => ({
@@ -19,22 +31,32 @@ vi.mock("@/lib/data/store", () => ({
 }));
 
 const {
+  changeEmail,
+  hasPassword,
   oauthProviderOf,
   providerEmailVerified,
+  sendPasswordReset,
   signIn,
   signInWithGitHub,
   signInWithGoogle,
   signUp,
-  signUpFailure
+  signUpFailure,
+  updatePassword,
+  verifyPassword
 } = await import("./auth");
 
 beforeEach(() => {
   signUpMock.mockReset();
   signInMock.mockReset();
   oauthMock.mockReset();
+  resetMock.mockReset();
+  updateUserMock.mockReset();
+  signOutMock.mockReset();
+  getUserMock.mockReset();
 });
 
 const CONFIRM_URL = "https://dev.airrow.app/auth/confirm";
+const RESET_URL = "https://dev.airrow.app/auth/reset";
 
 describe("signUp", () => {
   it("reports a session when the project signs the user straight in", async () => {
@@ -265,6 +287,128 @@ describe("signInWithGoogle", () => {
 
     await expect(signInWithGoogle("https://airrow.test/auth/callback")).resolves.toEqual({
       error: "provider disabled"
+    });
+  });
+});
+
+// Spec 171 — the credential mutations. The reset send is the one with a security property in its
+// *signature*: it answers nothing, so no caller can leak whether an address has an account.
+describe("sendPasswordReset", () => {
+  it("sends the link back to the environment the founder asked from", async () => {
+    resetMock.mockResolvedValue({ error: null });
+
+    await sendPasswordReset("ada@example.com", RESET_URL);
+
+    expect(resetMock).toHaveBeenCalledWith("ada@example.com", { redirectTo: RESET_URL });
+  });
+
+  it("looks identical to the caller when the provider refuses", async () => {
+    resetMock.mockResolvedValue({ error: { message: "over_email_send_rate_limit" } });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(sendPasswordReset("nobody@example.com", RESET_URL)).resolves.toBeUndefined();
+
+    // Logged for us — but never with the address, which would write the oracle down.
+    expect(logged).toHaveBeenCalled();
+    expect(JSON.stringify(logged.mock.calls)).not.toContain("nobody@example.com");
+    logged.mockRestore();
+  });
+});
+
+describe("verifyPassword", () => {
+  it("accepts the current password", async () => {
+    signInMock.mockResolvedValue({ error: null });
+    await expect(verifyPassword("ada@example.com", "hunter22")).resolves.toBe(true);
+  });
+
+  it("rejects anything else", async () => {
+    signInMock.mockResolvedValue({ error: { message: "Invalid login credentials" } });
+    await expect(verifyPassword("ada@example.com", "guess")).resolves.toBe(false);
+  });
+});
+
+describe("hasPassword", () => {
+  it("is true for an account with an email identity", async () => {
+    getUserMock.mockResolvedValue({ data: { user: { identities: [{ provider: "email" }] } } });
+    await expect(hasPassword()).resolves.toBe(true);
+  });
+
+  // The founder who has only ever pressed "Sign in with GitHub" has no password to be asked for.
+  it("is false for a provider-only account", async () => {
+    getUserMock.mockResolvedValue({ data: { user: { identities: [{ provider: "github" }] } } });
+    await expect(hasPassword()).resolves.toBe(false);
+  });
+
+  it("is false when there is no user at all", async () => {
+    getUserMock.mockResolvedValue({ data: { user: null } });
+    await expect(hasPassword()).resolves.toBe(false);
+  });
+});
+
+describe("updatePassword", () => {
+  // The point of a change: the password is usually replaced because someone else may know it, and a
+  // session of theirs that outlived it would make the change decorative.
+  it("ends every other session when the founder is staying signed in", async () => {
+    updateUserMock.mockResolvedValue({ error: null });
+    signOutMock.mockResolvedValue({ error: null });
+
+    await expect(updatePassword("Hunter22x", "others")).resolves.toEqual({ ok: true });
+
+    expect(updateUserMock).toHaveBeenCalledWith({ password: "Hunter22x" });
+    expect(signOutMock).toHaveBeenCalledWith({ scope: "others" });
+  });
+
+  /*
+   * After a reset, *this* session is the one that must not survive: it was created by clicking a link in
+   * an email, only so that Supabase would accept a new password. Leaving it alive is what made the first
+   * version of this feature sign the founder in automatically.
+   */
+  it("ends this session too when the caller asks for global", async () => {
+    updateUserMock.mockResolvedValue({ error: null });
+    signOutMock.mockResolvedValue({ error: null });
+
+    await updatePassword("Hunter22x", "global");
+
+    expect(signOutMock).toHaveBeenCalledWith({ scope: "global" });
+  });
+
+  it("keeps every session when the update failed", async () => {
+    updateUserMock.mockResolvedValue({ error: { message: "same as old password" } });
+
+    await expect(updatePassword("Hunter22x", "global")).resolves.toEqual({
+      ok: false,
+      message: "same as old password"
+    });
+    expect(signOutMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("changeEmail", () => {
+  // Named `confirm-sent`, not `ok`: nothing has moved yet, and a screen that said "email updated" here
+  // would have a founder sign out and find neither address works.
+  it("reports that a confirmation is on its way, carrying the per-request landing", async () => {
+    updateUserMock.mockResolvedValue({ error: null });
+
+    await expect(changeEmail("new@example.com", CONFIRM_URL)).resolves.toEqual({
+      status: "confirm-sent"
+    });
+    expect(updateUserMock).toHaveBeenCalledWith(
+      { email: "new@example.com" },
+      { emailRedirectTo: CONFIRM_URL }
+    );
+  });
+
+  it.each([
+    ["an address that is taken", { code: "email_exists", message: "Email address already exists" }, "taken"],
+    ["a taken address by message alone", { message: "A user with this email address has already been registered" }, "taken"],
+    ["a rate limit", { code: "over_email_send_rate_limit", message: "rate limit" }, "rate-limited"],
+    ["a cause we do not recognise", { message: "Database error" }, "unknown"]
+  ])("classifies %s", async (_label, error, reason) => {
+    updateUserMock.mockResolvedValue({ error });
+
+    await expect(changeEmail("new@example.com", CONFIRM_URL)).resolves.toEqual({
+      status: "error",
+      reason
     });
   });
 });

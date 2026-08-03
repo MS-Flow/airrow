@@ -12,13 +12,26 @@ const linkStripeCustomer = vi.hoisted(() => vi.fn(async () => {}));
 const customersCreate = vi.hoisted(() => vi.fn());
 const sessionsCreate = vi.hoisted(() => vi.fn());
 const portalCreate = vi.hoisted(() => vi.fn());
+const stripeCouponFounding = vi.hoisted(() => vi.fn<() => string | null>(() => "founding100"));
+const analytics = vi.hoisted(() => ({
+  captures: [] as { name: string; distinctId: string; properties: Record<string, unknown> }[]
+}));
 
+vi.mock("@/features/analytics/server", () => ({
+  capture: (name: string, distinctId: string, properties: Record<string, unknown>) => {
+    analytics.captures.push({ name, distinctId, properties });
+  }
+}));
 vi.mock("@/lib/auth", () => ({ requireSession }));
 vi.mock("next/headers", () => ({ headers: async () => new Map([["host", "airrow.test"]]) }));
 vi.mock("@/lib/data/store", () => ({ getSubscription, linkStripeCustomer }));
 vi.mock("@/lib/stripe", () => ({
   stripeConfigured: () => true,
-  stripePrices: () => [{ id: "price_monthly", interval: "month" }],
+  stripePrices: () => [
+    { id: "price_monthly", interval: "month" },
+    { id: "price_yearly", interval: "year" }
+  ],
+  stripeCouponFounding,
   stripe: () => ({
     customers: { create: customersCreate },
     checkout: { sessions: { create: sessionsCreate } },
@@ -53,6 +66,41 @@ describe("startCheckoutAction", () => {
     getSubscription.mockResolvedValue(null);
     customersCreate.mockResolvedValue({ id: "cus_new" });
     sessionsCreate.mockResolvedValue({ url: "https://checkout.stripe.test/s/1" });
+    stripeCouponFounding.mockReturnValue("founding100");
+    analytics.captures = [];
+  });
+
+  // The funnel's second-to-last step (spec 182). It had no test at all until `/analyze` noticed:
+  // the call typechecked, which is not the same as firing.
+  it("records the checkout, with the interval that was chosen", async () => {
+    await startCheckoutAction(form("month"));
+
+    expect(analytics.captures).toEqual([
+      {
+        name: "checkout_started",
+        distinctId: "org_org1",
+        properties: { interval: "month", founding: false }
+      }
+    ]);
+  });
+
+  it("marks a yearly checkout as founding, because that is where the coupon rides", async () => {
+    await startCheckoutAction(form("year"));
+
+    expect(analytics.captures[0]?.properties).toEqual({ interval: "year", founding: true });
+  });
+
+  it("records the checkout even when Stripe refuses to open it", async () => {
+    // `checkout_started → paid` is the ratio this event exists for, so an abandoned or failed
+    // checkout is exactly the case it has to count. Recording only the successes would make the
+    // conversion rate read as 100%.
+    sessionsCreate.mockRejectedValue(new Error("Stripe is down"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await startCheckoutAction(form("month"));
+
+    expect(result.error).toBeTruthy();
+    expect(analytics.captures).toHaveLength(1);
   });
 
   it("reuses the customer already recorded instead of creating another", async () => {
@@ -138,6 +186,76 @@ describe("startCheckoutAction", () => {
     expect(state.error).toMatch(/nothing has been charged/i);
     // The detail a developer needs is not lost, it just goes somewhere a customer never looks.
     expect(logged).toHaveBeenCalledWith(expect.stringMatching(/checkout failed/i), "No such price: ':price_123'");
+    logged.mockRestore();
+  });
+
+  // The founding-member offer (spec 179). Stripe holds the cap; these pin down that we attach the
+  // coupon to the right price, never take one from the browser, and translate "sold out" into
+  // something other than "try again in a moment".
+  it("attaches the founding coupon to the yearly price", async () => {
+    await startCheckoutAction(form("year"));
+
+    expect(sessionsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        line_items: [{ price: "price_yearly", quantity: 1 }],
+        discounts: [{ coupon: "founding100" }]
+      })
+    );
+  });
+
+  it("does not discount the monthly price", async () => {
+    // The offer is the annual deal. A monthly subscription taking the same coupon would hand out the
+    // founding discount every month to anyone who clicked the other button.
+    await startCheckoutAction(form("month"));
+
+    expect(sessionsCreate.mock.calls[0]?.[0]).not.toHaveProperty("discounts");
+  });
+
+  it("takes the coupon from configuration, never from the form", async () => {
+    const f = new FormData();
+    f.set("interval", "year");
+    f.set("coupon", "FREE_FOREVER");
+
+    await startCheckoutAction(f);
+
+    expect(sessionsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ discounts: [{ coupon: "founding100" }] })
+    );
+  });
+
+  it("sells the yearly price undiscounted when no founding coupon is configured", async () => {
+    stripeCouponFounding.mockReturnValue(null);
+
+    await startCheckoutAction(form("year"));
+
+    expect(sessionsCreate.mock.calls[0]?.[0]).not.toHaveProperty("discounts");
+  });
+
+  it("says the founding places are gone when Stripe reports the coupon exhausted", async () => {
+    // The 101st buyer. "Stripe couldn't open that page just now, try again in a moment" is advice
+    // that can never come true, on the one failure that is not an outage.
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    sessionsCreate.mockRejectedValue(
+      new Error("This coupon has reached its maximum number of redemptions.")
+    );
+
+    const state = await startCheckoutAction(form("year"));
+
+    expect(state.error).toMatch(/last founding place/i);
+    expect(state.error).toMatch(/nothing has been charged/i);
+    logged.mockRestore();
+  });
+
+  it("still reads a mistyped coupon id as a Stripe failure, not a sold-out offer", async () => {
+    // Our bug, not the founder's missed chance. Telling them the offer ended would be a lie that
+    // costs a sale and hides the misconfiguration.
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    sessionsCreate.mockRejectedValue(new Error("No such coupon: 'foundng100'"));
+
+    const state = await startCheckoutAction(form("year"));
+
+    expect(state.error).toMatch(/couldn't open that page/i);
+    expect(state.error).not.toMatch(/founding place/i);
     logged.mockRestore();
   });
 

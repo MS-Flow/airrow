@@ -15,7 +15,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import {
+  grantSupportPro,
+  isSupportGrantDays,
   recordAdminAction,
+  revokeActiveGrant,
   setReviewPublished,
   setTicketStatus,
   setUserSuspended
@@ -39,7 +42,10 @@ export async function suspendUserAction(formData: FormData): Promise<void> {
   const userId = requireId(formData, "userId");
   const suspend = formData.get("suspend") === "true";
 
-  await setUserSuspended(user.id, userId, suspend);
+  const result = await setUserSuspended(user.id, userId, suspend);
+  // Refused, so there is nothing to record — the audit log says what happened, and nothing did.
+  if (!result.ok) redirect(`/app/admin?error=${result.reason}`);
+
   await recordAdminAction({
     actorId: user.id,
     action: suspend ? "user.suspend" : "user.reactivate",
@@ -71,6 +77,59 @@ export async function grantCreditsAction(formData: FormData): Promise<void> {
 
   revalidatePath("/app/admin");
   redirect("/app/admin?done=granted");
+}
+
+/**
+ * Give a workspace Pro for a fixed stretch (spec 164).
+ *
+ * The org id arrives from a hidden field, which is safe here for the one reason it is never safe
+ * elsewhere: this action is admin-only by definition, so there is no tenancy boundary for a forged id
+ * to cross — an operator may act on any workspace. `grantSupportPro` still refuses anything that would
+ * be a no-op, and the audit row names the workspace either way.
+ */
+export async function grantProAction(formData: FormData): Promise<void> {
+  const { user } = await requireAdmin();
+  const orgId = requireId(formData, "orgId");
+  const userId = requireId(formData, "userId");
+  const days = Number(formData.get("days"));
+  if (!isSupportGrantDays(days)) redirect("/app/admin?error=days");
+
+  const result = await grantSupportPro(user.id, orgId, days);
+  if (!result.ok) redirect(`/app/admin?error=${result.reason}`);
+
+  await recordAdminAction({
+    actorId: user.id,
+    action: "pro.grant",
+    // Keyed on the person, like every other row here — the operator is looking at an account, and the
+    // audit lists that read this back are keyed on users (spec 150).
+    subjectType: "user",
+    subjectId: userId,
+    reason: `${days} days${reasonOf(formData) ? ` — ${reasonOf(formData)}` : ""}`
+  });
+
+  revalidatePath("/app/admin");
+  redirect("/app/admin?done=pro-granted");
+}
+
+/** End whatever grant is covering a workspace. The row survives; only its window closes. */
+export async function revokeProAction(formData: FormData): Promise<void> {
+  const { user } = await requireAdmin();
+  const orgId = requireId(formData, "orgId");
+  const userId = requireId(formData, "userId");
+
+  const result = await revokeActiveGrant(user.id, orgId);
+  if (!result.ok) redirect(`/app/admin?error=${result.reason}`);
+
+  await recordAdminAction({
+    actorId: user.id,
+    action: "pro.revoke",
+    subjectType: "user",
+    subjectId: userId,
+    reason: reasonOf(formData)
+  });
+
+  revalidatePath("/app/admin");
+  redirect("/app/admin?done=pro-revoked");
 }
 
 export async function setTicketStatusAction(formData: FormData): Promise<void> {

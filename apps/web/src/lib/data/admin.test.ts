@@ -24,6 +24,16 @@ vi.mock("./credits", () => ({ creditsAvailableFor }));
  */
 const state = vi.hoisted(() => ({
   rows: [] as unknown[],
+  /**
+   * Rows for one named table, when a test needs two tables to answer differently.
+   *
+   * `rows` alone was enough while every function under test read a single table; granting Pro reads
+   * the organization's plan *and* its existing grants, and a shared list cannot say two things.
+   * Falls back to `rows`, so every test written before this keeps working unchanged.
+   */
+  rowsFor: {} as Record<string, unknown[]>,
+  /** What PostgREST answers for one table, when a test is about a failure rather than a result. */
+  errorFor: {} as Record<string, { message: string; code: string }>,
   updates: [] as { table: string; payload: unknown }[],
   inserts: [] as { table: string; payload: unknown }[],
   /** Every filter the builder was asked for, so "in the database" can be asserted rather than hoped. */
@@ -48,8 +58,13 @@ const db = vi.hoisted(() => () => {
       return builder;
     };
     // Awaiting the builder is what PostgREST does at the end of a chain.
-    builder.then = (resolve: (value: { data: unknown; error: null }) => unknown) =>
-      resolve({ data: state.rows, error: null });
+    builder.then = (
+      resolve: (value: { data: unknown; error: { message: string; code: string } | null }) => unknown
+    ) =>
+      resolve({
+        data: state.rowsFor[table] ?? state.rows,
+        error: state.errorFor[table] ?? null
+      });
     return builder;
   };
   return { from: (table: string) => make(table) };
@@ -61,13 +76,17 @@ vi.mock("./supabase", async () => {
 
 import {
   adminAudit,
+  adminProjectFiles,
   adminProjects,
   adminReviews,
   adminTickets,
   adminUsers,
+  grantSupportPro,
   recordAdminAction,
+  revokeActiveGrant,
   setReviewPublished,
-  setTicketStatus
+  setTicketStatus,
+  setUserSuspended
 } from "./admin";
 
 const ACTOR = "actor-1";
@@ -75,6 +94,8 @@ const ACTOR = "actor-1";
 beforeEach(() => {
   vi.clearAllMocks();
   state.rows = [];
+  state.rowsFor = {};
+  state.errorFor = {};
   state.updates = [];
   state.inserts = [];
   state.calls = [];
@@ -114,6 +135,13 @@ describe("every admin read refuses a non-admin", () => {
           subjectType: "user",
           subjectId: "u1"
         })
+    ],
+    ["setUserSuspended", () => setUserSuspended(ACTOR, "u1", true)],
+    ["grantSupportPro", () => grantSupportPro(ACTOR, "org1", 30)],
+    ["revokeActiveGrant", () => revokeActiveGrant(ACTOR, "org1")],
+    [
+      "adminProjectFiles",
+      () => adminProjectFiles(ACTOR, "proj1", null, async () => [], async () => [])
     ]
   ];
 
@@ -357,5 +385,257 @@ describe("publishing a review", () => {
       ok: false,
       reason: "missing"
     });
+  });
+});
+
+describe("suspending an account (spec 164)", () => {
+  const NOW = new Date("2026-08-01T10:17:30.000Z");
+
+  it("writes the one column that enforces it", async () => {
+    profileFlags.mockImplementation(async (id: string) =>
+      id === ACTOR ? { isAdmin: true, suspendedAt: null } : { isAdmin: false, suspendedAt: null }
+    );
+
+    await expect(setUserSuspended(ACTOR, "u1", true, NOW)).resolves.toEqual({ ok: true });
+    expect(state.updates).toEqual([
+      { table: "profiles", payload: { suspended_at: "2026-08-01T10:17:30.000Z" } }
+    ]);
+  });
+
+  it("clears it on reactivation, and asks nothing about the target first", async () => {
+    // Bringing an account back is never refused — including an admin row that somehow got suspended.
+    await expect(setUserSuspended(ACTOR, "u1", false, NOW)).resolves.toEqual({ ok: true });
+    expect(state.updates).toEqual([{ table: "profiles", payload: { suspended_at: null } }]);
+  });
+
+  it("fails loudly on a database that has no suspended_at", async () => {
+    // The failure mode spec 164 exists because of: an operator who is told nothing assumes it worked.
+    // PostgREST rejects the write against its own schema cache, and that error must reach the screen
+    // rather than being swallowed the way the *read* path deliberately swallows it.
+    profileFlags.mockImplementation(async (id: string) =>
+      id === ACTOR ? { isAdmin: true, suspendedAt: null } : { isAdmin: false, suspendedAt: null }
+    );
+    state.errorFor = {
+      profiles: {
+        code: "PGRST204",
+        message: "Could not find the 'suspended_at' column of 'profiles' in the schema cache"
+      }
+    };
+
+    await expect(setUserSuspended(ACTOR, "u1", true, NOW)).rejects.toThrow(/suspended_at/);
+  });
+
+  it("refuses to suspend another operator, and writes nothing", async () => {
+    // Both of us are admins; suspending either locks the console and the way back is SQL.
+    profileFlags.mockResolvedValue({ isAdmin: true, suspendedAt: null });
+
+    await expect(setUserSuspended(ACTOR, "u2", true, NOW)).resolves.toEqual({
+      ok: false,
+      reason: "admin"
+    });
+    expect(state.updates).toEqual([]);
+  });
+});
+
+describe("Pro that support gives (spec 164)", () => {
+  const NOW = new Date("2026-08-01T00:00:00.000Z");
+
+  it("writes a plan_grants row and never touches organizations", async () => {
+    // The rule the whole design hangs on: `organizations.plan` is Stripe's, and a write there would be
+    // reconciled away by the next webhook without anyone seeing it (specs 74, 99, 100).
+    state.rowsFor = { organizations: [{ plan: "free" }], plan_grants: [] };
+
+    await expect(grantSupportPro(ACTOR, "org1", 30, NOW)).resolves.toEqual({
+      ok: true,
+      expiresAt: "2026-08-31T00:00:00.000Z"
+    });
+    expect(state.inserts).toEqual([
+      {
+        table: "plan_grants",
+        payload: {
+          organization_id: "org1",
+          source: "support",
+          duration_days: 30,
+          starts_at: "2026-08-01T00:00:00.000Z",
+          expires_at: "2026-08-31T00:00:00.000Z"
+        }
+      }
+    ]);
+    expect(state.updates.filter((u) => u.table === "organizations")).toEqual([]);
+  });
+
+  it("starts the window immediately, unlike an earned week", async () => {
+    // A referral week is written unstarted and waits behind any subscription. Support is answering
+    // someone who is on the phone now.
+    state.rowsFor = { organizations: [{ plan: "free" }], plan_grants: [] };
+
+    await grantSupportPro(ACTOR, "org1", 365, NOW);
+    expect(state.inserts[0]?.payload).toMatchObject({ starts_at: "2026-08-01T00:00:00.000Z" });
+  });
+
+  it("refuses a workspace that already pays Stripe", async () => {
+    state.rowsFor = { organizations: [{ plan: "pro" }], plan_grants: [] };
+
+    await expect(grantSupportPro(ACTOR, "org1", 30, NOW)).resolves.toEqual({
+      ok: false,
+      reason: "already-pro"
+    });
+    expect(state.inserts).toEqual([]);
+  });
+
+  it("refuses to stack a second grant on a running one", async () => {
+    state.rowsFor = {
+      organizations: [{ plan: "free" }],
+      plan_grants: [
+        {
+          organization_id: "org1",
+          source: "referral",
+          starts_at: "2026-07-30T00:00:00.000Z",
+          expires_at: "2026-08-06T00:00:00.000Z"
+        }
+      ]
+    };
+
+    await expect(grantSupportPro(ACTOR, "org1", 30, NOW)).resolves.toEqual({
+      ok: false,
+      reason: "already-granted"
+    });
+    expect(state.inserts).toEqual([]);
+  });
+
+  it("ignores an expired grant when deciding whether one is running", async () => {
+    state.rowsFor = {
+      organizations: [{ plan: "free" }],
+      plan_grants: [
+        {
+          organization_id: "org1",
+          source: "support",
+          starts_at: "2026-06-01T00:00:00.000Z",
+          expires_at: "2026-07-01T00:00:00.000Z"
+        }
+      ]
+    };
+
+    await expect(grantSupportPro(ACTOR, "org1", 30, NOW)).resolves.toMatchObject({ ok: true });
+  });
+});
+
+describe("taking Pro back (spec 164)", () => {
+  const NOW = new Date("2026-08-01T00:00:00.000Z");
+
+  it("closes the window instead of deleting the row", async () => {
+    // `plan_grants` is the record of what we gave and when. A deleted row takes the reason for a
+    // founder's lost Pro with it.
+    state.rowsFor = {
+      plan_grants: [
+        {
+          id: "g1",
+          organization_id: "org1",
+          source: "support",
+          starts_at: "2026-07-01T00:00:00.000Z",
+          expires_at: "2026-09-01T00:00:00.000Z"
+        }
+      ]
+    };
+
+    await expect(revokeActiveGrant(ACTOR, "org1", NOW)).resolves.toEqual({ ok: true });
+    expect(state.updates).toEqual([
+      { table: "plan_grants", payload: { expires_at: "2026-08-01T00:00:00.000Z" } }
+    ]);
+    expect(firstCall("plan_grants", "in")).toEqual(["id", ["g1"]]);
+  });
+
+  it("ends an earned week too — the button says remove Pro, so Pro is removed", async () => {
+    state.rowsFor = {
+      plan_grants: [
+        {
+          id: "g1",
+          organization_id: "org1",
+          source: "referral",
+          starts_at: "2026-07-01T00:00:00.000Z",
+          expires_at: "2026-09-01T00:00:00.000Z"
+        }
+      ]
+    };
+
+    await expect(revokeActiveGrant(ACTOR, "org1", NOW)).resolves.toEqual({ ok: true });
+  });
+
+  it("says so when there is nothing running, and writes nothing", async () => {
+    state.rowsFor = { plan_grants: [] };
+
+    await expect(revokeActiveGrant(ACTOR, "org1", NOW)).resolves.toEqual({
+      ok: false,
+      reason: "none-active"
+    });
+    expect(state.updates).toEqual([]);
+  });
+});
+
+describe("the files we delivered (spec 164)", () => {
+  const AIRROW = [{ path: "README.md", content: "# Hello", bytes: 7 }];
+
+  it("reads the newest completed job, never a failed one", async () => {
+    state.rowsFor = { generation_jobs: [{ id: "job2", finished_at: "2026-08-01T00:00:00.000Z" }] };
+
+    const found = await adminProjectFiles(
+      ACTOR,
+      "proj1",
+      null,
+      async () => AIRROW,
+      async () => []
+    );
+    expect(found).toMatchObject({ jobId: "job2", generatedAt: "2026-08-01T00:00:00.000Z" });
+    expect(callsOn("generation_jobs", "eq")).toContainEqual(["project_id", "proj1"]);
+    expect(callsOn("generation_jobs", "eq")).toContainEqual(["status", "completed"]);
+  });
+
+  it("says nothing was delivered when no generation has completed", async () => {
+    state.rowsFor = { generation_jobs: [] };
+
+    await expect(
+      adminProjectFiles(ACTOR, "proj1", null, async () => AIRROW, async () => [])
+    ).resolves.toBeNull();
+  });
+
+  it("lists the founder's own files as paths, and refuses to open one", async () => {
+    // We never stored their content — `import_files` holds a path, a size and a digest (spec 75).
+    state.rowsFor = { generation_jobs: [{ id: "job1", finished_at: null }] };
+
+    const found = await adminProjectFiles(
+      ACTOR,
+      "proj1",
+      "src/theirs.ts",
+      async () => AIRROW,
+      async () => [{ path: "src/theirs.ts", bytes: 400 }]
+    );
+
+    expect(found?.files).toEqual([
+      { path: "README.md", bytes: 7, origin: "airrow" },
+      { path: "src/theirs.ts", bytes: 400, origin: "yours" }
+    ]);
+    expect(found?.opened).toBeNull();
+  });
+
+  it("opens only a path it actually generated", async () => {
+    state.rowsFor = { generation_jobs: [{ id: "job1", finished_at: null }] };
+
+    const opened = await adminProjectFiles(
+      ACTOR,
+      "proj1",
+      "README.md",
+      async () => AIRROW,
+      async () => []
+    );
+    expect(opened?.opened).toEqual({ path: "README.md", content: "# Hello" });
+
+    const invented = await adminProjectFiles(
+      ACTOR,
+      "proj1",
+      "../../etc/passwd",
+      async () => AIRROW,
+      async () => []
+    );
+    expect(invented?.opened).toBeNull();
   });
 });

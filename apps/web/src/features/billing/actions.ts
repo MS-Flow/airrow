@@ -8,9 +8,11 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { distinctIdForOrg } from "@/features/analytics/events";
+import { capture } from "@/features/analytics/server";
 import { requireSession } from "@/lib/auth";
 import { getSubscription, linkStripeCustomer } from "@/lib/data/store";
-import { stripe, stripeConfigured, stripePrices } from "@/lib/stripe";
+import { stripe, stripeConfigured, stripeCouponFounding, stripePrices } from "@/lib/stripe";
 import { syncPlanFromStripe } from "./sync";
 
 export interface BillingRedirect {
@@ -23,6 +25,22 @@ const UNAVAILABLE = "Pro isn't available yet — payment isn't configured on thi
 const STRIPE_FAILED =
   "Stripe couldn't open that page just now. Nothing has been charged — try again in a moment.";
 
+const FOUNDING_GONE =
+  "The last founding place went while you were deciding. Nothing has been charged — Pro is still available at the usual rate.";
+
+/**
+ * Whether Stripe refused because the founding coupon is used up rather than because something broke.
+ *
+ * Matched on the message because that is what the SDK gives us for an invalid `discounts` parameter,
+ * and both halves are required: "coupon" alone also covers a mistyped id, which is our bug and not a
+ * sold-out offer. Getting this wrong in the safe direction shows `STRIPE_FAILED`, which is true if
+ * unhelpful; getting it wrong the other way would tell a founder the offer ended when it had not.
+ */
+function foundingExhausted(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /coupon/i.test(message) && /redemption|expired|no longer/i.test(message);
+}
+
 /**
  * A Stripe call, reported rather than thrown.
  *
@@ -33,17 +51,22 @@ const STRIPE_FAILED =
  *
  * What Stripe actually said goes to the server log, not to the founder. `No such price: ':price_…'`
  * is precisely what a developer needs and precisely what a customer cannot act on.
+ *
+ * @param explain turns a specific failure into something the founder can act on. Only Checkout has
+ * one: a maxed-out founding coupon is not an outage, and "try again in a moment" is advice that can
+ * never come true (spec 179). Everything it does not recognise still reads as a Stripe failure.
  */
 async function fromStripe(
   what: "checkout" | "billing portal",
-  create: () => Promise<{ url: string | null }>
+  create: () => Promise<{ url: string | null }>,
+  explain?: (error: unknown) => string | null
 ): Promise<BillingRedirect> {
   try {
     const { url } = await create();
     return url ? { url } : { error: `Stripe did not return a ${what} URL.` };
   } catch (error) {
     console.error(`Stripe ${what} failed:`, error instanceof Error ? error.message : error);
-    return { error: STRIPE_FAILED };
+    return { error: explain?.(error) ?? STRIPE_FAILED };
   }
 }
 
@@ -105,24 +128,44 @@ export async function startCheckoutAction(formData: FormData): Promise<BillingRe
   const price = prices.find((p) => p.interval === requested) ?? prices[0];
   if (!price) return { error: UNAVAILABLE };
 
-  // Customer creation is inside the same guard: it is a Stripe call too, and it fails the same way.
-  return fromStripe("checkout", async () => {
-    const customer = await customerFor(org.id, user.email, org.name);
-    const base = await origin();
+  // The founding discount rides on the yearly price only, and its id comes from the environment for
+  // the same reason the price id does: a coupon accepted from the form would let anyone discount
+  // their own subscription to whatever the account has lying around (spec 179).
+  const coupon = price.interval === "year" ? stripeCouponFounding() : null;
 
-    return stripe().checkout.sessions.create({
-      mode: "subscription",
-      customer,
-      line_items: [{ price: price.id, quantity: 1 }],
-      // Not straight to Settings: the return route reconciles with Stripe first, so the plan is
-      // already right when the founder lands rather than depending on the webhook having won a race.
-      success_url: `${base}/app/upgrade/return`,
-      cancel_url: `${base}/app/settings`,
-      // Repeated on the subscription because `checkout.session.completed` and the subscription events
-      // arrive separately, and the later ones carry only what the subscription itself holds.
-      subscription_data: { metadata: { organization_id: org.id } }
-    });
+  // The intent, recorded before Stripe is asked anything (spec 182). Deliberately not conditional on
+  // the call succeeding: `checkout_started → paid` is the ratio this event exists for, and an
+  // abandoned or failed checkout is exactly the case it has to be able to count.
+  capture("checkout_started", distinctIdForOrg(org.id), {
+    interval: price.interval,
+    founding: coupon !== null
   });
+
+  // Customer creation is inside the same guard: it is a Stripe call too, and it fails the same way.
+  return fromStripe(
+    "checkout",
+    async () => {
+      const customer = await customerFor(org.id, user.email, org.name);
+      const base = await origin();
+
+      return stripe().checkout.sessions.create({
+        mode: "subscription",
+        customer,
+        line_items: [{ price: price.id, quantity: 1 }],
+        // Stripe enforces `max_redemptions`, so the hundredth place is decided where two simultaneous
+        // buyers cannot both win it. Nothing here counts, so nothing here can double-sell.
+        ...(coupon ? { discounts: [{ coupon }] } : {}),
+        // Not straight to Settings: the return route reconciles with Stripe first, so the plan is
+        // already right when the founder lands rather than depending on the webhook having won a race.
+        success_url: `${base}/app/upgrade/return`,
+        cancel_url: `${base}/app/settings`,
+        // Repeated on the subscription because `checkout.session.completed` and the subscription
+        // events arrive separately, and the later ones carry only what the subscription itself holds.
+        subscription_data: { metadata: { organization_id: org.id } }
+      });
+    },
+    (error) => (coupon && foundingExhausted(error) ? FOUNDING_GONE : null)
+  );
 }
 
 /**

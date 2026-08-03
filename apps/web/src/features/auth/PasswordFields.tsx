@@ -119,7 +119,12 @@ function RevealableInput({
   );
 }
 
-export function PasswordFields() {
+/**
+ * `label` exists for the change-password screens (spec 171), where "Password" beside a *current*
+ * password field would name two different things the same. The field's `name` never moves with it —
+ * every action reads `password` and `confirmPassword`.
+ */
+export function PasswordFields({ label = "Password" }: { label?: string } = {}) {
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [score, setScore] = useState<number | null>(null);
@@ -168,10 +173,10 @@ export function PasswordFields() {
   return (
     <>
       <div>
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password">{label}</Label>
         <RevealableInput
           id="password"
-          label="Password"
+          label={label}
           inputRef={passwordRef}
           value={password}
           onChange={setPassword}

@@ -21,7 +21,9 @@ Every feature, screen, and generated file is judged against these.
 - **Preparation, and a starting point.** Airrow's hosted product generates engineering *foundations* —
   documents, rules, workflow and CI — never application code. The `/start` command it ships **inside**
   a generated repository is the deliberate exception: run explicitly by the founder, on their own
-  machine, it scaffolds the stack and then builds the product's core action — `mvpFocus` — for real,
+  machine, it installs the tools that machine is missing — git, the stack's runtime, the repo host's
+  CLI, and nothing it was not asked for, signing in to none of them — scaffolds the stack, and then
+  builds the product's core action — `mvpFocus` — for real,
   to the design in `UI_ARCHITECTURE.md`, using only information already in the repo. **The ceiling is
   `mvpFocus`, built well** — not a second feature, not a roadmap item, not a capability picked for
   later, and never a guess at the product: everything created must trace back to something the
@@ -31,7 +33,9 @@ Every feature, screen, and generated file is judged against these.
   real auth service stay out; those are the founder's first spec. Everything past `mvpFocus` goes
   through the spec loop. **`/start` is re-runnable until it succeeds, and removes itself once it
   has** — only after its own verification bar has actually passed, so an interrupted or failing run
-  always leaves the founder the command that would finish the job
+  always leaves the founder the command that would finish the job. It rewrites `START_HERE.md`'s
+  step 1 before it deletes itself, in that order, so the first file anyone opens never points at a
+  command that is no longer there
   ([spec 159](../../specs/159-ui-reference-start.md), which records the previous "re-runnable by
   design" wording). A foundation generated for a project that **already exists** ships `/cleanup`
   in its place: run the same way, it reads the codebase that is there and rewrites the foundation's
@@ -44,6 +48,11 @@ Every feature, screen, and generated file is judged against these.
   installs nothing, sends nothing anywhere, attacks nothing, and rewrites no history; its report,
   `SECURITY_AUDIT.md`, lists the holes still open and stays out of version control. Airrow runs it on
   nobody's behalf — like the other two, it runs on the founder's machine, when they ask.
+  **What `/start` installs is named, pinned and attributed** ([spec 165](../../specs/165-installable-ui-directions.md)):
+  a curated design direction is a theme on top of a **permissively licensed** library at an **exact
+  version**, never a range and never `@latest`, so the version `UI_ARCHITECTURE.md` names is the
+  version the founder got. Airrow ships the name and the command, never the library's code, and every
+  foundation that installs it carries the licence notice it owes.
   (Amended by [spec 66](../../specs/66-start-command.md), which records the previous wording, extended
   by [spec 91](../../specs/91-cleanup-command.md), amended again by
   [spec 123](../../specs/123-foundation-starts-strong.md) — which records the "bare minimum that runs"
@@ -141,8 +150,20 @@ Every feature, screen, and generated file is judged against these.
   branch is **never** PR'd to `main` or `develop`. If unsure which feature an issue branched from,
   check `git merge-base` or ask. Full model: `BRANCHING.md`.
 - **Conventional Commits**, atomic and buildable: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`,
-  `test:` (scope by feature where useful). Small PRs — one coherent slice; squash-merge with a clean
-  title.
+  `test:` (scope by feature where useful). Small PRs — one coherent slice.
+- **How a PR is merged depends on which of the three it is, and it is not a preference.**
+  `NNN-kort` → `feature/<name>` is **squashed** with a clean title: one coherent slice, and the issue
+  branch dies on merge, so there is no history left to lose. `feature/<name>` → `develop` and
+  `develop` → `main` take a **merge commit**, never a squash. A squash lands the whole branch on the
+  target as one *new* commit with no ancestry back to it — and those two branches keep living
+  afterwards, so the next merge still has the old merge-base and sees both sides as having rewritten
+  the same files independently. The result is a conflict in every file that has since diverged, and it
+  compounds: `feature/infrastructure` reached 52 commits behind with 14 add/add conflicts and spec 113
+  duplicated, and `feature/ui` hit the same wall one PR after #173 squashed it. Enforced rather than
+  remembered — `scripts/setup-branch-protection.sh` allows only `merge` on `main`/`develop`, so
+  GitHub's squash button is absent exactly where it does damage. (Amended 2026-08-03; the previous
+  wording — "squash-merge with a clean title", applied to every PR — and how to dig a branch out when it
+  has already happened are recorded in [`BRANCHING.md`](../../docs/architecture/BRANCHING.md).)
 - **Decisions are recorded.** Any decision that would cost >1 day to reverse is written down — in the
   spec that introduces it or a short note under `docs/` — with or before the implementing PR, never
   reconstructed after the fact.

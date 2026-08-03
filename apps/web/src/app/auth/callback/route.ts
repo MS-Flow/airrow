@@ -7,6 +7,7 @@
 //
 // Deliberately outside the middleware matcher — the founder has no session yet when they arrive.
 import { NextResponse, type NextRequest } from "next/server";
+import { captureSignup } from "@/features/analytics/signup";
 import { attachPendingReferral } from "@/features/referrals/attach";
 import { oauthProviderOf, providerEmailVerified } from "@/lib/auth";
 import { purgeUnverifiedSignup } from "@/lib/data/store";
@@ -53,6 +54,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // click meets, so an invitation counts here too (spec 122). `attachPendingReferral` decides for
   // itself whether this account is new enough: this route runs on every sign-in, not only the first.
   await attachPendingReferral({ id: data.user.id, createdAt: data.user.created_at });
+  // Beside the referral, on the same freshness test: this route runs on every sign-in, and only the
+  // first one is a signup (spec 182).
+  await captureSignup({ id: data.user.id, createdAt: data.user.created_at }, provider);
 
   return NextResponse.redirect(`${origin}/app`);
 }

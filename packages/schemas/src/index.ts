@@ -9,10 +9,12 @@ import {
   interviewQuestions,
   splitReferenceLinks
 } from "./questions.ts";
+import { UI_KITS } from "./ui-kits.ts";
 
 export * from "./types.ts";
 export * from "./questions.ts";
 export * from "./authoring.ts";
+export * from "./ui-kits.ts";
 
 const TEXT_MAX = 2000;
 
@@ -90,6 +92,19 @@ export const interviewAnswersSchema = z
     audience: z.enum(["b2b", "b2c", "both", "internal"]),
     coreEntities: textAnswer(ANSWER_MAX_CHARS.coreEntities),
     uiDirection: textAnswer(ANSWER_MAX_CHARS.uiDirection),
+    // Closed to the directions we ship, because it names a theme `/start` installs — an id nothing
+    // here recognises would be an install target chosen by whoever sent the request (spec 165).
+    //
+    // **Unknown ids are dropped, not rejected.** This is a *stored* answer, and a curated direction
+    // can be renamed or retired between the day it was picked and the day the project generates —
+    // `stark_technical` was, during this spec. Failing the enum then failed the whole answer set,
+    // and a founder's saved project could no longer generate at all because of a theme they had
+    // long since stopped being offered. Dropping it costs them the pick and nothing else. The
+    // closed list still does its job: nothing outside it ever reaches `uiKitFor`.
+    uiKit: z.preprocess(
+      (value) => (UI_KITS.some((k) => k.id === value) ? value : undefined),
+      z.enum(UI_KITS.map((k) => k.id) as [string, ...string[]]).optional()
+    ),
     uiReferenceLinks: referenceLinksAnswer,
     nonGoals: textAnswer(ANSWER_MAX_CHARS.nonGoals),
     tenancy: z.enum(["single_user", "organizations", "marketplace", "internal", "other"]),
@@ -253,7 +268,7 @@ export function unmetPasswordRules(value: string): PasswordRuleId[] {
  * must keep signing in, so tightening what we accept for a new password must never tighten what we accept
  * for an old one (spec 140).
  */
-const newPasswordSchema = z
+export const newPasswordSchema = z
   .string()
   .max(200)
   .superRefine((value, ctx) => {
@@ -273,6 +288,39 @@ export const signupSchema = loginSchema
     message: "The two passwords do not match.",
     path: ["confirmPassword"]
   });
+
+/**
+ * Asking for a reset link (spec 171). An address and nothing else — deliberately not `loginSchema`,
+ * which would demand a password from someone whose whole problem is not having one.
+ */
+export const passwordResetRequestSchema = loginSchema.pick({ email: true });
+
+/**
+ * Choosing a new password, from Settings or from a reset link.
+ *
+ * The **current** password is not part of it: whether it is required at all depends on how the founder
+ * arrived, and that is a server-side decision (`features/auth/credentials.ts`) rather than a field on a
+ * form. A schema that listed it would invite the reading that a present field is what authorises the
+ * change.
+ */
+export const passwordChangeSchema = z
+  .object({
+    password: newPasswordSchema,
+    confirmPassword: z.string().max(200)
+  })
+  .refine((values) => values.password === values.confirmPassword, {
+    message: "The two passwords do not match.",
+    path: ["confirmPassword"]
+  });
+
+/**
+ * Changing the login address. The current password *is* here, because this one is only ever reached with
+ * a session — an unattended one that could move the address to somebody else's inbox owns the account.
+ */
+export const emailChangeSchema = loginSchema.pick({ email: true }).extend({
+  // No `newPasswordSchema` rule: this is an existing credential being proved, not a new one being chosen.
+  currentPassword: z.string().min(1).max(200)
+});
 
 /** Validate a COMPLETE answer set: every visible question answered with a valid value. */
 export function validateCompleteAnswers(raw: unknown):

@@ -42,7 +42,7 @@ export default async function NewProject({
           <form action={createProjectAction} className="space-y-5">
             <div>
               <Label htmlFor="name">Project name</Label>
-              <Input id="name" name="name" placeholder="e.g. Loop CRM" required autoFocus maxLength={80} />
+              <Input id="name" name="name" placeholder="e.g. Pied Piper" required autoFocus maxLength={80} />
             </div>
             <div>
               <Label htmlFor="description">What does it do, and for whom?</Label>
@@ -52,7 +52,7 @@ export default async function NewProject({
                 rows={4}
                 required
                 maxLength={2000}
-                placeholder="e.g. A lightweight CRM that helps small agencies track client relationships and never miss a follow-up."
+                placeholder="e.g. A file compression platform that makes storage cheaper for anyone moving large amounts of data."
               />
             </div>
             <div className="flex justify-end">

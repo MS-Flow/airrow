@@ -32,6 +32,10 @@ const ERRORS: Record<string, string> = {
   // A confirmation link that has expired or already been used (spec 113). Ordinary, not a fault:
   // signing in resends one if the address still needs confirming.
   confirm: "That confirmation link is no longer valid. Sign in to get a new one.",
+  // The same ordinary failure, one flow over (spec 171): reset links are single-use and expire in an
+  // hour, and the fix is another link rather than anything the founder did wrong.
+  reset:
+    "That reset link is no longer valid — they can only be used once. Use “Forgot password?” to send another.",
   github: "GitHub sign-in did not complete. Try again, or sign in with your email and password.",
   // Verified by GitHub, not by us: an address nobody has proved they own is no way to identify
   // someone, and linking on it would let anyone claim an existing Airrow account (spec 67).
@@ -49,12 +53,23 @@ const ERRORS: Record<string, string> = {
   oauth: "That sign-in did not complete. Try again, or sign in with your email and password."
 };
 
+/**
+ * Why someone arrived here having just succeeded at something (spec 171).
+ *
+ * A reset ends its own session deliberately — the link is not a sign-in — so the founder lands on the
+ * sign-in screen a second after choosing a password. Without this line that reads as the reset having
+ * failed, which is the opposite of what happened.
+ */
+const STATUSES: Record<string, string> = {
+  "password-changed": "Password changed. Sign in with your new one — other devices have been signed out."
+};
+
 export default async function LoginPage({
   searchParams
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; status?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, status } = await searchParams;
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg px-6 py-16">
       <div className="w-full max-w-sm animate-slide-up">
@@ -71,13 +86,27 @@ export default async function LoginPage({
               <InlineError className="mt-4">{ERRORS[error] ?? ERRORS.invalid}</InlineError>
             ) : null}
 
+            {!error && status && STATUSES[status] ? (
+              <p className="mt-4 text-sm text-success" role="status">
+                {STATUSES[status]}
+              </p>
+            ) : null}
+
             <form action={loginAction} className="mt-6 space-y-4">
               <div>
                 <Label htmlFor="email">Email</Label>
                 <Input id="email" name="email" type="email" placeholder="you@company.com" required autoFocus />
               </div>
               <div>
-                <Label htmlFor="password">Password</Label>
+                <div className="flex items-baseline justify-between gap-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Link
+                    href="/forgot-password"
+                    className="text-xs text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
                 <Input id="password" name="password" type="password" placeholder="••••••••" required />
               </div>
               <SubmitButton className="w-full" pendingLabel="Signing in…">

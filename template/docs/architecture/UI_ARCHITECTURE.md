@@ -8,6 +8,9 @@ works from before it writes a single screen. Keep it current; a stale brief here
 ## Design direction
 {{UI_DIRECTION_SUMMARY}}
 
+## Design system
+{{UI_DESIGN_SYSTEM}}
+
 ## References
 {{UI_REFERENCES}}
 

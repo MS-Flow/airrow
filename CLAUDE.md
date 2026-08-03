@@ -62,8 +62,24 @@ passes it in.
 - External calls happen **only server-side**: the Claude API from exactly two places — the engine's
   authoring provider (`features/generation/author.ts`) and the public chat — Archer —
   (`features/chat/provider.ts`, specs 141 and 158), each with its own key so the public chat can never
-  spend generation's budget; Supabase / GitHub App / Stripe via the DataStore and server actions. Never
-  from client components; never from `packages/engine` or `packages/schemas` directly.
+  spend generation's budget; Supabase / GitHub App / Stripe via the DataStore and server actions —
+  plus one **read** that is neither, and deliberately: `features/billing/prices.ts` asks Stripe what
+  Pro costs so the landing card can name a figure, cached an hour so a public page cannot become one
+  API call per visitor (spec 179). It is called straight from the landing RSC, writes nothing, and is
+  still server-side. Never from client components; never from `packages/engine` or `packages/schemas`
+  directly.
+- **Analytics runs on both sides, and is write-only on both.** Not a new exception to §I: spec 153
+  already beacons to Vercel from a client component, because §I's rule is about the calls carrying our
+  data and our credentials — Claude, Supabase, the GitHub App. This carries neither, and can read
+  nothing. `features/analytics/` sends product events to PostHog from both sides: `server.ts` (the only
+  importer of `posthog-node`) carries `signup`, `foundation_generated`, `zip_downloaded`,
+  `checkout_started` and `paid`, so a content blocker cannot delete the bottom of the funnel;
+  `client.tsx` carries `pageview` and the interview steps, and **imports `posthog-js` dynamically after
+  the key check** — 228 kB that a deployment measuring nothing must not download. The complete list of
+  what may leave the process is `events.ts` — enforced at runtime by `sanitize`, not by convention. The browser
+  side runs `persistence: "memory"`: **no cookie, no device storage, and therefore still no consent
+  banner** (spec 153's promise, kept by spec 182). Changing that one option makes the cookie policy
+  false and a banner mandatory.
 - **Archer** is mounted from the two layouts — `app/(public)/layout.tsx` and `app/app/layout.tsx` — and
   therefore renders on every public page *and* every `/app` screen (spec 159, which lifted spec 158's
   deliberate `/app` exclusion). Pages never import `ChatWidget` themselves. When it cannot answer, or
@@ -85,14 +101,29 @@ passes it in.
   user's scope-less OAuth identity. Never user PATs, and no repo credential is persisted.
 - **Product:** Airrow generates engineering *foundations* — never application code from our servers.
   The one exception is the `/start` command shipped **inside** a generated repo: the founder runs it
-  on their own machine, and it builds the product's core action (`mvpFocus`) for real, to the design in
-  `UI_ARCHITECTURE.md` — that is the ceiling, not a second feature, and everything past it goes
-  through the spec loop (spec 66, amended by spec 123). `/start` **removes itself** once its own
-  verification bar has passed; a failed or partial run leaves it in place (spec 159). An **imported**
+  on their own machine, where it installs the tools that machine lacks (git, the stack's runtime, the
+  repo host's CLI — signing in to none of them) and builds the product's core action (`mvpFocus`) for
+  real, to the design in `UI_ARCHITECTURE.md` — that is the ceiling, not a second feature, and
+  everything past it goes
+  through the spec loop (spec 66, amended by spec 123). `/start` rewrites `START_HERE.md`'s step 1 and
+  then **removes itself**, once its own verification bar has passed — in that order; a failed or
+  partial run leaves both untouched (spec 159). An **imported**
   project gets `/cleanup` in its place (spec 91): it reads the existing codebase and rewrites the
   foundation's documents to match, changes no code and deletes nothing — including itself. Exactly one
   of the two ships, decided by the project's origin. ZIP delivery must always work with no integration
   connected.
+- **Curated UI directions are a visual language, never a layout (spec 165).** Each of the three
+  directions on the design question points at a **theme** — palette, type, corner, spacing, surface,
+  motion — that `/start` installs on top of shadcn/ui at an **exact pinned version**, never `@latest`.
+  It installs **no screens and no layout blocks**: what is on a screen, and how someone moves between
+  screens, comes from the founder's own answers, and a picked picture must never outrank them. The
+  interview shows each direction as a *specimen* of the look, drawn from that same record (or a real
+  capture of it — `pnpm capture:ui-kits`), so the picture cannot drift from what gets installed. The
+  pick is **stored** (`uiKit`), not derived from the prose: editing the words must not cancel an
+  install. `UI_ARCHITECTURE.md` names the theme, version and licence, and every foundation that
+  installs the library ships `THIRD_PARTY_NOTICES.md` — a custom stack and an imported project
+  install nothing and get neither. Only permissive licences may be installed
+  (`PERMISSIVE_LICENCES`); a weekly workflow reports a stale pin and never bumps one.
 - **UI references:** the interview's design question accepts links and uploaded screenshots (spec 159).
   Links are an ordinary answer and are **never fetched**; images live in the private `ui-references`
   bucket with an org-scoped row each, are read only by the authoring provider's UI call, and never
@@ -108,4 +139,12 @@ passes it in.
   Pro can also be **earned**: inviting someone who then generates their first foundation is worth a
   week, capped at three per workspace. That week is a `plan_grants` row, never `organizations.plan` —
   the entitlement is resolved as *the plan or an active grant*, and only `claimAllowance` and the
-  import gate may start one, so a screen that merely reports never spends it. Spec 122.
+  import gate may **start a queued one**, so a screen that merely reports never spends it. Spec 122.
+  Support can also **give** Pro from the admin console for a fixed 30, 90 or 365 days (spec 164): a
+  `plan_grants` row with `source = 'support'`, written already-started so it never queues behind
+  anything, refused when Stripe is already paying, and ended by closing its window rather than deleting
+  it. Still never `organizations.plan` — a write there would be reconciled away by the next webhook.
+  The public card and `/app/upgrade` show the founding rate **beside the list price it discounts from**,
+  struck through (spec 182, narrowing spec 179's rule that the list price must never appear: the figure
+  presented as payable is still always the founding one). Both come from Stripe; when the list price
+  cannot be read the founding figure renders alone.

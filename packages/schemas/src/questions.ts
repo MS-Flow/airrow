@@ -1,9 +1,9 @@
 // Declarative interview schema v1. Pure data + pure evaluator — no runtime deps.
 // This is the single source of truth for the interview UI and engine resolution.
 
-import type { Framework, InterviewAnswers, ProductType } from "./types.ts";
+import type { AnswerId, Framework, InterviewAnswers, ProductType } from "./types.ts";
 
-export const INTERVIEW_SCHEMA_VERSION = "4";
+export const INTERVIEW_SCHEMA_VERSION = "5";
 
 export interface QuestionOption {
   value: string;
@@ -17,11 +17,36 @@ export interface QuestionOption {
    */
   prefill?: string;
   /**
+   * Picking this option is how the founder asks to show us instead (spec 165).
+   *
+   * On a question that takes `references`, this is the one that reveals them. It is a property of the
+   * option rather than a hardcoded id because it is a *role* — "the escape from the five" — and the
+   * five may change without that role moving.
+   */
+  opensReferences?: boolean;
+  /**
    * The golden path for this question, when it is the same one for everybody. Where the answer
    * depends on an earlier one, use `Question.suggest` instead — never both.
    */
   recommended?: boolean;
 }
+
+/**
+ * An answer that belongs to a question without being one, keyed by its owning question.
+ *
+ * Two of them, and both belong to the design question — which is now the *only* UI question there
+ * is. `uiKit` records which curated direction was picked; `uiReferenceLinks` holds the products the
+ * founder pointed at. Neither is a screen of its own: everything about how this product should look
+ * is asked once, in one place.
+ *
+ * They still have to be pruned when their owner disappears, which is what this map is for:
+ * `pruneHiddenAnswers` walks the questions, so an answer no question claims would otherwise be
+ * dropped on every save.
+ */
+export const SATELLITE_ANSWERS: Partial<Record<AnswerId, AnswerId>> = {
+  uiKit: "uiDirection",
+  uiReferenceLinks: "uiDirection"
+};
 
 export interface Condition {
   questionId: keyof InterviewAnswers;
@@ -48,18 +73,26 @@ export interface Question {
   title: string;
   help?: string;
   /**
-   * Two types beyond the original three, both added by spec 159.
+   * One type beyond the original three, added by spec 159 and widened by spec 165.
    *
    * `guided_text` is one free-text answer with starting points above it: picking one writes its words
    * into the field, where the founder edits or extends them. It is not a choice *and* a text answer —
    * it is a text answer the founder does not have to start from nothing, which is why there is one
    * answer at the end of it and not two.
    *
-   * `references` is a text answer with a screen of its own: the founder's links live in the answer,
-   * and the images they upload beside it live in the database — bytes never belong in an answer
-   * object that is rewritten on every keystroke and replayed into a guest's `localStorage`.
+   * Spec 159's `references` type is gone: its one question folded into the design question rather
+   * than sitting on the screen after it (see `references` below).
    */
-  type: "single" | "multi" | "text" | "guided_text" | "references";
+  type: "single" | "multi" | "text" | "guided_text";
+  /**
+   * This question also takes references — pasted links and, for a signed-in founder, screenshots.
+   *
+   * A flag rather than a question type, because references are not what is being asked: they are a
+   * second way of answering the question already on the screen. The links land in
+   * `uiReferenceLinks` and the images in `ui_references`, exactly as they did when this was a screen
+   * of its own — bytes never belong in an answer object rewritten on every keystroke (spec 159).
+   */
+  references?: boolean;
   options?: QuestionOption[];
   placeholder?: string;
   required: boolean;
@@ -80,7 +113,9 @@ export interface Question {
  */
 export const ANSWER_MAX_CHARS = {
   problem: 400,
-  vision: 300,
+  // Raised from 300 when this question absorbed the MVP focus (spec 165): it now carries two
+  // answers, and a cap sized for one of them would have cut the second off mid-sentence.
+  vision: 500,
   mvpFocus: 300,
   coreEntities: 600,
   uiDirection: 500,
@@ -222,7 +257,7 @@ export const interviewQuestions: Question[] = [
     required: true,
     showIf: [{ questionId: "productType", in: ["other"] }],
     maxChars: ANSWER_MAX_CHARS.productTypeOther,
-    placeholder: "e.g. A turn-based strategy game for two players, running in the browser."
+    placeholder: "e.g. A compression library other people's products embed, plus the service that meters it."
   },
   {
     // Asked first among the written answers, and asked separately from the vision: without it every
@@ -235,34 +270,24 @@ export const interviewQuestions: Question[] = [
     required: true,
     maxChars: ANSWER_MAX_CHARS.problem,
     placeholder:
-      "e.g. Independent property managers track applications across email and spreadsheets, so good tenants go days without an answer and get lost to bigger agencies."
+      "e.g. Teams moving large media libraries pay for storage they never look at, and every tool that promises to shrink it either mangles the files or takes a week to run."
   },
   {
+    // Two questions in one, and the pairing is the point: the first thing it must do is only
+    // meaningful next to where it is going, and a founder answering them on consecutive screens
+    // wrote the same sentence twice (spec 165). `mvpFocus` is no longer asked and its **field
+    // stays** — the `nonGoals` treatment from spec 159, for a stronger reason: it is `/start`'s
+    // ceiling in the constitution and appears in six generated documents, so removing the field
+    // would be a constitution change rather than one fewer question. Readers of it fall back to
+    // this answer (`coreAction`), and an import analysis can still derive one.
     id: "vision",
-    title: "Where is this heading long-term?",
-    help: "One sentence on what it becomes if it succeeds. Your AI assistants build toward this.",
+    title: "What must it do first, and where is it heading?",
+    help: "The one thing it has to do to be useful at all — then, in a sentence, what it becomes if it works. Your AI assistants build the first and aim at the second.",
     type: "text",
     required: true,
     maxChars: ANSWER_MAX_CHARS.vision,
-    placeholder: "e.g. The default operating system for independent property managers."
-  },
-  {
-    id: "mvpFocus",
-    title: "What's the first thing it needs to do?",
-    help: "The one core action of the MVP — this drives your roadmap and first specs. One sentence.",
-    type: "text",
-    required: true,
-    maxChars: ANSWER_MAX_CHARS.mvpFocus,
-    placeholder: "e.g. Let a property manager create a listing and receive tenant applications online."
-  },
-  {
-    id: "coreEntities",
-    title: "What are the core objects in your product?",
-    help: "The 3–7 most important things and how they relate. Skip it if you're not sure yet — you can fill it in later.",
-    type: "text",
-    required: false,
-    maxChars: ANSWER_MAX_CHARS.coreEntities,
-    placeholder: "e.g. Landlords own Properties; a Property has many Listings; a Listing receives Applications from Tenants."
+    placeholder:
+      "e.g. Let someone drop in a folder and get it back materially smaller, losslessly, in minutes. Long-term, the compression layer everything else quietly runs on."
   },
   {
     // Two readers: the founder, who wants to know what their product looks like, and the assistant
@@ -275,70 +300,62 @@ export const interviewQuestions: Question[] = [
     // themselves into this field instead: pick one and it is your sentence, to edit or extend or
     // delete. What comes out is one answer, in the founder's own words, whether or not they started
     // from ours.
+    //
+    // And as of spec 165 a picked direction is more than words: each one points at a real theme,
+    // pinned, that `/start` installs. What it is *not* is a layout. The picture is a specimen of the
+    // look — colour, type, corner, spacing — and the screens themselves come from what the founder
+    // wrote about their product. A picked picture that decided the navigation would be a template
+    // overruling the answers, which is the opposite of the point.
+    //
+    // Everything about how this product should look is now asked here and nowhere else: the
+    // references screen spec 159 gave its own question folded back in, so a founder answers the
+    // design question once instead of being asked about the same subject on two consecutive screens
+    // (spec 165). `uiReferenceLinks` is still an answer — it is simply no longer a question.
     id: "uiDirection",
     title: "How should it look and feel?",
-    help: "Layout, tone, the screens that matter most, how someone moves through it. This becomes docs/architecture/UI_ARCHITECTURE.md — the design brief your AI assistant builds the first version from. Change it any time; it's a starting point, not a lock-in.",
+    help: "Pick the palette and type you like — that theme gets installed, so your first screen looks like it from day one. The screens themselves are built from what you write below, not from the picture.",
     type: "guided_text",
     required: false,
+    references: true,
     maxChars: ANSWER_MAX_CHARS.uiDirection,
     placeholder:
-      "e.g. Calm and uncluttered — a sidebar of properties, a single detail view per listing, dense tables over cards. Dark mode first. The applications inbox is the screen a property manager lives in.",
+      "e.g. Calm and uncluttered. The screen someone lives in is the job list — everything else is secondary. Dark mode matters; our users are engineers and they work late.",
     options: [
       {
-        value: "calm_focused",
-        label: "Calm & focused",
-        description: "Generous space, few colours, one clear action per screen. Reads quiet and expensive.",
+        value: "soft_minimal",
+        label: "Soft minimal",
+        description: "Warm off-white, deep green, a lot of air.",
         prefill:
-          "Calm and focused: generous whitespace, a restrained palette of one accent against neutrals, and one clear action per screen. Type is quiet and consistent, borders do the separating rather than shadows, and nothing moves unless something changed."
+          "Soft and minimal: a warm off-white ground, near-black text and one deep accent. Generous whitespace, hairline borders rather than shadows, and a large wordmark that leads every page. One typeface, with size and weight doing all the work. Almost nothing moves."
       },
       {
-        value: "dense_operational",
-        label: "Dense & operational",
-        description: "Tables over cards, keyboard-first, a lot of information at once. For people who live in it all day.",
+        value: "bold_contrast",
+        label: "Bold contrast",
+        description: "Near-black, soft red, oversized type. Looks new.",
         prefill:
-          "Dense and operational: tables over cards, tight row heights, and as much of the working set on screen at once as stays readable. Keyboard paths for anything done more than twice, and colour reserved for status rather than decoration."
+          "Bold and high-contrast: a near-black ground with one soft red accent, dark by default. Oversized headings against small quiet body text, flat surfaces separated by colour rather than borders, and monospace for anything technical. Motion is short and deliberate."
       },
       {
-        value: "bright_editorial",
-        label: "Bright & editorial",
-        description: "Large type, strong headings, plenty of contrast. The screen reads like a well-set page.",
-        prefill:
-          "Bright and editorial: large headings, strong vertical rhythm, and high contrast between sections. Generous line length for reading, images given room, and a clear typographic hierarchy doing the work navigation would otherwise do."
-      },
-      {
-        value: "warm_consumer",
-        label: "Warm & consumer",
-        description: "Rounded shapes, soft colour, friendly copy. For someone who did not come here to work.",
-        prefill:
-          "Warm and consumer: rounded shapes, soft colour, and copy that speaks plainly. Larger touch targets than a desktop tool needs, colour where a work tool would leave blank space, and a light default theme."
-      },
-      {
-        value: "stark_technical",
+        value: "stark_terminal",
         label: "Stark & technical",
-        description: "Monospace accents, high contrast, no decoration. For a developer audience.",
+        description: "Near-black, phosphor green, monospace accents. Terminal feeling.",
         prefill:
-          "Stark and technical: high contrast, monospace for anything a developer would copy, and no decoration that is not carrying information. Dense by default, dark-mode first, and precise about states."
+          "Stark and technical, like a terminal: a near-black ground with one phosphor-green accent, monospace everywhere at one size and one weight, and colour as the only emphasis. Sharp corners, single-pixel outlines instead of shadows, and no marketing voice — the output is the headline. A cursor blinks; nothing else moves."
       },
       {
-        // No prefill, and that is the option: an empty field, and a brief written from nothing but
-        // what the founder types into it.
-        value: "describe_myself",
-        label: "None of these — my own words",
-        description: "The brief is written from what you write, and from nothing else."
+        // The sixth option, and the only one that installs nothing: no prefill, no theme, no blocks.
+        //
+        // It used to read "None of these — my own words", which named the *absence* of a choice and
+        // then left the founder in front of an empty box. What someone who rejects five pictures
+        // actually wants is to show us the one they had in mind, so this option now opens the way to
+        // do that — the link field and the upload, which is where the references screen went when it
+        // folded into this question (spec 165).
+        value: "show_instead",
+        label: "None of these — I'll show you",
+        description: "Paste a link, or upload a screenshot. Nothing is installed.",
+        opensReferences: true
       }
     ]
-  },
-  {
-    // One screen, two kinds of reference (spec 159). The links are this answer; the images the
-    // founder uploads beside them are rows in `ui_references`, because bytes have no business in an
-    // answer object. Optional in the real sense — `firstUnanswered` skips it when it is empty.
-    id: "uiReferenceLinks",
-    title: "Anything you can show us?",
-    help: `Products whose look you like, and screenshots of them — read as direction, never as something to copy. At most ${MAX_UI_REFERENCE_LINKS} links and ${MAX_UI_REFERENCE_IMAGES} images.`,
-    type: "references",
-    required: false,
-    maxChars: ANSWER_MAX_CHARS.uiReferenceLinks,
-    placeholder: "linear.app  stripe.com/dashboard"
   },
   {
     id: "tenancy",
@@ -370,7 +387,7 @@ export const interviewQuestions: Question[] = [
     showIf: [{ questionId: "tenancy", in: ["other"] }],
     maxChars: ANSWER_MAX_CHARS.tenancyOther,
     placeholder:
-      "e.g. Each clinic is a tenant, but a patient record can be shared with a second clinic for a referral, for a fixed period."
+      "e.g. Each team is a tenant, but a library can be shared read-only with an outside reviewer for a fixed period."
   },
   {
     id: "authModel",
@@ -418,7 +435,7 @@ export const interviewQuestions: Question[] = [
     required: true,
     showIf: [{ questionId: "capabilities", in: ["other"] }],
     maxChars: ANSWER_MAX_CHARS.capabilitiesOther,
-    placeholder: "e.g. Offline sync — the field app has to keep working with no signal and reconcile later."
+    placeholder: "e.g. A public benchmark page — every run scored, so the ratio is something anyone can check."
   },
   {
     id: "aiUsage",
@@ -436,14 +453,17 @@ export const interviewQuestions: Question[] = [
     ]
   },
   {
-    id: "integrations",
-    title: "Which external systems will you integrate?",
-    help: "Name the services you already know you'll connect. Skip if none yet.",
+    // Asked here rather than up with the product questions, because half of it is about the
+    // capabilities just chosen: a founder who has this moment ticked payments and email knows what
+    // they are connecting to, and asking before that made them guess at a list they had not seen.
+    id: "coreEntities",
+    title: "What are the core pages, and what does it connect to?",
+    help: "The 3–7 screens someone actually moves between, and what each one is for — plus any service you already know you'll connect for the capabilities you just picked. Skip it if you're not sure yet; you can fill it in later.",
     type: "text",
     required: false,
-    showIf: [{ questionId: "capabilities", in: ["payments", "email", "notifications", "analytics", "ai"] }],
-    maxChars: ANSWER_MAX_CHARS.integrations,
-    placeholder: "e.g. Stripe for billing, Resend for email, Slack for alerts, HubSpot for CRM."
+    maxChars: ANSWER_MAX_CHARS.coreEntities,
+    placeholder:
+      "e.g. A dashboard listing your libraries; a library page holding its files; a file page showing each job and the ratio achieved. Stripe for billing, Resend for the finished-job email."
   },
   {
     // Every stack question states what it *changes* in the output, not just what it means. A founder
@@ -640,11 +660,18 @@ export function visibleQuestions(answers: InterviewAnswers): Question[] {
 /** Drop answers belonging to questions that are no longer visible. */
 export function pruneHiddenAnswers(answers: InterviewAnswers): InterviewAnswers {
   const pruned: InterviewAnswers = {};
+  const visible = new Set<AnswerId>();
   for (const q of interviewQuestions) {
-    if (isQuestionVisible(q, answers)) {
-      const v = answers[q.id];
-      if (v !== undefined) (pruned as Record<string, unknown>)[q.id] = v;
-    }
+    if (!isQuestionVisible(q, answers)) continue;
+    visible.add(q.id);
+    const v = answers[q.id];
+    if (v !== undefined) (pruned as Record<string, unknown>)[q.id] = v;
+  }
+  // An answer set by a question rather than *as* one survives exactly as long as that question does.
+  for (const [satellite, owner] of Object.entries(SATELLITE_ANSWERS)) {
+    if (owner === undefined || !visible.has(owner)) continue;
+    const v = answers[satellite as AnswerId];
+    if (v !== undefined) (pruned as Record<string, unknown>)[satellite] = v;
   }
   return pruned;
 }

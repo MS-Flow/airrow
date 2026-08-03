@@ -32,6 +32,7 @@ import {
   WHY_SDD,
   type DeliverableIcon
 } from "@/features/landing/copy";
+import { readPricing, savingFrom } from "@/features/billing/prices";
 import { readFoundation } from "@/features/landing/foundation";
 import { proCtaHref } from "@/features/landing/pro-cta";
 import { startCtaHref } from "@/features/landing/start-cta";
@@ -77,6 +78,13 @@ export default async function Landing() {
       })
     : null;
   const proHref = proCtaHref(allowance);
+  // What Pro costs, from Stripe (spec 179). Cached for an hour, so this is one call per deployment
+  // per hour rather than one per visitor. Returns nothing to show when Stripe is unconfigured or
+  // unreachable, and the card draws itself without an amount rather than failing.
+  const { prices, founding } = await readPricing();
+  const monthly = prices.find((p) => p.interval === "month");
+  // The figure to strike through beside the founding one, or nothing to show (spec 182).
+  const saving = savingFrom(founding);
 
   return (
     <div className="min-h-screen bg-bg">
@@ -234,15 +242,66 @@ export default async function Landing() {
 
             {/* Solid, not dashed, and no "coming soon" badge: Pro is purchasable (spec 99), and a
                 pricing section that says otherwise is the one screen whose whole job is to be
-                believed. The card carries no figure — the amount lives in Stripe so it can change
-                without a deploy, and duplicating it here is what that decision avoided. */}
+                believed. The figure is read from Stripe rather than written here (spec 179), so the
+                amount still lives in one place and the card still names it. When Stripe cannot be
+                asked, the amount line is absent rather than filled with a placeholder. */}
             <Card>
               <CardBody className="p-8">
-                <p className="text-sm font-medium text-fg-muted">{SECTIONS.pricing.pro.name}</p>
-                <p className="mt-2 text-3xl font-semibold tracking-tight text-fg">
-                  {SECTIONS.pricing.pro.amount}
-                </p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-fg-muted">{SECTIONS.pricing.pro.name}</p>
+                  {founding && founding.remaining > 0 ? (
+                    <Badge tone="accent">{SECTIONS.pricing.pro.founding.badge}</Badge>
+                  ) : null}
+                </div>
+                {monthly ? (
+                  <p className="mt-2 text-3xl font-semibold tracking-tight text-fg">
+                    {monthly.amount}
+                    <span className="ml-1.5 text-base font-normal text-fg-muted">
+                      {SECTIONS.pricing.pro.perMonth}
+                    </span>
+                  </p>
+                ) : null}
                 <p className="mt-2 text-base text-fg-muted">{SECTIONS.pricing.pro.note}</p>
+                {founding ? (
+                  <div className="mt-4 rounded-lg border border-border bg-surface-raised p-4">
+                    {founding.remaining > 0 ? (
+                      <>
+                        <p className="text-sm font-medium text-fg">
+                          {SECTIONS.pricing.pro.founding.seatsLeft(
+                            founding.remaining,
+                            founding.total
+                          )}
+                          {/* Both figures, and which is which is never in doubt: the list price is
+                              struck through and dimmed, the founding price is the one in the
+                              sentence. Spec 179 carried only the second, which made the offer read
+                              as a price rather than as a discount; spec 182 shows the saving without
+                              changing what is charged. When the list price cannot be read, this
+                              renders exactly as it did before — the founding figure, alone. */}
+                          {founding.amount ? (
+                            <>
+                              {" at "}
+                              {saving ? (
+                                <span className="font-normal text-fg-faint line-through">
+                                  <span className="sr-only">Usual price </span>
+                                  {saving}
+                                </span>
+                              ) : null}
+                              {saving ? " " : ""}
+                              {founding.amount} {SECTIONS.pricing.pro.perYear}
+                            </>
+                          ) : null}
+                        </p>
+                        <p className="mt-1 text-sm text-fg-muted">
+                          {SECTIONS.pricing.pro.founding.promise}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-fg-muted">
+                        {SECTIONS.pricing.pro.founding.soldOut}
+                      </p>
+                    )}
+                  </div>
+                ) : null}
                 <ul className="mt-7 grid gap-3">
                   {PRO_INCLUDED.map((item) => (
                     <li key={item} className="flex items-start gap-2.5 text-base text-fg-muted">

@@ -22,8 +22,18 @@ vi.mock("@/lib/auth", () => ({
     org: { id: "o1", name: "Ada's workspace", kind: "personal", plan: plan.current }
   }),
   githubIdentity: async () => identity.current,
-  updateName: vi.fn()
+  updateName: vi.fn(),
+  // Which shape the credential cards take (spec 171): an account with a password is the ordinary case,
+  // and `Settings — credentials` below flips it.
+  hasPassword: async () => accountHasPassword.current
 }));
+const accountHasPassword = vi.hoisted((): { current: boolean } => ({ current: true }));
+vi.mock("@/features/auth/credentials", () => ({
+  changePasswordAction: vi.fn(),
+  changeEmailAction: vi.fn(),
+  sendPasswordSetupAction: vi.fn()
+}));
+vi.mock("@/features/auth/PasswordFields", () => ({ PasswordFields: () => null }));
 const customer = vi.hoisted((): { current: unknown } => ({ current: null }));
 vi.mock("@/features/billing/sync", () => ({
   // When to re-ask Stripe is `sync.test.ts`'s subject. Here the page is what is under test, so it is
@@ -33,6 +43,13 @@ vi.mock("@/features/billing/sync", () => ({
 vi.mock("@/lib/stripe", () => ({
   stripeConfigured: () => true,
   stripePrices: () => [{ id: "price_monthly", interval: "month" }]
+}));
+// The figures on the upgrade buttons come from Stripe (spec 179). What they say is
+// `prices.test.ts`'s and the upgrade screen's subject; here the page is under test, so it is handed
+// an answer rather than reaching for a Stripe client and a request-scoped cache that do not exist.
+vi.mock("@/features/billing/prices", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  readPricing: async () => ({ prices: [{ interval: "month", amount: "$11.99" }], founding: null })
 }));
 vi.mock("@/lib/theme", () => ({ readTheme: async () => "dark" }));
 vi.mock("@/features/generation/allowance", () => ({
@@ -85,8 +102,9 @@ vi.mock("@/lib/site-url", () => ({ requestOrigin: async () => "https://airrow.te
 
 import SettingsPage from "./page";
 
-const settings = (searchParams: { saved?: string; upgraded?: string } = {}) =>
-  SettingsPage({ searchParams: Promise.resolve(searchParams) });
+const settings = (
+  searchParams: { saved?: string; upgraded?: string; error?: string; status?: string } = {}
+) => SettingsPage({ searchParams: Promise.resolve(searchParams) });
 
 // A founder came back from Checkout, money had left their account, and Settings said "You're on Pro"
 // directly above "Free · 0 of 1 foundation left". Both sentences came from the same page and only one
@@ -275,5 +293,60 @@ describe("Settings — GitHub account", () => {
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     expect(screen.getByText("Connected")).toBeInTheDocument();
     expect(screen.getByText("Not set up")).toBeInTheDocument();
+  });
+});
+
+// The credentials a founder signs in with (spec 171). Before this they were one disabled input under
+// "managed by your account sign-in", which was true of nothing except our own missing screen.
+describe("Settings — credentials", () => {
+  it("offers to change the password, asking for the current one", async () => {
+    accountHasPassword.current = true;
+    render(await settings());
+
+    expect(screen.getByLabelText(/current password/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /change password/i })).toBeInTheDocument();
+  });
+
+  it("offers to change the login address, and says the change waits for the new inbox", async () => {
+    accountHasPassword.current = true;
+    render(await settings());
+
+    expect(screen.getByLabelText(/new email/i)).toBeInTheDocument();
+    expect(screen.getByText(/your login stays/i)).toBeInTheDocument();
+    // Its own wording, so nobody navigating by label has to guess which of the two password boxes on
+    // this page they have landed in.
+    expect(screen.getByLabelText(/confirm with your password/i)).toBeInTheDocument();
+  });
+
+  // A GitHub- or Google-only account has no password, so a "current password" field would be asking for
+  // something that does not exist.
+  it("offers a provider-only account a link to set a password instead of a field it cannot fill", async () => {
+    accountHasPassword.current = false;
+    render(await settings());
+
+    expect(screen.queryByLabelText(/current password/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /email me a link to set one/i })).toBeInTheDocument();
+    expect(screen.getByText(/set a password first/i)).toBeInTheDocument();
+  });
+
+  /*
+   * Both cards read the same query string, so an answer meant for one of them used to render under the
+   * other as well — "open the link we sent to the new address" appeared above the password form, which is
+   * two instructions for one action. Each card now renders only the keys its own action redirects with.
+   */
+  it("reports an email change under the email card, and nowhere else", async () => {
+    accountHasPassword.current = true;
+    render(await settings({ status: "email-sent" }));
+
+    expect(screen.getByText(/open the link we sent to the new address/i)).toBeInTheDocument();
+  });
+
+  it("names the reason a change was refused, once", async () => {
+    accountHasPassword.current = true;
+    render(await settings({ error: "wrong-password" }));
+
+    const alerts = screen.getAllByRole("alert");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]?.textContent).toMatch(/not your current password/i);
   });
 });

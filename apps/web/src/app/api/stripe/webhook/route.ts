@@ -18,10 +18,12 @@ import type Stripe from "stripe";
 import {
   applySubscriptionState,
   claimStripeEvent,
+  getSubscription,
   orgForStripeCustomer,
   releaseStripeEvent,
   type SubscriptionState
 } from "@/lib/data/store";
+import { capturePaid } from "@/features/billing/paid";
 import {
   stripeCustomerId as customerId,
   toSubscriptionState as toState
@@ -34,12 +36,26 @@ export const runtime = "nodejs";
 /**
  * What a single event means for the organization, or null when it means nothing.
  *
+ * The subscription travels back beside the state it produced, because two things are decided from it
+ * and only one of them is the plan: `paid` also needs to know whether this was monthly, yearly or a
+ * founding place, and that is on the subscription rather than in the row we store (spec 182).
+ *
  * `invoice.payment_failed` is deliberately absent. Stripe retries a failed charge for days and moves
  * the subscription to `past_due` itself, which arrives as `subscription.updated` and which
  * `planForStatus` keeps on Pro. Downgrading on the first failed charge would cut off a founder whose
  * card expired before Stripe has finished trying — or emailed them.
  */
-async function stateFor(event: Stripe.Event): Promise<SubscriptionState | null> {
+interface Applied {
+  state: SubscriptionState;
+  subscription: Stripe.Subscription;
+}
+
+function applied(subscription: Stripe.Subscription): Applied | null {
+  const state = toState(subscription);
+  return state ? { state, subscription } : null;
+}
+
+async function stateFor(event: Stripe.Event): Promise<Applied | null> {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object;
@@ -51,13 +67,13 @@ async function stateFor(event: Stripe.Event): Promise<SubscriptionState | null> 
       const id =
         typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
       if (!id) return null;
-      return toState(await stripe().subscriptions.retrieve(id));
+      return applied(await stripe().subscriptions.retrieve(id));
     }
 
     case "customer.subscription.created":
     case "customer.subscription.updated":
     case "customer.subscription.deleted":
-      return toState(event.data.object);
+      return applied(event.data.object);
 
     default:
       // Stripe sends far more than we asked for, and new types appear without warning. An unknown
@@ -94,15 +110,20 @@ export async function POST(req: Request) {
   // Stripe's retry is a real second attempt rather than a no-op. Without this, one transient
   // database error turns a paid upgrade into a founder who is silently still on free.
   try {
-    const state = await stateFor(event);
-    if (!state) return NextResponse.json({ received: true, applied: false });
+    const outcome = await stateFor(event);
+    if (!outcome) return NextResponse.json({ received: true, applied: false });
+    const { state, subscription } = outcome;
 
     // Scoped by the customer the payment belongs to. There is no session here — this lookup *is*
     // the authorization, and an unknown customer changes nothing.
     const orgId = await orgForStripeCustomer(state.customerId);
     if (!orgId) return NextResponse.json({ received: true, applied: false });
 
+    // Read before the write, so `paid` can tell a new customer from a renewal or a redelivery — the
+    // difference between a funnel and a count of Stripe's traffic (spec 182).
+    const previous = await getSubscription(orgId);
     await applySubscriptionState(orgId, state);
+    capturePaid(orgId, previous, state, subscription);
     return NextResponse.json({ received: true, applied: true });
   } catch (error) {
     await releaseStripeEvent(event.id);

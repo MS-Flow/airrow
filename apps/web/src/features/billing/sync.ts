@@ -21,6 +21,7 @@ import {
   type SubscriptionRecord
 } from "@/lib/data/store";
 import { stripe, stripeConfigured } from "@/lib/stripe";
+import { capturePaid } from "./paid";
 import { decisiveSubscription, toSubscriptionState } from "./subscription-state";
 
 /**
@@ -98,6 +99,9 @@ export async function syncPlanFromStripe(orgId: string): Promise<PlanSync> {
     if (!state) return "unknown";
 
     await applySubscriptionState(orgId, state);
+    // `record` is the row as it stood before the write, which is what makes this a transition rather
+    // than a repeat: a founder who opens Settings twice pays once (spec 182).
+    capturePaid(orgId, record, state, subscription);
     return state.plan;
   } catch (error) {
     // Logged, not surfaced: the caller falls back to whatever the database already said, which is the

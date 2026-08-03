@@ -25,9 +25,14 @@
               blocked, it degrades to a styled "Airrow" wordmark — which is exactly what stood here
               before the logo existed, so nothing is lost in the common case.
 
+              The mark alone, not the lockup: at the size a mail client gives a header the wordmark
+              becomes unreadable, and the alt text already says "Airrow" when images are blocked.
+              Derived from `apps/web/src/app/icon.png` but kept as its own file under `public/brand/`
+              — the app icon is served by Next's own convention on a hashed URL, which an email
+              cannot rely on staying put.
+
               width/height as attributes as well as CSS because Outlook ignores the CSS. Served at 2x
-              (240x64 for a 120x32 slot) from the production domain, dedicated to email at 5 KB
-              rather than the 664 KB app asset.
+              (80x75 for a 40x38 slot) and 7 KB, rather than the 548 KB app asset.
 
               A new asset here is only reachable once it has merged all the way to `main` — that is
               what airrow.app serves. Until then every email sent renders the alt text instead, with
@@ -35,9 +40,9 @@
               extend to "and is deployed" without a network call. Add the image and send the mail in
               that order, not the reverse.
             -->
-            <img src="https://airrow.app/brand/airrow-lockup-email.png"
-                 alt="Airrow" width="120" height="32"
-                 style="display:block;border:0;width:120px;height:32px;font-size:15px;font-weight:600;letter-spacing:-0.01em;color:#fafafa;text-decoration:none;">
+            <img src="https://airrow.app/brand/airrow-mark-email.png"
+                 alt="Airrow" width="40" height="38"
+                 style="display:block;border:0;width:40px;height:38px;font-size:15px;font-weight:600;letter-spacing:-0.01em;color:#fafafa;text-decoration:none;">
           </td>
         </tr>
         <tr>

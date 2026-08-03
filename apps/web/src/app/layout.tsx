@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { SiteAnalytics } from "@/components/analytics";
+import { FunnelAnalytics } from "@/features/analytics/client";
 import { readTheme } from "@/lib/theme";
 import "./globals.css";
 
@@ -24,8 +25,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" data-theme={theme} className={`${inter.variable} ${jetbrains.variable}`}>
       <body className="font-sans">
         {children}
-        {/* Mounted once, here, and filtered to public pages inside the component (spec 153). */}
+        {/* Both mounted once, here, and both filtered to public pages inside the component: Vercel
+            counts who arrives (spec 153), PostHog counts what they then do (spec 182). Neither
+            writes anything to the visitor's device, which is why there is still no banner. */}
         <SiteAnalytics />
+        <FunnelAnalytics />
       </body>
     </html>
   );

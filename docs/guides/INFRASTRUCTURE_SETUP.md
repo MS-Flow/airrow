@@ -232,8 +232,8 @@ real traffic. Spec 113 replaces it with Resend over plain SMTP.
    non-empty, so every "is it set?" check passes, and the API answers with a 401 about header format
    that names nothing. The script now rejects a credential containing whitespace for exactly that
    reason — but not needing the shell at all is better than diagnosing it well.
-5. **Push the whole auth configuration** — SMTP, the email template, the redirect allow-list and the
-   site URL, in one call:
+5. **Push the whole auth configuration** — SMTP, the three email templates (signup confirmation,
+   password reset, email change), the redirect allow-list and the site URL, in one call:
    ```bash
    node --env-file=.env scripts/sync-supabase-auth.mjs --dry-run   # inspect; the key is redacted
    node --env-file=.env scripts/sync-supabase-auth.mjs
@@ -245,8 +245,9 @@ real traffic. Spec 113 replaces it with Resend over plain SMTP.
    _Authentication → URL Configuration_ the redirect list. Then sign up with a real address and read the
    mail that arrives.
 
-**The repo is the source of truth for all of it, not the dashboard.** The template is
-[`supabase/templates/confirmation.html`](../../supabase/templates/confirmation.html); the SMTP values,
+**The repo is the source of truth for all of it, not the dashboard.** The templates are
+[`supabase/templates/`](../../supabase/templates/) — `confirmation.html`, `recovery.html` and
+`email-change.html` (spec 171); the SMTP values,
 the redirect allow-list and the site URL are constants in
 [`scripts/sync-supabase-auth.mjs`](../../scripts/sync-supabase-auth.mjs). Editing any of them in the
 dashboard is pointless — the next sync overwrites it. Only the two secrets live outside the repo: the
@@ -285,26 +286,38 @@ value below has a live twin that has to be created and pasted once.
    anyone: the failure looks like a payment that vanished.
 2. **Product and price, in live mode.** Recreate the monthly product and copy the live `price_…`.
    Optional yearly likewise. No amount lives in this repository, so the figure is only ever right in
-   one place.
-3. **Keys, in Vercel → Production.** `STRIPE_SECRET_KEY` (`sk_live_…`), `STRIPE_PRICE_MONTHLY`,
+   one place — and since spec 179 the landing card reads it back out of Stripe rather than being told
+   it, so a price edited here changes the site within the hour with no deploy.
+3. **The founding-member offer (spec 179), live mode.** Products → Coupons → create one with
+   **`max_redemptions: 100`** and **`duration: forever`**, and put its id in
+   `STRIPE_COUPON_FOUNDING`. `forever` is not a preference: the card promises the founding rate
+   "stays that rate for as long as you keep it", and a `once` coupon would renew the second year at
+   the list price — the card would then be advertising something Stripe does not do. It is applied to
+   the **yearly** price only, server-side at Checkout. Stripe owns the count, which is the point: two
+   founders checking out at the same moment cannot both take the hundredth place, and the "places
+   left" counter on the landing card is read from the same coupon rather than from anything we tally.
+   Leave the variable unset to run no offer. A redemption is never given back — cancelling does not
+   free a place, which is the honest reading of "the first 100 customers".
+4. **Keys, in Vercel → Production.** `STRIPE_SECRET_KEY` (`sk_live_…`), `STRIPE_PRICE_MONTHLY`,
    `STRIPE_WEBHOOK_SECRET`. Names and values are both checked at runtime (prefix + trim) — get one
    wrong and the deploy shows a disabled Upgrade button with the reason on the page and the variable
-   named in the log, rather than a broken checkout.
-4. **Webhook endpoint, live mode.** Developers → Webhooks → Add endpoint →
+   named in the log, rather than a broken checkout. `STRIPE_COUPON_FOUNDING` is checked for presence
+   only; a coupon id has no prefix to verify.
+5. **Webhook endpoint, live mode.** Developers → Webhooks → Add endpoint →
    `https://airrow.app/api/stripe/webhook`, subscribed to `checkout.session.completed`,
    `customer.subscription.created`, `customer.subscription.updated`,
    `customer.subscription.deleted`. Its signing secret is the `STRIPE_WEBHOOK_SECRET` above — the
    test-mode one will reject every live delivery, which looks exactly like nothing happening.
-5. **Business settings Stripe requires of you, not of the code:** company details and statement
+6. **Business settings Stripe requires of you, not of the code:** company details and statement
    descriptor, a support email or URL on the receipt, and the customer portal enabled with
    cancellation on (Settings → Billing → Customer portal) — `Manage billing` opens it and a portal
    that is not configured 400s.
-6. **VAT / Tax.** Selling a subscription from Sweden to consumers means VAT, and Airrow does not
+7. **VAT / Tax.** Selling a subscription from Sweden to consumers means VAT, and Airrow does not
    compute it: Checkout is created without `automatic_tax`. Either enable **Stripe Tax** and add
    `automatic_tax: { enabled: true }` (plus address collection) in `startCheckoutAction`, or price
    inclusive and account for it yourself. This is a decision to make deliberately before launch, not
    a default to inherit.
-7. **Terms and refunds.** `/terms` and `/privacy` exist; make sure they say what the subscription is,
+8. **Terms and refunds.** `/terms` and `/privacy` exist; make sure they say what the subscription is,
    when it renews and how to cancel, because the portal is where people will look for it.
 
 **Then prove it with one real payment**, and use a real card rather than a test one — live mode has no
@@ -395,6 +408,141 @@ but a received message becomes a **webhook POST carrying metadata only** — the
 call — so forwarding to Gmail would be a route handler we write and maintain. Its docs also steer
 receiving onto a subdomain rather than the root. It earns its place the day tickets should land *in*
 the app as threads; it does not earn it for forwarding two addresses.
+
+---
+
+## 9. Funnel analytics (PostHog, spec 182)
+
+Vercel Web Analytics (spec 153) counts how many people reach the site. This counts what they then do,
+so the five ratios a launch is judged on — visit → start → signup → generate → download → paid — are
+answerable on the day rather than a month later.
+
+**Time: about 25 minutes**, most of it waiting for a deployment. Nothing below needs a card.
+
+### Step 1 — Create the PostHog project (3 min)
+
+1. Go to **<https://eu.posthog.com/signup>** — the EU cloud. Pick it deliberately: our visitors are
+   European, the region cannot be changed after the project is made, and it is the host the code
+   defaults to.
+2. Sign up, and when it asks what you are building, choose **Product analytics**. Skip any
+   "install the snippet" wizard it offers — the code is already written; you only need the key.
+3. Name the project **`airrow-production`**. Naming it after the *environment* rather than the
+   product is what stops a second project appearing later and splitting the funnel in half.
+4. Go to **Settings → Project → Project ID / API key** and copy the value beginning `phc_`.
+
+That `phc_…` key is *publishable and write-only*. It ships in the browser bundle by design, it is
+visible in devtools on any site that uses PostHog, and nothing can be read back with it. It is not a
+secret and does not belong in a password manager's "critical" pile — but do not paste it into a public
+issue either, because anyone holding it can write junk events into your funnel.
+
+### Step 2 — Put the key in Vercel, on Production only (5 min)
+
+Vercel dashboard → the `airrow` project → **Settings → Environment Variables**. Add four, and
+**untick Preview and Development on every one of them**:
+
+| Variable | Value | Environments |
+|---|---|---|
+| `POSTHOG_KEY` | your `phc_…` key | ☑ Production only |
+| `NEXT_PUBLIC_POSTHOG_KEY` | the same `phc_…` key | ☑ Production only |
+| `POSTHOG_HOST` | `https://eu.i.posthog.com` | ☑ Production only |
+| `NEXT_PUBLIC_POSTHOG_HOST` | `https://eu.i.posthog.com` | ☑ Production only |
+
+Two things people get wrong here:
+
+- **`i.posthog.com`, not `posthog.com`.** The first is the ingest host, the second is the dashboard.
+  Pointing the app at the dashboard fails silently — events go nowhere and nothing logs an error.
+- **The same key twice is correct.** A PostHog project has one ingest key. Two variables exist so the
+  server can report while the browser is told nothing; normally they hold the same value.
+
+**Preview and Development stay empty on purpose.** Production is the only source, so the launch
+dashboard is never diluted by your own clicking through a branch. The price is that the events cannot
+be rehearsed anywhere — which is why Step 4 is a deliberate walk-through rather than a wait-and-see.
+
+### Step 3 — Redeploy (5 min, mostly waiting)
+
+Environment variables are read at build time, so an existing deployment will not pick them up.
+Vercel → **Deployments** → the newest Production one → **⋯ → Redeploy**. Leave "use existing build
+cache" ticked; it is the env vars that changed, not the code.
+
+Wait for it to go green before Step 4. A half-deployed app will simply not send anything, and you
+will spend twenty minutes debugging a deployment that was still building.
+
+### Step 4 — Walk the funnel yourself, in production (10 min)
+
+This is the verification, and nobody else is going to do it. Open PostHog → **Activity** in one tab
+(it is a live feed) and the production site in another, then do all of this in order:
+
+| Do this | Watch for |
+|---|---|
+| Open the landing page | `pageview` |
+| Start the interview | `interview_started` (`mode: guest`) |
+| Answer two or three questions | one `interview_step` each, with `index` climbing |
+| Create an account | `signup` |
+| Finish the interview and generate | `foundation_generated` |
+| Download the ZIP | `zip_downloaded` |
+| Press Upgrade, reach Stripe's page | `checkout_started` |
+| Complete a real payment (or use a Stripe test-mode card if the deployment is in test mode) | `paid`, with `tier` |
+
+Eight events. There is a ninth name, `github_pushed`, which is defined and **never fires** — pushing
+a foundation to a repository is not built yet, and the name exists so the funnel has a slot ready
+rather than to claim a feature we do not have.
+
+**If nothing appears at all:** check the browser devtools Network tab for requests to
+`eu.i.posthog.com`. None at all means `NEXT_PUBLIC_POSTHOG_KEY` did not reach the build — re-check
+the environment scoping in Step 2 and redeploy. Requests that 401 mean the key is wrong.
+
+**If the client events appear but `signup` / `paid` do not:** those are server-sent, so the problem is
+`POSTHOG_KEY` (the one without `NEXT_PUBLIC_`), not the browser. Check the Vercel function logs.
+
+### Step 5 — Build the dashboard as ratios (5 min)
+
+PostHog → **Dashboards → New dashboard**, name it `Launch funnel`. Then add **one Funnel insight**
+rather than five counters — PostHog computes the conversion rate between consecutive steps for you,
+which is the entire point:
+
+1. New insight → **Funnels**
+2. Add these steps, in this order:
+   `pageview` → `interview_started` → `signup` → `foundation_generated` → `zip_downloaded` → `paid`
+3. Set the conversion window to **7 days** (a founder who signs up on Monday and pays on Thursday is
+   one conversion, not two people)
+4. Save it to the dashboard.
+
+Then add a **Breakdown by `utm_source`** on the same insight and save it as a second tile. That is
+how a channel gets credit — but read the note below before trusting it past the signup step.
+
+Five totals side by side is the thing this replaces: "1,200 visits and 14 payments" hides which of
+the four steps between them lost everybody.
+
+### How to read what you get
+
+**The two top-of-funnel ratios are floors, not measurements.** The browser side runs with
+`persistence: "memory"` — no cookie, no `localStorage`, nothing written to the visitor's device — which
+is what keeps the cookie policy true and the consent banner unnecessary (spec 153). It also means an
+identity lasts **one page session**: somebody who leaves and comes back is counted as two visitors, so
+visit → start and start → signup *understate* reality. Everything from `signup` down is sent
+server-side against a workspace id and is exact.
+
+**`utm_source` is reliable up to `signup` and absent after it,** for the same reason: the campaign is
+held in memory for that page session, so it cannot follow a founder to a checkout three days later.
+Read channel breakdowns on the top of the funnel; do not read them on `paid`.
+
+Closing both gaps means a cookie, and a cookie means a consent banner — a trade to make deliberately,
+in its own issue, not by changing one line of configuration.
+
+### Do not turn these on
+
+PostHog's defaults are broader than ours. **Session recording would capture interview answers**, which
+are customer IP, and autocapture would send DOM text we have not vetted. Both are disabled in code
+(`POSTHOG_OPTIONS` in `features/analytics/client.tsx`), and PostHog's project settings can *also* turn
+recording on server-side — if a banner in its UI offers to enable it, decline.
+
+Changing `persistence` away from `"memory"` makes the published cookie policy false and a consent
+banner legally mandatory. `client.test.ts` fails if you do, and says so.
+
+**What is never sent:** no email, no name, no interview answer, no generated document. Event
+properties are enums, counts and workspace ids, and the complete list is in
+`apps/web/src/features/analytics/events.ts` — one file, readable in full, enforced at runtime rather
+than by convention.
 
 ---
 
