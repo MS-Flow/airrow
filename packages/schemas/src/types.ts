@@ -1,5 +1,7 @@
 // Pure types shared across Airrow. No runtime dependencies.
 
+import type { UiKit } from "./ui-kits.ts";
+
 /** `other` means the founder described their product themselves, in `productTypeOther` (spec 159). */
 export type ProductType =
   | "saas"
@@ -102,10 +104,22 @@ export interface InterviewAnswers {
    *
    * One answer, whether the founder wrote it from nothing or started from one of the directions the
    * question offers: picking one writes its words here, and they are theirs to edit from that moment
-   * (spec 159). Nothing records which was picked, because after the first keystroke the question
-   * would have no honest answer.
+   * (spec 159). Which direction was picked is recorded separately, in `uiKit`.
    */
   uiDirection?: string;
+  /**
+   * Which curated direction the founder picked, if they picked one (spec 165).
+   *
+   * Spec 159 derived this from the prose — the option stayed highlighted while the text still began
+   * with its prefill — and that was honest while the pick had no consequence beyond a highlight. It
+   * now decides which theme `/start` installs, and a founder rewriting their opening sentence must
+   * not silently cancel an install they chose. So it is stored, and only the "my own words" option
+   * clears it.
+   *
+   * Not a question of its own: there is one design screen, and this is set from the picker on it.
+   * `SATELLITE_ANSWERS` in `questions.ts` is what keeps it alive through `pruneHiddenAnswers`.
+   */
+  uiKit?: string;
   /**
    * Products the founder pointed at, as they typed them — whitespace-separated, at most five.
    *
@@ -199,6 +213,14 @@ export interface ProjectModel {
   problem: string;
   /** How the product should look, feel, and move. Empty when unanswered — never inferred. */
   uiDirection: string;
+  /**
+   * The curated direction's theme, when one was picked (spec 165).
+   *
+   * Null covers every way of not picking: "my own words", a skipped question, an answer saved before
+   * this existed, and a stack this theme cannot install into. All four mean the same thing to
+   * everything downstream — name no theme, install nothing extra — which is why they share a value.
+   */
+  uiKit: UiKit | null;
   /** Products the founder pointed at, normalised to at most five entries. Never fetched. */
   uiReferenceLinks: string[];
   /**

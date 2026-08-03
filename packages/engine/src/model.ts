@@ -22,6 +22,7 @@ import {
   STANDARD_STACK,
   splitReferenceLinks
 } from "../../schemas/src/questions.ts";
+import { uiKitFor } from "../../schemas/src/ui-kits.ts";
 
 export const ENGINE_VERSION = "0.1.0";
 
@@ -90,6 +91,11 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
   const standard = STANDARD_STACK[productType];
   const framework: Framework = a.framework ?? standard.framework;
 
+  // Same test `commandFor` applies to the finished model, asked here because `uiKit` is resolved
+  // before there is a model to ask.
+  const origin: ProjectOrigin = input.origin ?? { kind: "new" };
+  const imported = origin.kind === "imported" && origin.stackDetected;
+
   const hosting: Hosting = a.hosting ?? "vercel";
   const database: Database = a.database ?? "supabase";
 
@@ -104,7 +110,7 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
     name: input.name.trim(),
     slug: slugify(input.name),
     description: input.description.trim(),
-    origin: input.origin ?? { kind: "new" },
+    origin,
     vision: (a.vision ?? "").trim(),
     productType,
     productTypeOther: productType === "other" ? (a.productTypeOther ?? "").trim() : "",
@@ -142,6 +148,13 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
     coreEntities: (a.coreEntities ?? "").trim(),
     problem: (a.problem ?? "").trim(),
     uiDirection: (a.uiDirection ?? "").trim(),
+    // A theme only means something where something installs it. Two cases where nothing does: a
+    // stack the founder named themselves, which brings its own conventions and gets no second design
+    // system on top of them; and an imported project, whose `/cleanup` changes no code and installs
+    // nothing at all. Resolving both to null here — rather than at each place that reads it — is
+    // what makes "prose-only, and say so" one decision instead of several chances to disagree.
+    uiKit:
+      framework === "custom" || imported ? null : uiKitFor(a.uiKit),
     uiReferenceLinks: splitReferenceLinks(a.uiReferenceLinks ?? "").slice(0, MAX_UI_REFERENCE_LINKS),
     // Set by the caller that knows — the app, which owns the rows. The engine renders a brief that
     // says whether there was anything to look at; it never sees the images themselves (spec 159).
@@ -251,6 +264,18 @@ export function commandPath(m: ProjectModel): string {
 /** The command as the founder types it — for the documents that tell them to run it. */
 export function commandName(m: ProjectModel): string {
   return `/${commandFor(m)}`;
+}
+
+/**
+ * The one thing this product has to do — `/start`'s ceiling, from wherever it is actually written.
+ *
+ * `mvpFocus` stopped being a question when the vision question absorbed it (spec 165), so the field
+ * is now usually empty and the answer lives in `vision`, which asks for both. The description is the
+ * last resort, as it always was. One helper rather than the same `||` chain at four call sites: this
+ * decides what gets built, and four copies of it is four chances for one to fall out of step.
+ */
+export function coreAction(m: ProjectModel): string {
+  return m.mvpFocus || m.vision || m.description;
 }
 
 /**

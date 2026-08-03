@@ -11,6 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveProjectModel } from "./model.ts";
 import { renderScaffold, type TemplateFile } from "./scaffold.ts";
+import { SHADCN_UI, uiKitFor } from "../../schemas/src/ui-kits.ts";
 import type { InterviewAnswers } from "../../schemas/src/types.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -35,6 +36,9 @@ function loadTemplate(): TemplateFile[] {
 
 const TEMPLATE = loadTemplate();
 const START = ".claude/commands/start.md";
+
+/** Collapse wrapping, so an assertion about a sentence survives the file being re-wrapped. */
+const prose = (text: string): string => text.replace(/\s+/g, " ");
 
 function render(answers: InterviewAnswers) {
   const model = resolveProjectModel({
@@ -144,7 +148,8 @@ describe("the bootstrap matches the framework the founder chose", () => {
     for (const answers of [nextjs, vite]) {
       const { start, byPath } = render(answers);
       expect(byPath("CLAUDE.md")).toContain("Tailwind + shadcn/ui");
-      expect(start).toContain("shadcn@latest init");
+      // Pinned as of spec 165 — this tool writes the theme every later `add` resolves against.
+      expect(start).toContain(`${SHADCN_UI.pkg}@${SHADCN_UI.version} init`);
       expect(start).toContain("Tailwind");
     }
     // create-vite ships neither; create-next-app ships Tailwind and stops there.
@@ -159,8 +164,9 @@ describe("the bootstrap matches the framework the founder chose", () => {
   });
 
   it("runs the one-off tools with the package manager the stack actually uses", () => {
-    expect(render(nextjs).start).toContain("pnpm dlx shadcn@latest");
-    expect(render(vite).start).toContain("npx shadcn@latest");
+    const cli = `${SHADCN_UI.pkg}@${SHADCN_UI.version}`;
+    expect(render(nextjs).start).toContain(`pnpm dlx ${cli}`);
+    expect(render(vite).start).toContain(`npx ${cli}`);
   });
 
   it("admits it cannot bootstrap a stack the founder described, rather than guessing", () => {
@@ -588,5 +594,119 @@ describe("section 1 installs what the founder's machine is missing", () => {
     const here = render(nextjs).byPath("START_HERE.md");
     expect(here).toContain("**Sign in:** `gh auth login`");
     expect(here).not.toMatch(/Install the GitHub CLI \(`gh`\) and run/);
+  });
+});
+
+/* ── The picked direction installs, at the version the documents name (spec 165) ────────────── */
+
+describe("/start installs the theme the founder picked", () => {
+  const picked = { ...nextjs, uiKit: "bold_contrast" } satisfies InterviewAnswers;
+  const kit = uiKitFor("bold_contrast")!;
+
+  it("pins the CLI exactly, and never reaches for @latest", () => {
+    const start = render(picked).start;
+    expect(start).toContain(`${SHADCN_UI.pkg}@${SHADCN_UI.version} init`);
+    // The defect this replaces: an unpinned tool writing a theme that UI_ARCHITECTURE.md then names.
+    expect(start).not.toContain("shadcn@latest");
+  });
+
+  it("runs an init that cannot stop and ask a question", () => {
+    // Found by running it. `--yes` alone is not non-interactive — `init` still asks which component
+    // library and which preset, and an assistant cannot answer an arrow-key prompt; it just waits.
+    // There is also no `--base-color` flag in this version, which failed outright.
+    const start = render(picked).start;
+    expect(start).toContain("init --yes -b radix -p nova");
+    expect(start).not.toContain("--base-color");
+  });
+
+  it("names the theme's neutral family where it actually lives now", () => {
+    const start = render(picked).start;
+    expect(start).toContain(`\`tailwind.baseColor\` to \`${kit.baseColor}\``);
+  });
+
+  it("writes the theme's tokens into the stylesheet", () => {
+    const start = render(picked).start;
+    expect(start).toContain(kit.name);
+    expect(start).toContain(`--radius: ${kit.design.radius};`);
+    // Both themes, from the same record the interview drew its preview from.
+    expect(start).toContain(`--background: ${kit.light.bg};`);
+    expect(start).toContain(`--background: ${kit.dark.bg};`);
+  });
+
+  it("installs a theme and no layout at all", () => {
+    // The whole change: a direction is a visual language. Installing a shell would make a picked
+    // picture outrank what the founder wrote about their product — and it is what made this command
+    // slow, since every block drags its own component tree in behind it.
+    const start = render(picked).start;
+    expect(start).not.toMatch(/\badd sidebar-\d|\badd login-\d|\badd dashboard-\d/);
+    expect(start).toContain("That is the whole install");
+    expect(prose(start)).toContain("no component library beyond the primitives above, and no screens");
+  });
+
+  it("tells the build step the theme decides the look and the answers decide the screens", () => {
+    const start = render(picked).start;
+    expect(start).toContain(`**${kit.name}** theme section 2 installed`);
+    expect(prose(start)).toMatch(/What is on the screen is still theirs to have decided/);
+    expect(prose(start)).toMatch(/Never copy a layout from a swatch/);
+    expect(start).toMatch(/overriding the theme with hand-written colours is a bug/i);
+  });
+
+  it("carries the direction's design language, not a set of counts", () => {
+    const start = render(picked).start;
+    expect(start).toContain(kit.design.logo);
+    expect(start).toContain(kit.design.surfaces);
+    expect(start).toContain(kit.design.spacing);
+  });
+
+  it("installs no theme when the founder wrote their own words", () => {
+    const start = render(nextjs).start;
+    // Still pinned, and still non-interactive — neither is conditional on a pick.
+    expect(start).toContain(`${SHADCN_UI.pkg}@${SHADCN_UI.version} init --yes -b radix -p nova`);
+    // No theme means nothing to write into the stylesheet and no base colour to name.
+    expect(start).not.toContain("--radius:");
+    expect(start).not.toContain("`tailwind.baseColor`");
+  });
+
+  it("says nothing about a theme on a stack that cannot take one", () => {
+    // A described stack brings its own conventions; a second design system on top is not ours to add.
+    const start = render({ ...custom, uiKit: "bold_contrast" }).start;
+    expect(start).not.toContain(kit.name);
+    expect(start).not.toContain("--radius:");
+  });
+
+  it("keeps the mvpFocus ceiling exactly where spec 123 put it", () => {
+    // A theme is presentation. It must not have quietly become permission to build a second feature.
+    const start = render(picked).start;
+    expect(start).toContain("Loop CRM");
+    expect(start).toMatch(/no second feature|not a second feature/i);
+    expect(start).toMatch(/\[NEEDS CLARIFICATION/);
+  });
+});
+
+describe("the repository carries the notice for the code it installs", () => {
+  const NOTICES = "THIRD_PARTY_NOTICES.md";
+
+  it("ships it with the licence in full, for a Tailwind stack", () => {
+    const notices = render({ ...nextjs, uiKit: "soft_minimal" }).byPath(NOTICES);
+    expect(notices).toContain(`${SHADCN_UI.pkg}/ui`);
+    expect(notices).toContain(SHADCN_UI.version);
+    expect(notices).toContain(`Copyright (c) 2023 ${SHADCN_UI.holder}`);
+    expect(notices).toContain("WITHOUT WARRANTY OF ANY KIND");
+    expect(notices).not.toMatch(/\{\{[A-Z0-9_]+\}\}/);
+  });
+
+  it("ships it even when no direction was picked — the install happens either way", () => {
+    // The obligation predates the picker: /start has installed shadcn/ui since spec 66.
+    expect(render(nextjs).byPath(NOTICES)).toContain("WITHOUT WARRANTY OF ANY KIND");
+  });
+
+  it("says the theme itself is not what is licensed", () => {
+    const notices = render({ ...nextjs, uiKit: "soft_minimal" }).byPath(NOTICES);
+    expect(notices).toContain("Airrow's own work and carries no third-party claim");
+  });
+
+  it("does not ship it to a stack that installs none of it", () => {
+    // A notice for code that was never installed is a file the founder cannot explain.
+    expect(render(custom).files.some((f) => f.path === NOTICES)).toBe(false);
   });
 });

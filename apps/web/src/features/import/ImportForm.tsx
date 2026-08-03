@@ -70,7 +70,7 @@ export function ImportForm() {
           name="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Loop CRM"
+          placeholder="e.g. Pied Piper"
           required
           autoFocus
           maxLength={80}
@@ -87,7 +87,7 @@ export function ImportForm() {
           rows={4}
           required
           maxLength={2000}
-          placeholder="e.g. A lightweight CRM that helps small agencies track client relationships."
+          placeholder="e.g. A file compression platform that makes storage cheaper for anyone moving large amounts of data."
         />
       </div>
 

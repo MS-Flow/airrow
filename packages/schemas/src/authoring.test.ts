@@ -98,10 +98,24 @@ describe("flaggable answers", () => {
     // Every question with a field in it, not only the ones typed `text`: `guided_text` may be seeded
     // from a direction we wrote, but the founder owns the field from the first keystroke (spec 159).
     const typed = interviewQuestions
-      .filter((q) => q.type === "text" || q.type === "guided_text" || q.type === "references")
+      .filter((q) => q.type === "text" || q.type === "guided_text")
       .map((q) => q.id);
 
-    expect([...FLAGGABLE_ANSWERS]).toEqual(typed);
+    // Plus the one field that is an answer without being a question (spec 165). Asserted by name,
+    // because the whole failure mode is a founder-typed answer quietly falling off this list.
+    expect([...FLAGGABLE_ANSWERS]).toEqual([...typed, "uiReferenceLinks"]);
+  });
+
+  it("keeps the reference links flaggable now they are no longer a question of their own", () => {
+    // Spec 159's regression, one answer later: `uiDirection` fell off this list the day it changed
+    // type, and `uiReferenceLinks` would have fallen off the day it stopped being a question.
+    expect(FLAGGABLE_ANSWERS).toContain("uiReferenceLinks");
+    expect(pickFlaggedAnswers(["uiReferenceLinks"])).toEqual(["uiReferenceLinks"]);
+  });
+
+  it("never flags the picked theme — it came from a list we wrote", () => {
+    expect(FLAGGABLE_ANSWERS).not.toContain("uiKit");
+    expect(pickFlaggedAnswers(["uiKit"])).toEqual([]);
   });
 
   it("excludes a picked option — it came from a list we wrote", () => {
@@ -109,7 +123,10 @@ describe("flaggable answers", () => {
   });
 
   it("keeps the free-text answers a rejection is allowed to name", () => {
-    expect(pickFlaggedAnswers(["problem", "mvpFocus"])).toEqual(["problem", "mvpFocus"]);
+    // `mvpFocus` is deliberately absent: spec 165 stopped asking for it, and this list is derived
+    // from the questions, so an answer nobody is asked for is one the model cannot point at either.
+    expect(pickFlaggedAnswers(["problem", "coreEntities"])).toEqual(["problem", "coreEntities"]);
+    expect(pickFlaggedAnswers(["mvpFocus"])).toEqual([]);
   });
 
   it.each([

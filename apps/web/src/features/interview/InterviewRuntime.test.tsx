@@ -7,19 +7,29 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { interviewQuestions } from "@airrow/schemas";
+import { interviewQuestions, type AnswerId, type InterviewAnswers } from "@airrow/schemas";
 import { InterviewRuntime } from "./InterviewRuntime";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 const direction = interviewQuestions.find((q) => q.id === "uiDirection");
-const preset = direction?.options?.find((o) => o.value === "calm_focused");
+const preset = direction?.options?.find((o) => o.value === "soft_minimal");
 
-function renderInterview() {
+function renderInterview({
+  persist = () => {},
+  destroy,
+  rejectedAnswers
+}: {
+  persist?: (answers: InterviewAnswers) => void;
+  destroy?: React.ReactNode;
+  rejectedAnswers?: AnswerId[];
+} = {}) {
   const submit = vi.fn(async () => undefined);
   render(
     <InterviewRuntime
-      projectName="Loop CRM"
+      destroy={destroy}
+      rejectedAnswers={rejectedAnswers}
+      projectName="Pied Piper"
       // Seeded past every required question, so the interview opens on the design question itself.
       initialAnswers={{
         productType: "saas",
@@ -34,7 +44,7 @@ function renderInterview() {
         hosting: "vercel",
         repoProvider: "github"
       }}
-      persist={() => {}}
+      persist={persist}
       submit={submit}
       submitLabel="Generate"
       pendingLabel="Starting…"
@@ -44,10 +54,15 @@ function renderInterview() {
   return { submit };
 }
 
-/** Walk from the review screen to the design question, which is where every test here starts. */
+/**
+ * Walk from the review screen to the design question, which is where every test here starts.
+ *
+ * The textarea by name rather than `getByRole("textbox")`: the screen carries a second field since
+ * spec 165 folded the references in, and the ambiguity that caused is the merge working.
+ */
 async function openTheDesignQuestion(): Promise<HTMLTextAreaElement> {
   await userEvent.click(screen.getByLabelText("Edit How should it look and feel?"));
-  const field = screen.getByRole("textbox");
+  const field = screen.getAllByRole("textbox").find((el) => el instanceof HTMLTextAreaElement);
   if (!(field instanceof HTMLTextAreaElement)) throw new Error("no design field");
   return field;
 }
@@ -58,7 +73,7 @@ describe("the design question", () => {
     const field = await openTheDesignQuestion();
 
     expect(screen.getByRole("heading", { name: "How should it look and feel?" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Calm & focused/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Soft minimal/ })).toBeInTheDocument();
     expect(field).toHaveValue("");
   });
 
@@ -66,7 +81,7 @@ describe("the design question", () => {
     renderInterview();
     const field = await openTheDesignQuestion();
 
-    await userEvent.click(screen.getByRole("button", { name: /Calm & focused/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Soft minimal/ }));
     expect(field).toHaveValue(preset?.prefill);
 
     // And it is a field, not a label: what they add to it stays.
@@ -78,18 +93,18 @@ describe("the design question", () => {
     renderInterview();
     const field = await openTheDesignQuestion();
 
-    await userEvent.click(screen.getByRole("button", { name: /Calm & focused/ }));
-    await userEvent.click(screen.getByRole("button", { name: /Dense & operational/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Soft minimal/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Bold contrast/ }));
 
-    expect(field.value.startsWith("Dense and operational")).toBe(true);
-    expect(field.value).not.toContain("Calm and focused");
+    expect(field.value.startsWith("Bold and high-contrast")).toBe(true);
+    expect(field.value).not.toContain("Soft and minimal");
   });
 
   it("empties the field for a founder who wants none of them", async () => {
     renderInterview();
     const field = await openTheDesignQuestion();
 
-    await userEvent.click(screen.getByRole("button", { name: /Calm & focused/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Soft minimal/ }));
     await userEvent.click(screen.getByRole("button", { name: /None of these/ }));
 
     expect(field).toHaveValue("");
@@ -100,5 +115,124 @@ describe("the design question", () => {
     await openTheDesignQuestion();
 
     expect(screen.getByRole("button", { name: "Skip" })).toBeEnabled();
+  });
+});
+
+/* ── The pick is stored, because it now installs something (spec 165) ──────────────────────── */
+
+describe("picking a direction picks a theme", () => {
+  /** The answers as they would be saved right now. */
+  function saved(persist: ReturnType<typeof vi.fn>): Record<string, unknown> {
+    const last = persist.mock.calls.at(-1);
+    if (!last) throw new Error("nothing was persisted");
+    return last[0] as Record<string, unknown>;
+  }
+
+  it("records which one was picked, alongside the words it wrote", async () => {
+    const persist = vi.fn();
+    renderInterview({ persist });
+    await openTheDesignQuestion();
+
+    await userEvent.click(screen.getByRole("button", { name: /Soft minimal/ }));
+    await vi.waitFor(() => expect(persist).toHaveBeenCalled());
+    expect(saved(persist).uiKit).toBe("soft_minimal");
+  });
+
+  it("keeps the pick when the founder rewrites every word of the prose", async () => {
+    // The regression this spec exists for. Spec 159 derived the pick from whether the text still
+    // began with the prefill — which silently cancelled an install the moment they edited the
+    // opening sentence. The pick is theirs until they unpick it.
+    const persist = vi.fn();
+    renderInterview({ persist });
+    const field = await openTheDesignQuestion();
+
+    await userEvent.click(screen.getByRole("button", { name: /Soft minimal/ }));
+    await userEvent.clear(field);
+    await userEvent.type(field, "Actually, something entirely my own.");
+
+    await vi.waitFor(() => expect(saved(persist).uiDirection).toBe("Actually, something entirely my own."));
+    expect(saved(persist).uiKit).toBe("soft_minimal");
+  });
+
+  it("swaps the theme when a different direction is picked", async () => {
+    const persist = vi.fn();
+    renderInterview({ persist });
+    await openTheDesignQuestion();
+
+    await userEvent.click(screen.getByRole("button", { name: /Soft minimal/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Stark & technical/ }));
+
+    await vi.waitFor(() => expect(saved(persist).uiKit).toBe("stark_terminal"));
+  });
+
+  it("clears it for the founder's own words — the one option that unpicks", async () => {
+    const persist = vi.fn();
+    renderInterview({ persist });
+    await openTheDesignQuestion();
+
+    await userEvent.click(screen.getByRole("button", { name: /Soft minimal/ }));
+    await userEvent.click(screen.getByRole("button", { name: /None of these/ }));
+
+    await vi.waitFor(() => expect(saved(persist).uiKit).toBeUndefined());
+  });
+
+  it("asks for references on this same screen, not the one after it", async () => {
+    // Spec 165 folded spec 159's separate references screen into the design question: everything
+    // about how the product should look is asked once, in one place.
+    renderInterview();
+    await openTheDesignQuestion();
+
+    expect(screen.getByLabelText(/Products whose look you like/)).toBeInTheDocument();
+    expect(screen.getByText(/Screenshots/)).toBeInTheDocument();
+  });
+
+  it("keeps the links as an answer, though they are no longer a question", async () => {
+    const persist = vi.fn();
+    renderInterview({ persist });
+    await openTheDesignQuestion();
+
+    await userEvent.type(screen.getByLabelText(/Products whose look you like/), "linear.app");
+    await vi.waitFor(() => expect(saved(persist).uiReferenceLinks).toBe("linear.app"));
+  });
+
+  it("shows each direction rather than only describing it", async () => {
+    renderInterview();
+    await openTheDesignQuestion();
+
+    // Either a capture of the real blocks or the drawing generated from the same record — both are
+    // pictures of this direction, and which one is showing depends on whether a capture was taken.
+    const picker = screen.getByRole("button", { name: /Soft minimal/ });
+    expect(picker.querySelector("img, svg")).not.toBeNull();
+    // The option that installs nothing has nothing to show.
+    const escape = screen.getByRole("button", { name: /None of these/ });
+    expect(escape.querySelector("img, svg")).toBeNull();
+  });
+});
+
+/* ── A way out from the screen where the decision is made (spec 165) ────────────────────────── */
+
+describe("abandoning a project from the review screen", () => {
+  it("offers deleting beside generating, for a project that has one", () => {
+    renderInterview({ destroy: <button type="button">Delete</button> });
+
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generate" })).toBeInTheDocument();
+  });
+
+  it("still offers it when the answers were refused — the case it exists for", () => {
+    // A founder looking at "these answers weren't accepted" is deciding between rewriting and
+    // abandoning. Until now the only way out was a project page they had no reason to visit.
+    renderInterview({
+      destroy: <button type="button">Delete</button>,
+      rejectedAnswers: ["problem"]
+    });
+
+    expect(screen.getByText(/weren't accepted/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  });
+
+  it("offers nothing to delete on the guest path, where there is no project yet", () => {
+    renderInterview();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
   });
 });

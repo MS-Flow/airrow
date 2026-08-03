@@ -216,6 +216,11 @@ _What "done" means. Every line is something a reviewer can check._
       reading — asserted directly.
 - [x] No code fence, no command, no `{{TOKEN}}`; the unauthored path is the one the tests exercise.
 - [x] `DOCUMENT_MAX_CHARS` for the brief raised 5000 → 7000, sized to nine sections rather than four.
+      **Corrected by [spec 165](165-installable-ui-directions.md):** this was checked off here but
+      never landed — the code kept the four-section 5000 through this whole branch, so the brief has
+      been one long answer from silently falling back to its template. Spec 165 adds the tenth
+      section and makes the raise real. Recorded rather than quietly re-ticked, because a criterion
+      that was false is worth more as a record than as a clean checkbox.
 
 **`/start`**
 

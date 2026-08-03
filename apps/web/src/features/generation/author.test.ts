@@ -168,11 +168,11 @@ describe("authorFoundation", () => {
     // The model's own judgement, on its own channel — so an off-topic interview produces no
     // foundation rather than a plausible-looking one about nothing. Rejected, not unavailable: this
     // one is the founder's to fix, and generation stops on it (spec 128).
-    create.mockResolvedValue(refused(["problem", "mvpFocus"]));
+    create.mockResolvedValue(refused(["problem", "coreEntities"]));
 
     await expect(authorFoundation(model)).resolves.toEqual({
       status: "rejected",
-      answers: ["problem", "mvpFocus"]
+      answers: ["problem", "coreEntities"]
     });
   });
 
