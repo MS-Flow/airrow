@@ -64,4 +64,40 @@ describe("landing copy", () => {
     );
     expect(offenders).toEqual([]);
   });
+
+  // Spec 196. Three claims about importing are easy to write and each would be false. They are
+  // tests rather than prose in the spec because the next person to edit this file will not have
+  // read the spec.
+  it("never says an imported project gets rebuilt, because no code is written or moved", () => {
+    // Airrow's servers write no application code, and `/cleanup` changes none at all: it rewrites
+    // the foundation's documents to describe the stack that is already there.
+    const offenders = LANDING_STRINGS.filter((s) =>
+      /rebuild|restructure|rewrite your|rewrites your|migrate your|refactor your/i.test(s)
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("never frames hidden mode against an employer, because it hides files and nothing else", () => {
+    // Keeping files out of a shared repository is all it does. It grants no access nobody had, and
+    // selling it as concealment would be untrue as well as a bad thing to sell (spec 187).
+    const offenders = LANDING_STRINGS.filter((s) =>
+      /\bemployer\b|\bboss\b|behind (your|their) (team|company|back)|without your (team|company|employer) (knowing|noticing)/i.test(
+        s
+      )
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("promises no pipeline in the hidden mode, because a workflow in an ignored folder cannot run", () => {
+    const hidden = strings(copy.DELIVERY_MODES.find((mode) => mode.key === "hidden"));
+    expect(hidden.length).toBeGreaterThan(0);
+    // Naming CI here is fine only where the sentence says there is none. A promise is a sentence
+    // that mentions it and does not deny it.
+    const offenders = hidden.filter(
+      (s) =>
+        /\b(ci|cd|pipeline|workflow|github actions)\b/i.test(s) &&
+        !/\b(no|not|never|cannot|without)\b/i.test(s)
+    );
+    expect(offenders).toEqual([]);
+  });
 });
