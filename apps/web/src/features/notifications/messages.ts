@@ -54,21 +54,24 @@ export function userCreatedMessage(workspace: string | null, method: string): st
   return `🎉 New account — *${named(workspace)}* signed up with ${METHOD_LABEL[method] ?? method}.`;
 }
 
-/** Where a project came from. The three paths that create one, in the founder's terms. */
-export type ProjectOrigin = "new" | "imported" | "claimed";
-
-const ORIGIN_LABEL: Record<ProjectOrigin, string> = {
-  new: "started a project",
-  imported: "imported a project",
-  claimed: "finished the interview they started signed out"
-};
-
-export function projectCreatedMessage(
+/**
+ * A finished foundation — the moment value is actually delivered.
+ *
+ * Deliberately *not* a project being created. A project is made in seconds and can be abandoned
+ * before a single question is answered, so notifying on it would fill the channel with people who
+ * never arrived. This fires when a foundation exists.
+ *
+ * A regeneration says so. Founders regenerate constantly while tuning one answer, and a channel that
+ * reads the same either way would make a busy afternoon look like ten new customers.
+ */
+export function foundationGeneratedMessage(
   workspace: string | null,
   project: string | null,
-  origin: ProjectOrigin
+  reused: boolean
 ): string {
-  return `📁 *${named(workspace)}* ${ORIGIN_LABEL[origin]}: *${named(project)}*`;
+  return reused
+    ? `🔁 *${named(workspace)}* regenerated *${named(project)}*`
+    : `✨ *${named(workspace)}* generated a foundation: *${named(project)}*`;
 }
 
 /** What Pro was bought as. `founding` is the capped launch offer (spec 179). */

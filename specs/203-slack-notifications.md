@@ -43,11 +43,14 @@ _How things work today and what's wrong with that — grounded in real code._
   *new* customer rather than a renewal. Both rules are reused rather than written a second time.
   `lib/email.ts` (Resend, spec 144) is the precedent for outbound HTTP that no-ops without a key.
 
-**Scope changed after the issue was written.** The issue asked for *foundation generated* + *bought
-Pro*. What is actually wanted, and what this spec builds, is **user created · project created · bought
-Pro**. `foundation_generated` is left to PostHog. Worth knowing that a created project is a *weaker*
-signal than a generated foundation — a project can be created and abandoned before a single question
-is answered — so this notification will fire more often than value is delivered.
+**Scope, and one correction made during implementation.** The issue asked for *foundation generated* +
+*bought Pro*; a signup notification was added to that. The middle one was first built on **project
+created** and then moved to **foundation generated**, which is where it belongs: a project is made in
+seconds and can be abandoned before a single question is answered, so notifying on it would have
+filled the channel with people who never arrived. What ships is **user created · foundation generated
+· bought Pro**, and the generated message says plainly when it was a regeneration — founders
+regenerate constantly while tuning one answer, and a channel that read the same either way would make
+a busy afternoon look like ten new customers.
 
 ---
 
@@ -83,8 +86,8 @@ spec exists precisely so that they do not have to change.
 _What "done" means. Every line is something a reviewer can check._
 
 - [x] A message arrives when a **new account** is created, naming the workspace and how they signed in.
-- [x] A message arrives when a **project is created**, naming the workspace and the project — from all
-      three paths that create one: the new-project form, an import, and a claimed guest draft.
+- [x] A message arrives when a **foundation is generated**, naming the workspace and the project, and
+      saying plainly when it was a regeneration rather than a first run.
 - [x] A message arrives when an organization **becomes Pro**, naming the workspace and whether it was
       monthly, yearly or a founding place.
 - [x] **No message fires twice for one event.** A returning founder signing in is not a signup; a
@@ -119,8 +122,8 @@ _How each criterion above is proven._
 in `paid.test.ts`. Half of the message tests are about escaping, because that is where a founder-typed
 name becomes a stranger deciding what our internal channel does.
 
-**Result:** `pnpm -r typecheck` clean · `pnpm -r lint` clean · `pnpm -r test` **1480 passed, 0 failed**
-(113 schemas · 305 engine · 1062 web; 103 skipped, unchanged).
+**Result:** `pnpm -r typecheck` clean · `pnpm -r lint` clean · `pnpm -r test` **1484 passed, 0 failed**
+(113 schemas · 305 engine · 1066 web; 103 skipped, unchanged).
 
 **One deviation from the plan.** `notifyPaid` takes an `orgId` and does its own workspace lookup
 inside the fire-and-forget, rather than being handed a name. `capturePaid`'s callers hold only an id,
@@ -143,11 +146,12 @@ failure costs nothing.
 4. **`features/analytics/signup.ts`** — `notifyUserCreated` beside `capture`, inside the freshness
    guard that already distinguishes a signup from a sign-in.
 5. **`features/billing/paid.ts`** — `notifyPaid` beside `capture`, inside `isNewConversion`.
-6. **The three project paths** — `features/projects/actions.ts`, `features/import/actions.ts`,
-   `features/interview/claim-action.ts`. Each already holds the session's `org`, so each passes the
-   name it already has.
+6. **`features/generation/runner.ts`** — `notifyFoundationGenerated` beside the `capture`, on the one
+   line past which a foundation is known to exist. Like `notifyPaid` it takes ids and reads the names
+   itself: the runner holds an organization id and a project id and nothing else, and threading names
+   into it would put two database reads inside a job a founder is watching.
 7. **`lib/data/store.ts`** — `getOrganization(orgId)`, a scoped read of one row. Nothing like it
-   existed; `getOrgForUser` takes a user.
+   existed; `getOrgForUser` takes a user. `getProject` already exists and is org-scoped.
 8. **`apps/web/.env.example`** + **`docs/guides/INFRASTRUCTURE_SETUP.md`** — the variable and how to
    create the webhook in Slack, in the same change as the code that reads it.
 

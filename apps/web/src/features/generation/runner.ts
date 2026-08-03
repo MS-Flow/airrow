@@ -25,6 +25,7 @@ import {
 } from "@/lib/data/store";
 import { distinctIdForOrg } from "@/features/analytics/events";
 import { capture } from "@/features/analytics/server";
+import { notifyFoundationGenerated } from "@/features/notifications/notify";
 import { loadUiReferenceImages } from "@/lib/data/ui-references";
 import { loadTemplate } from "@/lib/template/load";
 import { AUTHORING_MODEL, PROMPT_VERSION, authorFoundation } from "./author";
@@ -216,6 +217,9 @@ export async function runGenerationJob(
       project: job.projectId,
       reused: reused !== null
     });
+    // Slack gets the names, PostHog gets the ids (spec 203). Both from here, because this is the
+    // line past which a foundation is known to exist — every path above it ends the job without one.
+    notifyFoundationGenerated(orgId, job.projectId, reused !== null);
   } catch (err) {
     await updateJob(jobId, {
       status: "failed",
