@@ -80,3 +80,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Curated directions that install real code | [165-installable-ui-directions.md](165-installable-ui-directions.md) | ✅ Done |
 | A real price on the Pro card, and a founding-member deal | [179-pro-price-founding-offer.md](179-pro-price-founding-offer.md) | ✅ Done |
 | Knowing where people fall out | [182-posthog-funnel.md](182-posthog-funnel.md) | 🔄 In progress |
+| The two moments worth interrupting someone for | [203-slack-notifications.md](203-slack-notifications.md) | ⏳ Not started |

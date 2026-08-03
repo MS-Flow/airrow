@@ -24,6 +24,7 @@ import {
   type ImportSourceKind,
   type InterviewAnswers
 } from "@airrow/schemas";
+import { notifyProjectCreated } from "@/features/notifications/notify";
 import { githubToken, requireSession } from "@/lib/auth";
 import { githubReader } from "@/lib/github";
 import { claimPro } from "@/lib/data/referrals";
@@ -171,6 +172,9 @@ async function completeImport(
     );
     await saveInterviewAnswers(project.id, prefill);
 
+    // Reported as an import rather than a new project — the two arrive very differently and the
+    // difference is worth seeing in the channel (spec 203).
+    notifyProjectCreated(org.name, project.name, "imported");
     return { projectId: project.id };
   } catch (error) {
     console.error("[import] persisting the import failed:", error);

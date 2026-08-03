@@ -16,6 +16,7 @@
 import type Stripe from "stripe";
 import { capture } from "@/features/analytics/server";
 import { distinctIdForOrg, type PaidTier } from "@/features/analytics/events";
+import { notifyPaid } from "@/features/notifications/notify";
 import type { SubscriptionState } from "@/lib/data/store";
 import { planForStatus } from "@/lib/stripe";
 
@@ -73,7 +74,11 @@ export function capturePaid(
 ): void {
   try {
     if (!isNewConversion(previous, next)) return;
-    capture("paid", distinctIdForOrg(orgId), { tier: paidTier(subscription) });
+    const tier = paidTier(subscription);
+    capture("paid", distinctIdForOrg(orgId), { tier });
+    // Both channels behind the same transition rule, so a renewal or a redelivery cannot announce a
+    // customer we already had in one place while staying quiet in the other (spec 203).
+    notifyPaid(orgId, tier);
   } catch (error) {
     console.error("Paid event failed:", error instanceof Error ? error.message : error);
   }
