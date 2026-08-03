@@ -62,8 +62,12 @@ passes it in.
 - External calls happen **only server-side**: the Claude API from exactly two places — the engine's
   authoring provider (`features/generation/author.ts`) and the public chat — Archer —
   (`features/chat/provider.ts`, specs 141 and 158), each with its own key so the public chat can never
-  spend generation's budget; Supabase / GitHub App / Stripe via the DataStore and server actions. Never
-  from client components; never from `packages/engine` or `packages/schemas` directly.
+  spend generation's budget; Supabase / GitHub App / Stripe via the DataStore and server actions —
+  plus one **read** that is neither, and deliberately: `features/billing/prices.ts` asks Stripe what
+  Pro costs so the landing card can name a figure, cached an hour so a public page cannot become one
+  API call per visitor (spec 179). It is called straight from the landing RSC, writes nothing, and is
+  still server-side. Never from client components; never from `packages/engine` or `packages/schemas`
+  directly.
 - **Archer** is mounted from the two layouts — `app/(public)/layout.tsx` and `app/app/layout.tsx` — and
   therefore renders on every public page *and* every `/app` screen (spec 159, which lifted spec 158's
   deliberate `/app` exclusion). Pages never import `ChatWidget` themselves. When it cannot answer, or

@@ -21,7 +21,11 @@ const STRIPE_VARS = {
   STRIPE_SECRET_KEY: ["sk_", "rk_"],
   STRIPE_PRICE_MONTHLY: ["price_"],
   STRIPE_PRICE_YEARLY: ["price_"],
-  STRIPE_WEBHOOK_SECRET: ["whsec_"]
+  STRIPE_WEBHOOK_SECRET: ["whsec_"],
+  // Empty on purpose, and the only entry that is. A coupon id is whatever the person who created it
+  // typed — Stripe generates one like `IMcqUvVL` when you do not, and neither shape has a prefix to
+  // check. Presence is all this can honestly verify (spec 179).
+  STRIPE_COUPON_FOUNDING: []
 } as const;
 
 type StripeVar = keyof typeof STRIPE_VARS;
@@ -50,7 +54,9 @@ const REQUIRED_STRIPE_VARS: StripeVar[] = [
 function stripeVar(name: StripeVar): string | null {
   const value = process.env[name]?.trim();
   if (!value) return null;
-  return STRIPE_VARS[name].some((prefix) => value.startsWith(prefix)) ? value : null;
+  const prefixes: readonly string[] = STRIPE_VARS[name];
+  if (prefixes.length === 0) return value;
+  return prefixes.some((prefix) => value.startsWith(prefix)) ? value : null;
 }
 
 /**
@@ -120,6 +126,20 @@ export function stripePrices(): StripePrice[] {
   if (monthly) prices.push({ id: monthly, interval: "month" });
   if (yearly) prices.push({ id: yearly, interval: "year" });
   return prices;
+}
+
+/**
+ * The founding-member coupon, or `null` when this deployment is not running the offer.
+ *
+ * Never in `REQUIRED_STRIPE_VARS`, and that is the point: the cap is a launch promotion, not part of
+ * being able to sell. A deployment without it sells Pro at the ordinary figures instead of refusing to
+ * sell at all — the opposite of the webhook secret, whose absence takes money and grants nothing.
+ *
+ * Stripe counts the redemptions (`max_redemptions`), so the seat limit is enforced where it cannot be
+ * raced by two founders checking out at once, and nothing here counts anything (spec 179).
+ */
+export function stripeCouponFounding(): string | null {
+  return stripeVar("STRIPE_COUPON_FOUNDING");
 }
 
 export function stripeWebhookSecret(): string {

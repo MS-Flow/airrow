@@ -44,6 +44,13 @@ vi.mock("@/lib/stripe", () => ({
   stripeConfigured: () => true,
   stripePrices: () => [{ id: "price_monthly", interval: "month" }]
 }));
+// The figures on the upgrade buttons come from Stripe (spec 179). What they say is
+// `prices.test.ts`'s and the upgrade screen's subject; here the page is under test, so it is handed
+// an answer rather than reaching for a Stripe client and a request-scoped cache that do not exist.
+vi.mock("@/features/billing/prices", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  readPricing: async () => ({ prices: [{ interval: "month", amount: "$11.99" }], founding: null })
+}));
 vi.mock("@/lib/theme", () => ({ readTheme: async () => "dark" }));
 vi.mock("@/features/generation/allowance", () => ({
   FREE_GENERATION_LIMIT: 1,

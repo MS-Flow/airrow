@@ -54,6 +54,11 @@ describe("landing copy", () => {
   it("names no price, because the amount lives in Stripe", () => {
     // Spec 99 keeps every figure in the dashboard so it changes without a deploy. A number here
     // would be a second source of truth, and the one customers read first.
+    //
+    // Still true now the card shows a figure (spec 179) — more so. The amount is fetched and passed
+    // in; a literal pasted back here would quietly outrank Stripe on the one screen that must be
+    // believed, and this is the check that notices. `$0` stays: the free tier costs nothing, which
+    // is a fact about the product rather than a price anyone can change.
     const offenders = LANDING_STRINGS.filter(
       (s) => /(^|\s)[$£€]\s?\d/.test(s) && !/\$0\b/.test(s)
     );
