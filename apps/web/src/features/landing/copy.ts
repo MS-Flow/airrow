@@ -152,9 +152,8 @@ export const WHY_SDD = [
   "You spend far fewer tokens when the agent knows exactly what to build. Guessing, exploring and undoing the wrong thing is the expensive part.",
 ];
 
-/* Two tiers, and only one of them is real. Pro is labelled "coming soon" and carries no price
-   because it has none yet — naming a figure we have not decided would be a promise, and the free
-   tier is what someone can actually have today. */
+/* Two tiers, both real and both priced. The figures are not here: they are read from Stripe at
+   render (spec 179), so this list is what a tier gives you and never what it costs. */
 export const INCLUDED = [
   `${FOUNDATIONS} generated ${foundationNoun}, with ${FREE_REPAIR_LIMIT} free revisions`,
   "The full CTO interview",
@@ -200,12 +199,26 @@ export const SECTIONS = {
     },
     pro: {
       name: "Pro",
-      /* Still no figure here, and now for a different reason: the amount lives in Stripe so it can
-         change without a deploy (spec 99). Putting it in static marketing copy would recreate
-         exactly the duplication that decision avoided. The badge is gone because Pro is real. */
-      amount: "Monthly",
+      /* No figure here, and no "Monthly" standing in for one either. The amount is fetched from
+         Stripe and rendered beside these words (spec 179): the price stays in one place, and the
+         card still names it. What lives here is only what a figure needs around it. */
+      perMonth: "per month",
+      perYear: "per year",
       note: "Unlimited foundations, and importing a project you have already started.",
       action: "Start with Pro",
+      /* The launch offer. Stripe's coupon holds the cap, so every number on the card traces back to
+         something Stripe counted rather than something we typed. */
+      founding: {
+        badge: "Founding member",
+        promise: "Pay yearly at the founding rate and it stays that rate for as long as you keep it.",
+        soldOut: "All 100 founding places are taken. Pro is still open at the usual rate.",
+        /* A function rather than a string, because the number comes from Stripe and the singular
+           reads wrong on the one occasion that matters most: the last place. */
+        seatsLeft: (remaining: number, total: number): string =>
+          remaining === 1
+            ? `1 founding place left of ${total}`
+            : `${remaining} founding places left of ${total}`,
+      },
     },
   },
   cta: {

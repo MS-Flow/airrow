@@ -49,11 +49,14 @@ describe("what the landing chat knows", () => {
   });
 
   it("never promises a Pro price, which lives in Stripe", () => {
-    // The landing page deliberately carries no figure for Pro (spec 99) — the amount lives in Stripe
-    // so it can change without a deploy, and a bot that invented one would be making a promise
-    // nobody can honour at checkout. Free's own "$0" is the one figure allowed to be here.
+    // The amount lives in Stripe so it can change without a deploy (spec 99), and a bot that invented
+    // one would be making a promise nobody can honour at checkout. Free's own "$0" is the one figure
+    // allowed to be here.
+    //
+    // Unchanged by spec 179, which gave the *card* a figure: the card fetches it per render, this
+    // prompt is assembled from static copy, and a number baked in here would be the stale one.
     expect(buildKnowledge()).not.toMatch(/\$[1-9]/);
-    expect(SECTIONS.pricing.pro.amount).not.toMatch(/\d/);
+    expect(JSON.stringify(SECTIONS.pricing.pro)).not.toMatch(/[$£€]\s?\d/);
   });
 
   it("offers exactly the questions it can answer without a model", () => {

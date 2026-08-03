@@ -26,6 +26,7 @@ import {
   UpgradeButtons
 } from "@/features/billing/BillingActions";
 import { PLAN_BADGE_TONE, planStanding } from "@/features/billing/plan-standing";
+import { readPricing, upgradeAmounts } from "@/features/billing/prices";
 import { planWithStripe } from "@/features/billing/sync";
 import { InviteCard } from "@/features/referrals/InviteCard";
 import { EmailCard, PasswordCard } from "@/features/auth/CredentialCards";
@@ -76,7 +77,11 @@ export default async function SettingsPage({
   // simply absent rather than the page being a 500 (spec 122).
   const referral = await referralSummary(org.id);
   const inviteLink = referral ? `${await requestOrigin()}/invite/${referral.code}` : null;
-  const intervals = stripePrices().map((p) => p.interval);
+  // The same figures the upgrade screen shows, from the same cached read (spec 179, amendment 1).
+  const upgradeOptions = upgradeAmounts(
+    await readPricing(),
+    stripePrices().map((p) => p.interval)
+  );
   const github = await githubIdentity();
   // Decides which shape both credential cards take: an account that has only ever signed in with GitHub
   // or Google has no password to confirm anything with (spec 171).
@@ -200,7 +205,7 @@ export default async function SettingsPage({
                 is unlimited and adds importing an existing project.
               </p>
               {stripeConfigured() ? (
-                <UpgradeButtons intervals={intervals} />
+                <UpgradeButtons options={upgradeOptions} />
               ) : (
                 <BillingUnavailable />
               )}
