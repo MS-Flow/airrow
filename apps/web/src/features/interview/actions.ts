@@ -19,7 +19,8 @@ import {
   saveInterviewAnswers,
   setProjectStatus
 } from "@/lib/data/store";
-import { allowanceMessage, checkAllowance } from "@/features/generation/allowance";
+import { listUiReferences } from "@/lib/data/ui-references";
+import { allowanceMessage, claimAllowance } from "@/features/generation/allowance";
 import { projectOrigin } from "@/features/import/origin";
 
 export async function saveAnswersAction(projectId: string, raw: unknown): Promise<{ ok: boolean }> {
@@ -53,7 +54,10 @@ export async function submitInterviewAction(
     answers: validated.answers as InterviewAnswers,
     // The only place a ProjectModel is built, so the only place the origin can be stamped on it —
     // and it decides whether the foundation ships `/start` or `/cleanup` (spec 91).
-    origin: await projectOrigin(projectId)
+    origin: await projectOrigin(projectId),
+    // The count, never the images: the engine renders a brief that says honestly where its design
+    // direction came from, and the bytes stay with the app (spec 159).
+    referenceImageCount: (await listUiReferences(org.id, projectId)).length
   });
   const modelVersion = await createModelVersion(projectId, model);
 
@@ -66,7 +70,7 @@ export async function submitInterviewAction(
   // Checked here rather than at the point of generation: a founder who is out of allowance should
   // hear it now, not after landing on a progress screen that will never move. The idempotent
   // re-entry above is deliberately allowed through — resuming a running job costs nothing new.
-  const allowance = await checkAllowance({
+  const allowance = await claimAllowance({
     orgId: org.id,
     plan: org.plan,
     userId: user.id,

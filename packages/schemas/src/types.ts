@@ -1,5 +1,8 @@
 // Pure types shared across Airrow. No runtime dependencies.
 
+import type { UiKit } from "./ui-kits.ts";
+
+/** `other` means the founder described their product themselves, in `productTypeOther` (spec 159). */
 export type ProductType =
   | "saas"
   | "marketplace"
@@ -8,10 +11,12 @@ export type ProductType =
   | "api"
   | "internal_tool"
   | "browser_extension"
-  | "hobby";
+  | "hobby"
+  | "other";
 
 export type Audience = "b2b" | "b2c" | "both" | "internal";
 
+/** `other` means the founder described a capability of their own, in `capabilitiesOther` (spec 159). */
 export type FeatureId =
   | "auth"
   | "organizations"
@@ -25,7 +30,8 @@ export type FeatureId =
   | "realtime"
   | "email"
   | "admin"
-  | "audit_logs";
+  | "audit_logs"
+  | "other";
 
 /** `custom` means the founder described their own stack in `frameworkOther`. */
 export type Framework = "nextjs" | "vite" | "custom";
@@ -34,22 +40,35 @@ export type TeamShape = "solo" | "small_team" | "startup" | "agency";
 export type SecurityLevel = "standard" | "elevated";
 export type ScaleExpectation = "validate" | "growth" | "high_scale";
 
-/** How data is organized & isolated — drives the data model and RLS strategy. */
-export type Tenancy = "single_user" | "organizations" | "marketplace" | "internal";
+/**
+ * How data is organized & isolated — drives the data model and RLS strategy.
+ *
+ * `other` means the founder described their own isolation model in `tenancyOther` (spec 159). It is
+ * deliberately *not* treated as multi-tenant: what a described model implies about `organization_id`
+ * is the founder's own words to read, and guessing "everyone shares" from an answer we did not
+ * understand is the one guess with a security consequence.
+ */
+export type Tenancy = "single_user" | "organizations" | "marketplace" | "internal" | "other";
 /** How users authenticate (multi-select; `public` means no accounts). */
 export type AuthMethod = "email_password" | "magic_link" | "social" | "sso" | "public";
 /** Kind of AI in the product; the model stores `"none"` when AI is not selected. */
 export type AiUsage = "llm_calls" | "rag" | "agents" | "ml_models";
 /** Data sensitivity / compliance posture. */
 export type DataSensitivity = "standard" | "pii" | "regulated";
-/** Deploy target. */
-export type Hosting = "vercel" | "azure" | "self_host";
-/** Database provider — all PostgreSQL, to keep RLS + SQL migrations (constitution §II). */
-export type Database = "supabase" | "postgres";
+/** Deploy target. `other` means the founder named their own, in `hostingOther` (spec 159). */
+export type Hosting = "vercel" | "azure" | "self_host" | "other";
+/**
+ * Database provider. The two golden paths are PostgreSQL, which is what keeps RLS and SQL migrations
+ * available (constitution §II); `other` is the founder's own, named in `databaseOther`, and the
+ * generated documents then describe *their* database rather than assuming Postgres of it (spec 159).
+ */
+export type Database = "supabase" | "postgres" | "other";
 
 /** Raw interview answers, keyed by question id. Order mirrors the interview flow. */
 export interface InterviewAnswers {
   productType?: ProductType;
+  /** The founder's own words for what they are building, when `productType` is `other`. */
+  productTypeOther?: string;
   problem?: string;
   vision?: string;
   mvpFocus?: string;
@@ -57,9 +76,17 @@ export interface InterviewAnswers {
   coreEntities?: string;
   nonGoals?: string;
   tenancy?: Tenancy;
+  /** The founder's own isolation model, when `tenancy` is `other`. */
+  tenancyOther?: string;
   authModel?: AuthMethod[];
   roles?: "simple" | "granular";
   capabilities?: FeatureId[];
+  /** The capability no option covered, when `capabilities` includes `other`. */
+  capabilitiesOther?: string;
+  /** The founder's own database, when `database` is `other`. */
+  databaseOther?: string;
+  /** The founder's own deploy target, when `hosting` is `other`. */
+  hostingOther?: string;
   /** `"none"` lets the founder back out of AI after selecting the capability. */
   aiUsage?: AiUsage | "none";
   integrations?: string;
@@ -72,7 +99,52 @@ export interface InterviewAnswers {
   hosting?: Hosting;
   repoProvider?: RepoProvider;
   team?: TeamShape;
+  /**
+   * How the product should look, feel, and move — free text, feeds `UI_ARCHITECTURE.md` and `/start`.
+   *
+   * One answer, whether the founder wrote it from nothing or started from one of the directions the
+   * question offers: picking one writes its words here, and they are theirs to edit from that moment
+   * (spec 159). Which direction was picked is recorded separately, in `uiKit`.
+   */
+  uiDirection?: string;
+  /**
+   * Which curated direction the founder picked, if they picked one (spec 165).
+   *
+   * Spec 159 derived this from the prose — the option stayed highlighted while the text still began
+   * with its prefill — and that was honest while the pick had no consequence beyond a highlight. It
+   * now decides which theme `/start` installs, and a founder rewriting their opening sentence must
+   * not silently cancel an install they chose. So it is stored, and only the "my own words" option
+   * clears it.
+   *
+   * Not a question of its own: there is one design screen, and this is set from the picker on it.
+   * `SATELLITE_ANSWERS` in `questions.ts` is what keeps it alive through `pruneHiddenAnswers`.
+   */
+  uiKit?: string;
+  /**
+   * Products the founder pointed at, as they typed them — whitespace-separated, at most five.
+   *
+   * Words, and only ever words: nothing here is fetched (see the spec's _Design decision_ 4). A URL
+   * from an interview anyone can answer, resolved from our servers, is an SSRF surface that buys
+   * markup saying little about how a page looks.
+   */
+  uiReferenceLinks?: string;
 }
+
+/**
+ * One image the founder attached, ready for the authoring provider's vision block.
+ *
+ * Lives here rather than in the app because the app's authoring provider and its data layer both
+ * speak it. **The engine never sees one** — `packages/engine` takes strings and stays synchronous
+ * and pure (§I); what reaches a document is the model's *description* of an image, never an image.
+ */
+export interface UiReferenceImage {
+  mediaType: "image/png" | "image/jpeg" | "image/webp";
+  /** Raw bytes, base64-encoded — the shape the Claude API's image block takes. */
+  base64: string;
+}
+
+/** One question's id — what the interview keys an answer by, and what names an answer elsewhere. */
+export type AnswerId = keyof InterviewAnswers;
 
 /**
  * Where a project came from, and — for an import — whether the analysis found code to read.
@@ -93,15 +165,25 @@ export interface ProjectModel {
   origin: ProjectOrigin;
   vision: string;
   productType: ProductType;
+  /** The founder's own words for their product type; empty unless `productType` is `other`. */
+  productTypeOther: string;
   audience: Audience;
   tenancy: Tenancy;
+  /** The founder's own isolation model; empty unless `tenancy` is `other`. */
+  tenancyOther: string;
   authModel: AuthMethod[];
   /** Projected capability list (includes derived `auth`/`organizations`). */
   features: FeatureId[];
+  /** The capability no option covered; empty unless `features` includes `other`. */
+  capabilitiesOther: string;
   roles: "simple" | "granular" | "none";
   aiUsage: AiUsage | "none";
   integrations: string;
   hosting: Hosting;
+  /** The founder's own deploy target; empty unless `hosting` is `other`. */
+  hostingOther: string;
+  /** The founder's own database; empty unless `stack.database` is `other`. */
+  databaseOther: string;
   stack: {
     framework: Framework;
     /**
@@ -129,6 +211,23 @@ export interface ProjectModel {
   coreEntities: string;
   /** The problem and who has it. Empty when unanswered — never inferred. */
   problem: string;
+  /** How the product should look, feel, and move. Empty when unanswered — never inferred. */
+  uiDirection: string;
+  /**
+   * The curated direction's theme, when one was picked (spec 165).
+   *
+   * Null covers every way of not picking: "my own words", a skipped question, an answer saved before
+   * this existed, and a stack this theme cannot install into. All four mean the same thing to
+   * everything downstream — name no theme, install nothing extra — which is why they share a value.
+   */
+  uiKit: UiKit | null;
+  /** Products the founder pointed at, normalised to at most five entries. Never fetched. */
+  uiReferenceLinks: string[];
+  /**
+   * How many images the founder attached. The bytes stay in the app (see `UiReferenceImage`); the
+   * engine only needs to know whether the brief it renders had anything to look at.
+   */
+  uiReferenceImageCount: number;
   /** What the product deliberately is not doing. Empty when unanswered. */
   nonGoals: string;
   derived: {

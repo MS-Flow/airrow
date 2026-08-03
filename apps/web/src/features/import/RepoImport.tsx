@@ -132,7 +132,7 @@ function RepoDetails({ repo, onBack }: { repo: GitHubRepo; onBack: () => void })
               rows={4}
               required
               maxLength={2000}
-              placeholder="e.g. A lightweight CRM that helps small agencies track client relationships."
+              placeholder="e.g. A file compression platform that makes storage cheaper for anyone moving large amounts of data."
             />
             <p className="mt-1.5 text-sm text-fg-faint">
               Prefilled from the repository description when it has one. At least 10 characters.

@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveProjectModel } from "./model.ts";
 import { renderScaffold, type TemplateFile } from "./scaffold.ts";
+import { uiKitFor } from "../../schemas/src/ui-kits.ts";
 import type { ResolveInput } from "./model.ts";
 import type { InterviewAnswers } from "../../schemas/src/types.ts";
 
@@ -337,6 +338,50 @@ describe("the generated stack is stated consistently", () => {
     expect(vite.byPath.get(".github/workflows/deploy-dev.yml")).toContain("npx vercel@latest");
   });
 
+  // A founder's first message in a generated repository used to be "what do I do now?" — CLAUDE.md
+  // is what the assistant reads before answering it, so the answer belongs there (spec 159).
+  it("opens CLAUDE.md with the six things to type, in order", () => {
+    const claude = render().byPath.get("CLAUDE.md") ?? "";
+    expect(claude).toContain("## Starting a chat here");
+    const order = ["/start", "START_HERE.md", "/createspec", "/clarify", "/implement", "/analyze"];
+    let at = claude.indexOf("## Starting a chat here");
+    for (const step of order) {
+      const next = claude.indexOf(step, at);
+      expect(next, `CLAUDE.md's first-session table is missing "${step}" in order`).toBeGreaterThan(at);
+      at = next;
+    }
+    // The command deletes itself, so the row has to be conditional rather than a standing promise.
+    expect(claude).toContain(".claude/commands/start.md` still exists");
+    expect(claude).toContain("Installs the tools, scaffolds the stack");
+  });
+
+  // Knowing what /implement did is not knowing what to type next, and the one step nobody can guess
+  // is the one outside the terminal: a pushed branch does not merge itself (spec 159).
+  it("tells the assistant what to say after each command, merge included", () => {
+    const claude = render().byPath.get("CLAUDE.md") ?? "";
+    expect(claude).toContain("## After a command finishes");
+    // Every command the foundation ships, `/security` included — a command with no next step is the
+    // one a founder stops at.
+    for (const command of ["/createspec", "/clarify", "/implement", "/analyze", "/push", "/pr-check", "/security"]) {
+      expect(claude, `no next step after ${command}`).toContain(`| \`${command}\` |`);
+    }
+    expect(claude).toContain("**Squash and merge**");
+    expect(claude).toContain("`feature/<name>` → `develop` → `main`");
+    // After /start the next move is the founder's accounts, named — or the first spec.
+    expect(claude).toContain("the Supabase and Vercel accounts only they can create");
+    // And a command that failed gets no cheerful pointer at the step after it.
+    expect(claude).toMatch(/Never point at the next\s+step of a step that did not finish/);
+  });
+
+  it("names the merge in the vocabulary of the host the code is actually on", () => {
+    const azure = render({ repoProvider: "azure_devops" }).byPath.get("CLAUDE.md") ?? "";
+    expect(azure).toContain("Azure DevOps → Repos → Pull requests");
+    expect(azure).toContain("**Complete** the PR");
+    expect(azure).toContain("az repos pr create");
+    expect(azure).not.toContain("Squash and merge");
+    expect(render().byPath.get("CLAUDE.md")).toContain("gh pr create");
+  });
+
   it("gives ordered next steps from /start to the implement loop", () => {
     const { byPath } = render();
     const start = byPath.get("START_HERE.md") ?? "";
@@ -345,5 +390,191 @@ describe("the generated stack is stated consistently", () => {
     }
     // The first step has to be the one that makes the others runnable.
     expect(start.indexOf("/start")).toBeLessThan(start.indexOf("/createspec"));
+  });
+});
+
+/* ── The UI brief, and the answers that had no box (spec 159) ──────────────── */
+
+const UI_DOC = "docs/architecture/UI_ARCHITECTURE.md";
+
+describe("UI_ARCHITECTURE.md is a brief a screen can be built from", () => {
+  it("renders every section, with nothing left unresolved", () => {
+    const brief = render().byPath.get(UI_DOC) ?? "";
+    for (const heading of [
+      "## Design direction",
+      "## Design system",
+      "## References",
+      "## Screens & navigation",
+      "## Layout, spacing & type",
+      "## Colour",
+      "## Components",
+      "## Interaction & motion",
+      "## States",
+      "## Design language"
+    ]) {
+      expect(brief, `the brief is missing "${heading}"`).toContain(heading);
+    }
+    expect(brief).not.toMatch(/\{\{[A-Z_]+\}\}/);
+    // Prose and headings only — the same rule the authoring contract enforces on the model.
+    expect(brief).not.toContain("```");
+  });
+
+  it("is useful with no design answer at all — that is the common case, not the edge", () => {
+    const brief = render().byPath.get(UI_DOC) ?? "";
+    expect(brief).toContain("No design direction was described");
+    expect(brief).toContain("attached no references");
+    // The sections that never needed an answer must still say something worth reading.
+    expect(brief).toMatch(/Empty is a designed screen/);
+    expect(brief).toMatch(/spacing scale/);
+  });
+
+  it("carries one design direction — the founder's, however they arrived at it", () => {
+    // The interview merged the picker into the field, so there is exactly one answer to render and
+    // nothing downstream has to reconcile a pick with the words beside it (spec 159).
+    const brief =
+      render({
+        uiDirection: "Dense and operational: tables over cards. The inbox is where someone lives."
+      }).byPath.get(UI_DOC) ?? "";
+    expect(brief).toContain(
+      "In the founder's own words: Dense and operational: tables over cards."
+    );
+    expect(brief).not.toContain("Closest of the starting directions");
+  });
+
+  it("names what the founder pointed at, and the one rule about it", () => {
+    const brief =
+      render({ uiReferenceLinks: "linear.app stripe.com" }).byPath.get(UI_DOC) ?? "";
+    expect(brief).toContain("linear.app, stripe.com");
+    expect(brief).toMatch(/never as something to copy/);
+    expect(brief).toMatch(/Do not reproduce anyone's logo/);
+  });
+
+  it("says how many screenshots it read, since nothing else can", () => {
+    const model = resolveProjectModel({ ...input, referenceImageCount: 2 });
+    const { files } = renderScaffold(TEMPLATE, model);
+    const brief = files.find((f) => f.path === UI_DOC)?.content ?? "";
+    expect(brief).toContain("2 screenshots were attached");
+  });
+
+  /* ── The theme the brief is allowed to name (spec 165) ─────────────────── */
+
+  it("names the theme, the pinned version and the licence when one was picked", () => {
+    const kit = uiKitFor("bold_contrast")!;
+    const brief = render({ uiKit: "bold_contrast" }).byPath.get(UI_DOC) ?? "";
+    expect(brief).toContain(kit.name);
+    expect(brief).toContain(kit.source.version);
+    expect(brief).toContain(`Licensed ${kit.source.licence}, © ${kit.source.holder}`);
+    expect(brief).toContain("THIRD_PARTY_NOTICES.md");
+    // The claim the pin exists to make true.
+    expect(brief).toMatch(/pinned to that exact version so this section stays true/);
+    // And the boundary that keeps a picked look from becoming a picked layout.
+    expect(brief).toContain("visual language, not a layout");
+    expect(brief).toMatch(/The theme decides how those screens look, never what they are/);
+  });
+
+  it("says plainly that nothing was installed when nothing was picked", () => {
+    const brief = render().byPath.get(UI_DOC) ?? "";
+    expect(brief).toContain("No curated direction was picked");
+    // The command by name, not an unrendered token — this value is substituted, never re-expanded.
+    expect(brief).toContain("`/start`");
+    expect(brief).not.toMatch(/\{\{[A-Z_]+\}\}/);
+  });
+
+  it("installs no theme on a stack that brings its own conventions", () => {
+    const brief =
+      render({
+        uiKit: "bold_contrast",
+        framework: "custom",
+        frameworkOther: "Django 5 with Postgres, managed by uv"
+      }).byPath.get(UI_DOC) ?? "";
+    expect(brief).toContain("No theme is installed");
+    expect(brief).not.toContain("Bold contrast");
+    expect(brief).not.toContain("Licensed MIT");
+  });
+
+  it("keeps the founder's own reference above the theme they picked", () => {
+    // Spec 159's rule, unchanged by a pick becoming installable: our theme is a starting point,
+    // their screenshot is theirs and wins where the two disagree.
+    const brief =
+      render({ uiKit: "soft_minimal", uiReferenceLinks: "linear.app" }).byPath.get(UI_DOC) ?? "";
+    expect(brief).toContain("Soft minimal");
+    expect(brief).toMatch(/never as something to copy/);
+  });
+});
+
+describe("an answer that fitted no box still reaches the output", () => {
+  it("describes the product the founder described, not the nearest option", () => {
+    const text = allText(
+      render({ productType: "other", productTypeOther: "A turn-based strategy game for two players." })
+        .files
+    );
+    expect(text).toContain("A turn-based strategy game for two players.");
+    // The generic label must not be what a document ends up calling it.
+    expect(text).not.toContain("is a software product for");
+  });
+
+  it("carries a described isolation model into the data documents", () => {
+    const text = allText(
+      render({
+        tenancy: "other",
+        tenancyOther: "Each clinic is a tenant, but a record can be shared for a referral."
+      }).files
+    );
+    expect(text).toContain("Each clinic is a tenant");
+  });
+
+  it("gives a described capability its own spec brief, like every other one", () => {
+    const text = allText(
+      render({
+        capabilities: ["other"],
+        capabilitiesOther: "Offline sync — the field app keeps working with no signal."
+      }).files
+    );
+    expect(text).toContain("Offline sync");
+    expect(text).toContain("The capability you described");
+  });
+
+  it("asks for the description rather than inventing one when it is missing", () => {
+    const text = allText(render({ capabilities: ["other"] }).files);
+    expect(text).toContain("[NEEDS CLARIFICATION: you selected a capability of your own");
+  });
+});
+
+describe("a database and a deploy target the founder named", () => {
+  it("writes the setup guide for their database rather than assuming Postgres of it", () => {
+    const text = allText(
+      render({ database: "other", databaseOther: "MongoDB Atlas with migrate-mongo" }).files
+    );
+    expect(text).toContain("MongoDB Atlas with migrate-mongo");
+    // The two things that would be wrong to assume of a database nobody here has seen.
+    expect(text).not.toContain("`DATABASE_URL`");
+    expect(text).toContain("that database's own migration tool");
+  });
+
+  it("names their deploy target, and says plainly that the workflow is a placeholder", () => {
+    const text = allText(render({ hosting: "other", hostingOther: "Fly.io" }).files);
+    expect(text).toContain("Fly.io");
+    expect(text).toContain("nothing here has seen Fly.io");
+    // The self-hosting section would be a different, wrong story about their infrastructure.
+    expect(text).not.toContain("## 2. Your own server");
+  });
+
+  it("still says something sensible when the field was left empty", () => {
+    const text = allText(render({ hosting: "other", database: "other" }).files);
+    expect(text).toContain("your own deploy target");
+    expect(text).toContain("the database you described");
+  });
+});
+
+describe("what the product is not doing", () => {
+  it("is no longer asked for, and the document says so rather than inventing one", () => {
+    const claude = render().byPath.get("CLAUDE.md") ?? "";
+    expect(claude).toContain("Not yet decided");
+  });
+
+  it("is still carried when something else derived it — an import, or an older answer", () => {
+    const claude =
+      render({ nonGoals: "No accounting. No native app in year one." }).byPath.get("CLAUDE.md") ?? "";
+    expect(claude).toContain("No accounting. No native app in year one.");
   });
 });

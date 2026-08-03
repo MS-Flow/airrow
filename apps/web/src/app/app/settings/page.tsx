@@ -27,7 +27,11 @@ import {
 } from "@/features/billing/BillingActions";
 import { PLAN_BADGE_TONE, planStanding } from "@/features/billing/plan-standing";
 import { planWithStripe } from "@/features/billing/sync";
-import { githubIdentity, requireSession, updateName } from "@/lib/auth";
+import { InviteCard } from "@/features/referrals/InviteCard";
+import { EmailCard, PasswordCard } from "@/features/auth/CredentialCards";
+import { githubIdentity, hasPassword, requireSession, updateName } from "@/lib/auth";
+import { referralSummary } from "@/lib/data/referrals";
+import { requestOrigin } from "@/lib/site-url";
 import { stripeConfigured, stripePrices } from "@/lib/stripe";
 import { readTheme } from "@/lib/theme";
 
@@ -44,9 +48,15 @@ export const metadata = { title: "Settings" };
 export default async function SettingsPage({
   searchParams
 }: {
-  searchParams: Promise<{ saved?: string; upgraded?: string; refreshed?: string }>;
+  searchParams: Promise<{
+    saved?: string;
+    upgraded?: string;
+    refreshed?: string;
+    error?: string;
+    status?: string;
+  }>;
 }) {
-  const { saved, upgraded, refreshed } = await searchParams;
+  const { saved, upgraded, refreshed, error, status } = await searchParams;
   const { user, org } = await requireSession();
   const theme = await readTheme();
   // Reconciled on load rather than on demand. A cancellation made in Stripe, or a payment whose
@@ -59,8 +69,18 @@ export default async function SettingsPage({
   const { plan, subscription } = await planWithStripe(org);
   const allowance = await checkAllowance({ orgId: org.id, plan, userId: user.id });
   const standing = subscription ? planStanding(subscription) : null;
+  // Read-only, and the invite code is created here on first visit. Starting a *week* from a page
+  // render would be wrong; minting a link when the founder is looking at where to find it is exactly
+  // when it should exist (spec 122).
+  // Null on a deployment whose database has not run the referrals migration yet; the card is then
+  // simply absent rather than the page being a 500 (spec 122).
+  const referral = await referralSummary(org.id);
+  const inviteLink = referral ? `${await requestOrigin()}/invite/${referral.code}` : null;
   const intervals = stripePrices().map((p) => p.interval);
   const github = await githubIdentity();
+  // Decides which shape both credential cards take: an account that has only ever signed in with GitHub
+  // or Google has no password to confirm anything with (spec 171).
+  const accountHasPassword = await hasPassword();
   const githubConfigured = Boolean(process.env.GITHUB_APP_ID && process.env.GITHUB_APP_PRIVATE_KEY);
 
   return (
@@ -87,19 +107,17 @@ export default async function SettingsPage({
               <Label htmlFor="name">Name</Label>
               <Input id="name" name="name" defaultValue={user.name} required maxLength={80} />
             </div>
-            <div>
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" value={user.email} disabled />
-              <p className="mt-1.5 text-xs text-fg-faint">
-                Email is managed by your account sign-in and can&apos;t be changed here.
-              </p>
-            </div>
             <Button type="submit" size="sm">
               Save changes
             </Button>
           </form>
         </CardBody>
       </Card>
+
+      {/* The two credentials, each its own card (spec 171). They used to be one disabled input under
+          "managed by your account sign-in", which was true of nothing except our own missing screen. */}
+      <EmailCard email={user.email} hasPassword={accountHasPassword} error={error} status={status} />
+      <PasswordCard hasPassword={accountHasPassword} error={error} status={status} />
 
       {/* What is left, in the one place a founder looks when they wonder. Shown to everyone rather
           than only on the way out: a limit discovered at the moment it stops you reads as a trap. */}
@@ -137,10 +155,19 @@ export default async function SettingsPage({
             <>
               <p className="text-sm text-fg-muted">
                 <span className="font-medium text-fg">
-                  {allowance.allowed && allowance.grant === "pro" ? "Pro" : "Admin"}
+                  {allowance.allowed && allowance.grant === "admin" ? "Admin" : "Pro"}
                 </span>{" "}
                 · unlimited generations. {allowance.used} used so far.
               </p>
+              {/* A week is not a subscription and must never be dressed as one: there is no card
+                  behind it, nothing renews, and Stripe has never heard of it (spec 122). */}
+              {allowance.allowed && allowance.grant === "referral" && referral?.activeUntil ? (
+                <p className="mt-1.5 max-w-prose text-xs leading-relaxed text-fg-faint">
+                  This is a week from an invitation, not a subscription — nothing is being charged and
+                  nothing renews. It runs until {referral.activeUntil.slice(0, 10)}, and everything
+                  you generate stays yours afterwards.
+                </p>
+              ) : null}
               {subscription && standing && plan === "pro" ? (
                 <>
                   {/* The state, then what happens next and when. Both derived from the subscription
@@ -185,6 +212,8 @@ export default async function SettingsPage({
           )}
         </CardBody>
       </Card>
+
+      {referral && inviteLink ? <InviteCard summary={referral} link={inviteLink} /> : null}
 
       <Card className="mt-4">
         <CardHeader>

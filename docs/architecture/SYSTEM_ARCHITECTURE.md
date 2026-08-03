@@ -65,7 +65,9 @@ Generation is async: a Server Action enqueues a `generation_jobs` row; a job run
 
 ## Auth & tenancy
 
-Supabase Auth (email magic link + GitHub OAuth). Every user gets a personal organization at signup; all resources hang off `organization_id` (see DATABASE_DESIGN.md). RLS enforces tenancy on every table.
+Supabase Auth (email + password, GitHub OAuth, Google OAuth). Every user gets a personal organization at signup; all resources hang off `organization_id` (see DATABASE_DESIGN.md). RLS enforces tenancy on every table.
+
+This line previously read "email magic link + GitHub OAuth". Magic link was never built — it was a designed-but-inert button (spec 19) that spec 140 removed rather than leave promising a flow nobody intended to ship.
 
 ## External services
 

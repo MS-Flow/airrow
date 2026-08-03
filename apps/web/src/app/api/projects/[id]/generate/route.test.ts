@@ -17,6 +17,10 @@ const store = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/data/store", () => store);
 
+// Crediting whoever invited this founder happens here too (spec 122); it has its own tests.
+const matureReferral = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock("@/lib/data/referrals", () => ({ matureReferral }));
+
 import { POST } from "./route";
 
 const ctx = { params: Promise.resolve({ id: "proj1" }) };
@@ -60,7 +64,9 @@ describe("POST /api/projects/[id]/generate", () => {
 
     const res = await POST(new Request("http://x", { method: "POST" }), ctx);
 
-    expect(runGenerationJob).toHaveBeenCalledWith("job1", {});
+    // The organization travels with the job: the runner only knows a project, and the founder's UI
+    // references are org-scoped like every other read (spec 159).
+    expect(runGenerationJob).toHaveBeenCalledWith("job1", {}, "org1");
     await expect(res.json()).resolves.toMatchObject({ started: true, status: "completed" });
   });
 

@@ -10,3 +10,8 @@ dist/
 .vercel
 # Written by the audit step in ci.yml (and by anyone running it locally) — never committed.
 audit.json
+# Written by /security — a list of the ways in that are still open. Committed to a public repo it is
+# a map handed to whoever finds it (spec 157).
+SECURITY_AUDIT.md
+# Personliga Claude Code-inställningar (permission-läge m.m.) — gäller bara den egna maskinen.
+.claude/settings.local.json

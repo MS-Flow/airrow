@@ -25,7 +25,8 @@ Deploys to {{DEPLOY_TARGET}}.
 
 ## Working here
 Spec-driven development, governed by a single [constitution](.claude/spec-kit/constitution.md) and
-driven by slash commands: `/createspec → /clarify → /implement → /analyze` (+ `/push`, `/pr-check`).
+driven by slash commands: `/createspec → /clarify → /implement → /analyze` (+ `/push`, `/pr-check`,
+and `/security` for a vulnerability review of the whole repository).
 Read [CLAUDE.md](CLAUDE.md) first. Branch direction is strict — see
 [docs/architecture/BRANCHING.md](docs/architecture/BRANCHING.md).
 

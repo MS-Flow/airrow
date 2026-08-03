@@ -184,7 +184,94 @@ the same push, but it only touches the database schema; it cannot gate the deplo
 
 ---
 
-## 6. Taking Pro live (specs 99, 100)
+## 6. Auth email (Resend)
+
+Without this, Supabase sends the verification email from its own domain with its own wording — and its
+built-in mailer is rate-limited to a couple of messages an hour, so mail starts disappearing under any
+real traffic. Spec 113 replaces it with Resend over plain SMTP.
+
+1. **Create the sending domain.** At <https://resend.com> → **Domains → Add**, add `airrow.app`.
+   Resend shows DKIM (and optionally DMARC) records to publish.
+2. **Publish the DNS records.** `airrow.app` uses Vercel's nameservers (`ns1`/`ns2.vercel-dns.com`), so
+   they go in the **domain's own DNS view** — Vercel dashboard → _Domains_ → `airrow.app` → DNS records.
+   Not the project's _Settings → Domains_ tab, which only attaches a domain to a project.
+   _(§8 adds receiving on top of this and deliberately leaves every record here alone — DNS stays at
+   Vercel.)_
+
+   Resend gives the values; they are unique to the domain and cannot be written down here in advance.
+   What is worth knowing before you start:
+
+   - **Enter the name without the domain.** Resend displays `send.airrow.app` and
+     `resend._domainkey.airrow.app`; Vercel's Name field wants `send` and `resend._domainkey`. Pasting
+     the full name creates `send.airrow.app.airrow.app` and verification never passes. This is the
+     mistake to expect.
+   - **Paste TXT values without the surrounding quotes.** Vercel adds them.
+   - **The MX record needs a priority** (Resend shows it, usually `10`), and it sits on the sending
+     subdomain — not on the apex, so it cannot disturb inbound mail for `airrow.app`. That choice is
+     what later let §8 put a receiving MX and SPF on the apex without merging anything.
+   - There were no TXT or MX records on the domain as of 2026-07-30, so nothing here merges with an
+     existing SPF.
+
+   Check propagation yourself rather than only refreshing Resend:
+   `nslookup -type=TXT resend._domainkey.airrow.app`. Wait for Resend to report **Verified** before
+   sending — mail sent earlier is likely to be filed as spam.
+3. **Create an API key** (Resend → **API keys**) with send permission only.
+4. **Get a Supabase access token** from <https://supabase.com/dashboard/account/tokens>, then put it and
+   the Resend key in a `.env` file at the repo root:
+   ```
+   SUPABASE_ACCESS_TOKEN=sbp_…
+   SUPABASE_PROJECT_ID=frqhxybuzcmecxqkimxj
+   RESEND_API_KEY=re_…
+   ```
+   `.env` is gitignored and Next.js never reads it — the app only reads `.env*` inside `apps/web/`, so
+   nothing here reaches a build or a bundle.
+
+   A file rather than shell variables on purpose. `VAR=value command` is bash syntax and fails in
+   PowerShell, and the PowerShell equivalent invites a worse trap: paste several `Read-Host` lines at
+   once and the prompt swallows the following line, leaving a whole command inside the variable. It is
+   non-empty, so every "is it set?" check passes, and the API answers with a 401 about header format
+   that names nothing. The script now rejects a credential containing whitespace for exactly that
+   reason — but not needing the shell at all is better than diagnosing it well.
+5. **Push the whole auth configuration** — SMTP, the three email templates (signup confirmation,
+   password reset, email change), the redirect allow-list and the site URL, in one call:
+   ```bash
+   node --env-file=.env scripts/sync-supabase-auth.mjs --dry-run   # inspect; the key is redacted
+   node --env-file=.env scripts/sync-supabase-auth.mjs
+   ```
+   Run it again whenever the template or the host list changes. Without `RESEND_API_KEY` it updates
+   everything **except** SMTP and says so — blanking working sending credentials would be worse than
+   leaving them.
+6. **Check it took:** _Project Settings → Authentication_ shows the SMTP host, and
+   _Authentication → URL Configuration_ the redirect list. Then sign up with a real address and read the
+   mail that arrives.
+
+**The repo is the source of truth for all of it, not the dashboard.** The templates are
+[`supabase/templates/`](../../supabase/templates/) — `confirmation.html`, `recovery.html` and
+`email-change.html` (spec 171); the SMTP values,
+the redirect allow-list and the site URL are constants in
+[`scripts/sync-supabase-auth.mjs`](../../scripts/sync-supabase-auth.mjs). Editing any of them in the
+dashboard is pointless — the next sync overwrites it. Only the two secrets live outside the repo: the
+Resend key and the access token.
+
+The same SMTP block sits **commented out** in [`supabase/config.toml`](../../supabase/config.toml) for
+reference. That file governs the local stack, where enabling it would override the local inbox and start
+mailing real addresses from a developer's machine.
+
+**Why a script and not a set of dashboard forms:** one fact in two places, kept in step by someone
+remembering, is what [spec 77](../../specs/77-auto-apply-migrations.md) was written to remove after it
+had already shipped a broken production database. A stale email template or a missing redirect host is
+cheaper than a stale schema, but it fails the same way — what reviewers approved stops being what
+founders get, and nothing announces it. The redirect list has a second guard: a test fails if the app's
+own host allow-list (`apps/web/src/lib/site-url.ts`) and this script's list stop agreeing, because a
+host in one and not the other builds a confirmation link that Supabase then rejects.
+
+**Local development sends nothing outward.** `[auth.email.smtp]` stays commented out, so the local stack
+keeps using `[local_smtp]` — the mail catcher on port 54324 — and no real address is ever mailed from a
+developer machine. Enabling it is a deliberate act, and the point at which that stops being true.
+
+---
+
+## 7. Taking Pro live (specs 99, 100)
 
 Test mode and live mode are two separate Stripe accounts wearing one dashboard. Nothing carries over:
 not the product, not the price id, not the keys, not the webhook endpoint or its signing secret. Every
@@ -235,86 +322,80 @@ diagnosis is the "Paid, and still on Free" runbook in
 
 ---
 
-## 7. Auth email (Resend)
+## 8. Inbound email (forwarding on Vercel DNS, spec 144)
 
-Without this, Supabase sends the verification email from its own domain with its own wording — and its
-built-in mailer is rate-limited to a couple of messages an hour, so mail starts disappearing under any
-real traffic. Spec 113 replaces it with Resend over plain SMTP.
+§6 made Airrow able to **send**. Nothing receives: `support@airrow.app` and `hello@airrow.app` — the
+address already printed in the legal pages — reach no mailbox at all, and the support page (spec 144)
+mails tickets and reviews to the first of them. A message to an address with no MX record does not
+bounce loudly; it shows as `sent` in Resend and is simply never delivered, which is exactly how this
+was found.
 
-1. **Create the sending domain.** At <https://resend.com> → **Domains → Add**, add `airrow.app`.
-   Resend shows DKIM (and optionally DMARC) records to publish.
-2. **Publish the DNS records.** `airrow.app` uses Vercel's nameservers (`ns1`/`ns2.vercel-dns.com`), so
-   they go in the **domain's own DNS view** — Vercel dashboard → _Domains_ → `airrow.app` → DNS records.
-   Not the project's _Settings → Domains_ tab, which only attaches a domain to a project.
+**Forwarding is three DNS records, not a migration.** `airrow.app` uses Vercel's nameservers
+(`ns1`/`ns2.vercel-dns.com`) and **stays there**. ImprovMX (or Forward Email — same shape) receives on
+the domain's `MX` and forwards to an ordinary Gmail account, free, and Vercel ships a preset that
+writes the records for you.
 
-   Resend gives the values; they are unique to the domain and cannot be written down here in advance.
-   What is worth knowing before you start:
+> **Why not Cloudflare Email Routing.** It does the same job for the same price, but only on a zone
+> using **Cloudflare's** nameservers — so it would mean re-creating every §4 and §6 record inside
+> Cloudflare and switching nameservers at the registrar, with §6's verified sending domain riding on
+> the change. Spec 144 chose that route first and reversed it here: the receiving half is worth two
+> records, not a zone move. Cloudflare stays the right answer only if the zone is going there anyway.
 
-   - **Enter the name without the domain.** Resend displays `send.airrow.app` and
-     `resend._domainkey.airrow.app`; Vercel's Name field wants `send` and `resend._domainkey`. Pasting
-     the full name creates `send.airrow.app.airrow.app` and verification never passes. This is the
-     mistake to expect.
-   - **Paste TXT values without the surrounding quotes.** Vercel adds them.
-   - **The MX record needs a priority** (Resend shows it, usually `10`), and it sits on the sending
-     subdomain — not on the apex, so it cannot disturb inbound mail for `airrow.app`.
-   - There were no TXT or MX records on the domain as of 2026-07-30, so nothing here merges with an
-     existing SPF.
+1. **Add the forwarding records.** Vercel dashboard → _Domains_ → `airrow.app` → **Add DNS Preset** →
+   **ImprovMX [MX]** → _Add records_. Prefer the preset and then check what landed against this:
 
-   Check propagation yourself rather than only refreshing Resend:
-   `nslookup -type=TXT resend._domainkey.airrow.app`. Wait for Resend to report **Verified** before
-   sending — mail sent earlier is likely to be filed as spam.
-3. **Create an API key** (Resend → **API keys**) with send permission only.
-4. **Get a Supabase access token** from <https://supabase.com/dashboard/account/tokens>, then put it and
-   the Resend key in a `.env` file at the repo root:
-   ```
-   SUPABASE_ACCESS_TOKEN=sbp_…
-   SUPABASE_PROJECT_ID=frqhxybuzcmecxqkimxj
-   RESEND_API_KEY=re_…
-   ```
-   `.env` is gitignored and Next.js never reads it — the app only reads `.env*` inside `apps/web/`, so
-   nothing here reaches a build or a bundle.
+   | Type  | Name         | Value                                  | Priority |
+   | ----- | ------------ | -------------------------------------- | -------- |
+   | `MX`  | _(empty)_    | `mx1.improvmx.com`                     | `10`     |
+   | `MX`  | _(empty)_    | `mx2.improvmx.com`                     | `20`     |
+   | `TXT` | _(empty)_    | `v=spf1 include:spf.improvmx.com ~all` | —        |
 
-   A file rather than shell variables on purpose. `VAR=value command` is bash syntax and fails in
-   PowerShell, and the PowerShell equivalent invites a worse trap: paste several `Read-Host` lines at
-   once and the prompt swallows the following line, leaving a whole command inside the variable. It is
-   non-empty, so every "is it set?" check passes, and the API answers with a 401 about header format
-   that names nothing. The script now rejects a credential containing whitespace for exactly that
-   reason — but not needing the shell at all is better than diagnosing it well.
-5. **Push the whole auth configuration** — SMTP, the email template, the redirect allow-list and the
-   site URL, in one call:
-   ```bash
-   node --env-file=.env scripts/sync-supabase-auth.mjs --dry-run   # inspect; the key is redacted
-   node --env-file=.env scripts/sync-supabase-auth.mjs
-   ```
-   Run it again whenever the template or the host list changes. Without `RESEND_API_KEY` it updates
-   everything **except** SMTP and says so — blanking working sending credentials would be worse than
-   leaving them.
-6. **Check it took:** _Project Settings → Authentication_ shows the SMTP host, and
-   _Authentication → URL Configuration_ the redirect list. Then sign up with a real address and read the
-   mail that arrives.
+   - **Leave Name empty for the apex** — not `@`, not `airrow.app`. Vercel appends the domain, so `@`
+     creates `@.airrow.app` and nothing works. Same trap as §6's `send` / `resend._domainkey`.
+   - **Paste the TXT value without quotes**; Vercel adds them.
+   - Safe on the apex only because §6 deliberately put Resend's sending on the **`send.airrow.app`**
+     subdomain. Verified on 2026-07-31, before adding anything: `airrow.app` had **no** `MX` and **no**
+     `TXT`, while `send.airrow.app` carried `feedback-smtp.eu-west-1.amazonses.com` and
+     `v=spf1 include:amazonses.com ~all`. Nothing to merge. If sending is ever moved to the apex, the
+     two SPF strings must become one record — a domain may publish exactly one, and two make both
+     invalid.
+2. **Create the aliases** at <https://improvmx.com> → add the domain → forward
+   `support@airrow.app → <gmail>` and `hello@airrow.app → <gmail>`. A free account allows both, plus a
+   catch-all — leave the **catch-all off**, it forwards every typo and every address a spammer guesses.
+3. **Wait for the domain to read _Active_** in ImprovMX (usually minutes; DNS can lag an hour).
+4. **Verify receiving:** mail `support@airrow.app` from an outside account and watch it arrive in
+   Gmail. Then send a ticket from `/app/support` — Resend's log should show `last_event: delivered`
+   rather than `sent`, with the founder's address in `Reply-To`. `sent` and nothing in Gmail means the
+   MX records have not propagated yet.
+5. **Nothing in §4 or §6 changes.** No nameserver switch, no record re-created, so Resend's _Domains_
+   page keeps reading **Verified** and the signup verification email keeps working. That is the whole
+   reason this route was preferred.
+6. **DMARC already exists — edit it, never add a second.** `_dmarc.airrow.app` publishes
+   `v=DMARC1; p=none;` (checked 2026-07-31). A domain may have exactly one DMARC record, so to start
+   receiving failure reports, change that record to
+   `v=DMARC1; p=none; rua=mailto:<gmail>` rather than creating another. Tighten past `p=none` only
+   once the reports are clean.
+7. **Optional, and worth it:** in Gmail, _See all settings → Accounts → Send mail as_ →
+   `support@airrow.app`, using Resend's SMTP (`smtp.resend.com`, port 587, user `resend`, the API key
+   as the password). Without it, replies come from a personal address, which reads as a different
+   person than the one they wrote to. ImprovMX's own SMTP sending is a paid feature; Resend's is
+   already paid for.
 
-**The repo is the source of truth for all of it, not the dashboard.** The template is
-[`supabase/templates/confirmation.html`](../../supabase/templates/confirmation.html); the SMTP values,
-the redirect allow-list and the site URL are constants in
-[`scripts/sync-supabase-auth.mjs`](../../scripts/sync-supabase-auth.mjs). Editing any of them in the
-dashboard is pointless — the next sync overwrites it. Only the two secrets live outside the repo: the
-Resend key and the access token.
+**Until the records are in place**, set `SUPPORT_INBOX` to a real mailbox
+(`apps/web/.env.example`) — the notification then goes straight there and `Reply-To` still carries the
+founder, so the support loop works with no DNS at all. It does not help anyone who writes to the
+published addresses, which is what step 1 is for.
 
-The same SMTP block sits **commented out** in [`supabase/config.toml`](../../supabase/config.toml) for
-reference. That file governs the local stack, where enabling it would override the local inbox and start
-mailing real addresses from a developer's machine.
+**What the app needs from this:** nothing but `RESEND_API_KEY`, which §6 already set. `SUPPORT_INBOX`
+and `MAIL_FROM` have working defaults and exist so a staging deployment can be pointed somewhere else.
+With no key at all the support page and the review card still save everything — only the notification
+to us is skipped.
 
-**Why a script and not a set of dashboard forms:** one fact in two places, kept in step by someone
-remembering, is what [spec 77](../../specs/77-auto-apply-migrations.md) was written to remove after it
-had already shipped a broken production database. A stale email template or a missing redirect host is
-cheaper than a stale schema, but it fails the same way — what reviewers approved stops being what
-founders get, and nothing announces it. The redirect list has a second guard: a test fails if the app's
-own host allow-list (`apps/web/src/lib/site-url.ts`) and this script's list stop agreeing, because a
-host in one and not the other builds a confirmation link that Supabase then rejects.
-
-**Local development sends nothing outward.** `[auth.email.smtp]` stays commented out, so the local stack
-keeps using `[local_smtp]` — the mail catcher on port 54324 — and no real address is ever mailed from a
-developer machine. Enabling it is a deliberate act, and the point at which that stops being true.
+**Not chosen: Resend Inbound.** Resend can receive (its domain API reports a `receiving` capability),
+but a received message becomes a **webhook POST carrying metadata only** — the body is a second API
+call — so forwarding to Gmail would be a route handler we write and maintain. Its docs also steer
+receiving onto a subdomain rather than the root. It earns its place the day tickets should land *in*
+the app as threads; it does not earn it for forwarding two addresses.
 
 ---
 
@@ -331,4 +412,4 @@ developer machine. Enabling it is a deliberate act, and the point at which that 
   creates the account but no session — the UI sends you to "Confirm your email" instead of the
   dashboard. `supabase/config.toml` (`enable_confirmations = false`) only governs a **local** stack.
   Turn it off for the dev project under _Authentication → Sign In / Providers → Email_ if you want
-  signup to log you straight in. Who that email comes from, and what it says, is §7 below.
+  signup to log you straight in. Who that email comes from, and what it says, is §6 below.

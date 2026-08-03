@@ -7,7 +7,9 @@
 // here is additionally scoped by organization_id server-side (defense in depth, §II).
 import crypto from "node:crypto";
 import { cache } from "react";
+import { pickFlaggedAnswers } from "@airrow/schemas";
 import type {
+  AnswerId,
   ConflictResolution,
   GenerationResult,
   ImportAnalysis,
@@ -20,6 +22,7 @@ import type {
   ProjectModel
 } from "@airrow/schemas";
 import { db, rows, maybe, single } from "./supabase";
+import { removeProjectUiReferences } from "./ui-references";
 
 export type ProjectStatus = "interviewing" | "generating" | "ready" | "failed";
 
@@ -88,6 +91,12 @@ export interface JobRecord {
   totalFiles: number;
   currentPath: string | null;
   error: string | null;
+  /**
+   * Why a `failed` job failed, when the reason was the founder's answers rather than ours (spec 128).
+   * Non-null — empty included — means the authoring layer refused the answers and named these; null
+   * means the job fell over on our side and a retry is the right offer.
+   */
+  rejectedAnswers: AnswerId[] | null;
   heartbeatAt: string;
   startedAt: string | null;
   finishedAt: string | null;
@@ -131,14 +140,21 @@ type SupabaseError = { message: string; code?: string };
  * A column this code knows about and the database does not — a deployment running ahead of its
  * migrations.
  *
- * Postgres reports `42703` (undefined_column); the qualified name is matched as well because
- * PostgREST does not always forward the code. Callers name the column they are prepared to do
- * without, so an unrelated typo in a select still throws instead of being quietly swallowed.
+ * Three shapes, because there are three ways to be told. Postgres reports `42703`
+ * (undefined_column); the qualified name is matched as well because PostgREST does not always
+ * forward the code; and a **write** never reaches Postgres at all — PostgREST rejects it against its
+ * own schema cache first, with `PGRST204` and its own wording ("Could not find the 'x' column of
+ * 'y' in the schema cache"). Callers name the column they are prepared to do without, so an
+ * unrelated typo in a select still throws instead of being quietly swallowed.
  */
 function isMissingColumn(error: SupabaseError, column: string): boolean {
+  const message = error.message.toLowerCase();
+  const qualified = column.toLowerCase();
+  const [table, name] = qualified.split(".");
   return (
     error.code === "42703" ||
-    error.message.toLowerCase().includes(`${column.toLowerCase()} does not exist`)
+    message.includes(`${qualified} does not exist`) ||
+    (error.code === "PGRST204" && message.includes(`'${name}'`) && message.includes(`'${table}'`))
   );
 }
 
@@ -208,6 +224,8 @@ interface JobRow {
   total_files: number;
   current_path: string | null;
   error: string | null;
+  /** Absent on a deployment running ahead of the spec-128 migration, and on every older row. */
+  rejected_answers?: string[] | null;
   heartbeat_at: string;
   started_at: string | null;
   finished_at: string | null;
@@ -223,6 +241,9 @@ const toJob = (r: JobRow): JobRecord => ({
   totalFiles: r.total_files,
   currentPath: r.current_path,
   error: r.error,
+  // Re-checked on the way out rather than trusted: these ids are named by a model, and a question
+  // removed from the interview since the row was written must not reach a screen that looks it up.
+  rejectedAnswers: r.rejected_answers ? pickFlaggedAnswers(r.rejected_answers) : null,
   heartbeatAt: r.heartbeat_at,
   startedAt: r.started_at,
   finishedAt: r.finished_at
@@ -358,6 +379,11 @@ export async function setProjectStatus(projectId: string, status: ProjectStatus)
 
 /** Delete a project; interviews/models/jobs/artifacts/deliveries cascade via FK. */
 export async function deleteProject(orgId: string, projectId: string): Promise<void> {
+  // Storage first, and before the rows that say where the objects are: the `ui_references` rows go
+  // with the project by foreign key, and once they are gone nothing knows which objects belonged to
+  // it. Deleting a project has to reach its Storage objects too (§II).
+  await removeProjectUiReferences(orgId, projectId);
+
   const res = await db()
     .from("projects")
     .delete()
@@ -528,12 +554,51 @@ export async function projectUsage(projectId: string): Promise<ProjectUsage> {
   return { count: usage.length, firstAt: first ?? null };
 }
 
+/**
+ * The two things about an account that are decided outside it: whether it operates Airrow, and
+ * whether it has been taken offline (spec 150).
+ *
+ * Read together because both are asked on the same paths — `getSession` needs the suspension on every
+ * request, and the allowance and the admin gate need the flag. Neither is ever writable by the
+ * account itself: `20260801130000_admin_console.sql` narrowed `authenticated`'s privilege on
+ * `profiles` to the two columns a founder legitimately owns, so `is_admin` cannot be self-granted and
+ * `suspended_at` cannot be self-cleared.
+ *
+ * Tolerant of `suspended_at` being absent, the way `getOrgForUser` is of `organizations.plan`: this
+ * sits on the request path of every signed-in page, and a deployment one migration behind must degrade
+ * to "nobody is suspended" rather than log everybody out.
+ */
+export interface ProfileFlags {
+  isAdmin: boolean;
+  suspendedAt: string | null;
+}
+
+export async function profileFlags(userId: string): Promise<ProfileFlags> {
+  const query = await db()
+    .from("profiles")
+    .select("is_admin, suspended_at")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (query.error) {
+    if (!isMissingColumn(query.error, "profiles.suspended_at")) {
+      throw new Error(`Supabase: ${query.error.message}`);
+    }
+    const fallback = maybe<{ is_admin: boolean }>(
+      await db().from("profiles").select("is_admin").eq("id", userId).maybeSingle()
+    );
+    return { isAdmin: fallback?.is_admin === true, suspendedAt: null };
+  }
+
+  // `as` justified: the select names exactly these two columns, and `maybe` has narrowed away the
+  // error case — but the client types the payload as a generic record.
+  const row = query.data as { is_admin: boolean; suspended_at: string | null } | null;
+  return { isAdmin: row?.is_admin === true, suspendedAt: row?.suspended_at ?? null };
+}
+
 /** True when this account bypasses the free allowance. Set by migration only — never from the app. */
 export async function isAdminUser(userId: string): Promise<boolean> {
-  const row = maybe<{ is_admin: boolean }>(
-    await db().from("profiles").select("is_admin").eq("id", userId).maybeSingle()
-  );
-  return row?.is_admin === true;
+  return (await profileFlags(userId)).isAdmin;
 }
 
 export async function getJob(jobId: string): Promise<JobRecord | null> {
@@ -607,6 +672,7 @@ function jobPatchToRow(patch: Partial<JobRecord>): Record<string, unknown> {
   if (patch.totalFiles !== undefined) row.total_files = patch.totalFiles;
   if (patch.currentPath !== undefined) row.current_path = patch.currentPath;
   if (patch.error !== undefined) row.error = patch.error;
+  if (patch.rejectedAnswers !== undefined) row.rejected_answers = patch.rejectedAnswers;
   if (patch.startedAt !== undefined) row.started_at = patch.startedAt;
   if (patch.finishedAt !== undefined) row.finished_at = patch.finishedAt;
   return row;
@@ -614,7 +680,17 @@ function jobPatchToRow(patch: Partial<JobRecord>): Record<string, unknown> {
 
 export async function updateJob(jobId: string, patch: Partial<JobRecord>): Promise<void> {
   const res = await db().from("generation_jobs").update(jobPatchToRow(patch)).eq("id", jobId);
-  if (res.error) throw new Error(`Supabase: ${res.error.message}`);
+  if (!res.error) return;
+
+  // A branch deploy runs against the shared database, so this code can legitimately reach it before
+  // its migration does. Losing the flagged ids there costs the per-question marks on the review
+  // screen; failing the write instead would cost the founder the whole explanation, which already
+  // travels in `error` — so the rejection is recorded without them and the run still ends the way it
+  // should (spec 128).
+  if (patch.rejectedAnswers !== undefined && isMissingColumn(res.error, "generation_jobs.rejected_answers")) {
+    return updateJob(jobId, { ...patch, rejectedAnswers: undefined });
+  }
+  throw new Error(`Supabase: ${res.error.message}`);
 }
 
 /* ── Authoring provenance & memoisation ───────────────────────────────────── */

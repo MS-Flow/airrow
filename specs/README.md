@@ -17,6 +17,7 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | `/analyze` | Cross-check spec ↔ code ↔ constitution; if all passes, close the spec out |
 | `/push` | Commit pending changes + push the current branch (never main/develop, never force) |
 | `/pr-check` | Pre-PR merge-safety check against the target branch |
+| `/security` | Review the whole repository for vulnerabilities, fix the invisible ones, write the gitignored `SECURITY_AUDIT.md` |
 
 ## File naming
 `specs/NNN-kort.md` — the GitHub issue number plus a short kebab-case name, matching the branch.
@@ -57,6 +58,23 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Pro: a plan and entitlement model, and a free tier of one foundation | [74-pro-entitlements.md](74-pro-entitlements.md) | ✅ Done |
 | Stripe Checkout and the billing portal for Pro | [99-stripe-checkout.md](99-stripe-checkout.md) | ✅ Done |
 | The upgrade moment, and revising a foundation (issues #100 + #101) | [100-pro-upgrade-revisions.md](100-pro-upgrade-revisions.md) | ✅ Done |
+| A foundation that starts strong — fewer questions, a UI architecture to build from, a bigger `/start` | [123-foundation-starts-strong.md](123-foundation-starts-strong.md) | ✅ Done |
 | `/createspec` syncs `develop` into the feature branch first | [104-createspec-sync-develop.md](104-createspec-sync-develop.md) | ✅ Done |
 | Migrations apply themselves, or the PR is blocked | [77-auto-apply-migrations.md](77-auto-apply-migrations.md) | ✅ Done |
 | The verification email comes from Airrow | [113-branded-auth-email.md](113-branded-auth-email.md) | 🔄 In progress |
+| Unusable answers stop the generation instead of producing a generic foundation | [128-reject-invalid-answers.md](128-reject-invalid-answers.md) | 🔄 In progress |
+| Invite a friend, get a week of Pro | [122-invite-a-friend.md](122-invite-a-friend.md) | ✅ Done |
+| The migration check answers what a push can ask | [130-migration-check-on-push.md](130-migration-check-on-push.md) | 🔄 In progress |
+| Signup says which wall you walked into | [135-signup-error-causes.md](135-signup-error-causes.md) | 🔄 In progress |
+| The invite list says who, not just what | [133-invite-names.md](133-invite-names.md) | 🔄 In progress |
+| A way to reach us, and a way to say what it was worth | [144-support-review.md](144-support-review.md) | ✅ Done |
+| A chat on the landing page that answers, and leads on | [141-landing-chat.md](141-landing-chat.md) | ✅ Done |
+| `/security` — find the holes, fix the invisible ones, write down the rest | [157-security-command.md](157-security-command.md) | ✅ Done |
+| The chat says why it is quiet, and answers without a proxy | [151-chat-diagnostics.md](151-chat-diagnostics.md) | ✅ Done |
+| Archer: on every public page, with a name and a way to a person | [158-archer-everywhere.md](158-archer-everywhere.md) | ✅ Done |
+| Measuring visits without asking for anything | [153-cookie-consent.md](153-cookie-consent.md) | ✅ Done |
+| The operator's console: who they are, what they built, where they stopped | [150-admin-console.md](150-admin-console.md) | ✅ Done |
+| The console can act: a suspension that bites, a plan you can read, Pro you can hand out | [164-admin-suspend-and-pro.md](164-admin-suspend-and-pro.md) | ✅ Done |
+| References the founder can point at, and a `/start` that finishes the job | [159-ui-reference-start.md](159-ui-reference-start.md) | 🔄 In progress |
+| A way back in, and credentials you can change | [171-forgot-password.md](171-forgot-password.md) | ✅ Done |
+| Curated directions that install real code | [165-installable-ui-directions.md](165-installable-ui-directions.md) | ✅ Done |

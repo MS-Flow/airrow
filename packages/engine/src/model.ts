@@ -17,7 +17,12 @@ import type {
   SecurityLevel,
   Tenancy
 } from "../../schemas/src/types.ts";
-import { STANDARD_STACK } from "../../schemas/src/questions.ts";
+import {
+  MAX_UI_REFERENCE_LINKS,
+  STANDARD_STACK,
+  splitReferenceLinks
+} from "../../schemas/src/questions.ts";
+import { uiKitFor } from "../../schemas/src/ui-kits.ts";
 
 export const ENGINE_VERSION = "0.1.0";
 
@@ -30,6 +35,12 @@ export interface ResolveInput {
    * one started from nothing, so the default is a fact rather than a guess.
    */
   origin?: ProjectOrigin;
+  /**
+   * How many UI reference images the founder attached (spec 159). Passed in rather than read,
+   * because the rows live in the app's database and this function is pure — the count is all the
+   * brief needs to say honestly where its design direction came from.
+   */
+  referenceImageCount?: number;
 }
 
 export function slugify(name: string): string {
@@ -48,7 +59,10 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
   const a = input.answers;
   const productType: ProductType = a.productType ?? "saas";
 
-  // Tenancy drives multi-tenancy explicitly (was inferred from a feature checkbox).
+  // Tenancy drives multi-tenancy explicitly (was inferred from a feature checkbox). A described
+  // model (`other`) is deliberately not multi-tenant: the founder's own words are what the data
+  // documents are written from, and inferring shared access from an answer nothing here understood
+  // is the one inference with a security consequence (spec 159).
   const tenancy: Tenancy = a.tenancy ?? (productType === "internal_tool" ? "internal" : "single_user");
   const multiTenant = tenancy === "organizations" || tenancy === "marketplace";
 
@@ -77,6 +91,14 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
   const standard = STANDARD_STACK[productType];
   const framework: Framework = a.framework ?? standard.framework;
 
+  // Same test `commandFor` applies to the finished model, asked here because `uiKit` is resolved
+  // before there is a model to ask.
+  const origin: ProjectOrigin = input.origin ?? { kind: "new" };
+  const imported = origin.kind === "imported" && origin.stackDetected;
+
+  const hosting: Hosting = a.hosting ?? "vercel";
+  const database: Database = a.database ?? "supabase";
+
   const dataSensitivity: DataSensitivity = a.dataSensitivity ?? "standard";
   const security: SecurityLevel = dataSensitivity === "standard" ? "standard" : "elevated";
   const hasAi = capabilities.includes("ai");
@@ -88,17 +110,22 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
     name: input.name.trim(),
     slug: slugify(input.name),
     description: input.description.trim(),
-    origin: input.origin ?? { kind: "new" },
+    origin,
     vision: (a.vision ?? "").trim(),
     productType,
+    productTypeOther: productType === "other" ? (a.productTypeOther ?? "").trim() : "",
     audience,
     tenancy,
+    tenancyOther: tenancy === "other" ? (a.tenancyOther ?? "").trim() : "",
     authModel,
     features,
+    capabilitiesOther: features.includes("other") ? (a.capabilitiesOther ?? "").trim() : "",
     roles: multiTenant ? (a.roles ?? "simple") : "none",
     aiUsage,
     integrations: (a.integrations ?? "").trim(),
-    hosting: a.hosting ?? "vercel",
+    hosting,
+    hostingOther: hosting === "other" ? (a.hostingOther ?? "").trim() : "",
+    databaseOther: database === "other" ? (a.databaseOther ?? "").trim() : "",
     stack: {
       framework,
       customFramework:
@@ -107,7 +134,7 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
       styling: "tailwind",
       ui: "shadcn/ui",
       backend: "supabase",
-      database: a.database ?? "supabase",
+      database,
       deployment: "vercel",
       repoProvider: a.repoProvider ?? "github",
       editor: "vscode",
@@ -120,6 +147,18 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
     mvpFocus: (a.mvpFocus ?? "").trim(),
     coreEntities: (a.coreEntities ?? "").trim(),
     problem: (a.problem ?? "").trim(),
+    uiDirection: (a.uiDirection ?? "").trim(),
+    // A theme only means something where something installs it. Two cases where nothing does: a
+    // stack the founder named themselves, which brings its own conventions and gets no second design
+    // system on top of them; and an imported project, whose `/cleanup` changes no code and installs
+    // nothing at all. Resolving both to null here — rather than at each place that reads it — is
+    // what makes "prose-only, and say so" one decision instead of several chances to disagree.
+    uiKit:
+      framework === "custom" || imported ? null : uiKitFor(a.uiKit),
+    uiReferenceLinks: splitReferenceLinks(a.uiReferenceLinks ?? "").slice(0, MAX_UI_REFERENCE_LINKS),
+    // Set by the caller that knows — the app, which owns the rows. The engine renders a brief that
+    // says whether there was anything to look at; it never sees the images themselves (spec 159).
+    uiReferenceImageCount: input.referenceImageCount ?? 0,
     nonGoals: (a.nonGoals ?? "").trim(),
     derived: {
       multiTenant,
@@ -143,8 +182,24 @@ export const productTypeLabel: Record<ProductType, string> = {
   api: "API / developer platform",
   internal_tool: "internal tool",
   browser_extension: "browser extension",
-  hobby: "side project"
+  hobby: "side project",
+  // Never rendered on its own — `productTypeName` below prefers the founder's own words, and this is
+  // what a document falls back to when they left the field empty.
+  other: "software product"
 };
+
+/**
+ * What to call this product in prose (spec 159).
+ *
+ * A founder who picked "something else" told us what it is; the eight-option label would then be a
+ * worse description than the one already on file. Everything the scaffold renders about the product
+ * type goes through here so no document can quietly say "software product" at a founder who wrote
+ * "a turn-based strategy game".
+ */
+export function productTypeName(m: ProjectModel): string {
+  if (m.productType === "other" && m.productTypeOther) return m.productTypeOther;
+  return productTypeLabel[m.productType];
+}
 
 export const audienceLabel: Record<Audience, string> = {
   b2b: "businesses (B2B)",
@@ -166,7 +221,8 @@ export const featureLabel: Record<FeatureId, string> = {
   realtime: "Realtime",
   email: "Transactional email",
   admin: "Admin panel",
-  audit_logs: "Audit logs"
+  audit_logs: "Audit logs",
+  other: "The capability you described"
 };
 
 export const teamLabel: Record<ProjectModel["team"], string> = {
@@ -211,6 +267,18 @@ export function commandName(m: ProjectModel): string {
 }
 
 /**
+ * The one thing this product has to do — `/start`'s ceiling, from wherever it is actually written.
+ *
+ * `mvpFocus` stopped being a question when the vision question absorbed it (spec 165), so the field
+ * is now usually empty and the answer lives in `vision`, which asks for both. The description is the
+ * last resort, as it always was. One helper rather than the same `||` chain at four call sites: this
+ * decides what gets built, and four copies of it is four chances for one to fall out of step.
+ */
+export function coreAction(m: ProjectModel): string {
+  return m.mvpFocus || m.vision || m.description;
+}
+
+/**
  * True when this foundation lands in a codebase that already exists.
  *
  * Asked through `commandFor` rather than `origin.kind`: an import with nothing but documents in it
@@ -240,8 +308,15 @@ export const tenancyLabel: Record<Tenancy, string> = {
   single_user: "per-user (each person sees only their own data)",
   organizations: "multi-tenant with teams / organizations",
   marketplace: "a two-sided marketplace",
-  internal: "a single internal organization"
+  internal: "a single internal organization",
+  other: "an isolation model of your own"
 };
+
+/** The tenancy in prose — the founder's own description when they wrote one (spec 159). */
+export function tenancyName(m: ProjectModel): string {
+  if (m.tenancy === "other" && m.tenancyOther) return m.tenancyOther;
+  return tenancyLabel[m.tenancy];
+}
 
 export const authMethodLabel: Record<AuthMethod, string> = {
   email_password: "email & password",
@@ -261,15 +336,26 @@ export const aiUsageLabel: Record<AiUsage, string> = {
 export const hostingLabel: Record<Hosting, string> = {
   vercel: "Vercel",
   azure: "Azure",
-  self_host: "self-hosted"
+  self_host: "self-hosted",
+  // Only ever read when the founder left the field empty — `hostingName` prefers their own words.
+  other: "your own deploy target"
 };
+
+/** The deploy target in prose — the founder's own words when they named one (spec 159). */
+export function hostingName(m: ProjectModel): string {
+  if (m.hosting === "other" && m.hostingOther) return m.hostingOther;
+  return hostingLabel[m.hosting];
+}
 
 const DATABASE_LABEL: Record<Database, string> = {
   supabase: "Supabase",
-  postgres: "PostgreSQL (self-hosted)"
+  postgres: "PostgreSQL (self-hosted)",
+  other: "the database you described"
 };
 
+/** The database in prose — the founder's own words when they named one (spec 159). */
 export function databaseLabel(m: ProjectModel): string {
+  if (m.stack.database === "other" && m.databaseOther) return m.databaseOther;
   return DATABASE_LABEL[m.stack.database];
 }
 

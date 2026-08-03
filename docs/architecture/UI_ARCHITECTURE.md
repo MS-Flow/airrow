@@ -96,6 +96,8 @@ failure teaches founders to dismiss both. Below ~24px the mark drops the gradien
 /                                  Landing
 /start                             Signed-out interview — no account until "generate" (spec 11)
 /login  /signup                    Auth — email+password live; Google/GitHub/Email/magic-link disabled
+/forgot-password                   Ask for a reset link. Answers the same for every address, account
+                                   or not, so it cannot be used to enumerate them (spec 171)
 /app                               Dashboard: continue, recent projects, recent generations
 /app/projects                      Project list
 /app/projects/new                  Create project (step 1 of 2)
@@ -106,10 +108,31 @@ failure teaches founders to dismiss both. Below ~24px the mark drops the gradien
 /app/projects/[id]/preview         Repo browser (tree + reader + editor) — the one view of the output
 /app/projects/[id]/import          Import review: what was derived, and conflicts to decide (spec 63)
 /app/projects/[id]/continue        "Continue locally" handoff
-/app/settings                      Profile, plan & billing, theme, workspace, connections
+/app/password                      Where a reset link lands. Asks for the current password unless the
+                                   recovery marker says the mailbox was just proved (spec 171)
+/app/settings                      Profile, credentials, plan & billing, theme, workspace, connections
+/app/support                       Write to us — a ticket that reaches a real inbox (spec 144).
+                                   The one /app route a suspended account still reaches (spec 164)
+/app/suspended                     Where a suspended account lands: says so, links to support, names
+                                   no reason — the note is ours and lives in admin_audit_log (spec 164)
 /app/upgrade                       What Pro gives, and the way to buy it (specs 99, 100)
 /app/upgrade/return                Where Checkout returns: reconciles with Stripe, then Settings (spec 100)
+/app/admin                         Operator console — users (spec 150). Admin only; 404s everyone else.
+                                   Plan in words with its end date and where Pro came from; give and
+                                   take Pro; suspend (never another admin) (spec 164)
+/app/admin/projects                Every project, its origin, its interview read back question by
+                                   question, and the files we delivered (spec 164)
+/app/admin/tickets                 Every support ticket; open ↔ closed (finishes spec 144's status column)
+/app/admin/reviews                 The publication queue — the only screen that sets published_at
+/app/admin/stats                   Signups, activation, where founders stop, invites, Pro — all from Postgres
 ```
+
+The admin routes are the one place the nav is not the same for everyone: `navItems({ isAdmin })` builds
+one list that feeds both the sidebar and the ⌘K palette, so the entry cannot appear in one and not the
+other. **Hiding it is presentation, not authorization** — the layout calls `requireAdmin()`, every admin
+server action calls it again, and `lib/data/admin.ts` checks a third time at the point it crosses the
+tenancy boundary. A non-admin who guesses the URL gets `notFound()` rather than a redirect, because a
+redirect would confirm the route exists.
 
 The paywall sits at **generate**, never earlier: a founder out of free foundations can still create a
 project and answer every question, and meets `/app/upgrade` at the button that would cost a Claude
@@ -120,6 +143,24 @@ The landing page's Pro action follows the same rule from the other side (`featur
 a visitor with nothing generated goes to their free foundation, and one who has already spent it goes
 straight to `/app/upgrade`. Sending everyone to `/app/projects/new` handed the only visitor who had met
 the limit the one screen that cannot lift it.
+
+Every screen carries one overlay: **Archer**, a chat panel fixed to the corner, that answers questions
+about what Airrow builds and what it costs (`features/chat/`, specs 141, 158 and 159). It is mounted
+from the two layouts — `app/(public)/layout.tsx` and `app/app/layout.tsx` — and from nowhere else, so
+the public pages and the signed-in app both have it everywhere: `/`, `/login`, `/signup`, `/start`,
+the legal pages, and every `/app/**` screen. Spec 158 deliberately kept it out of `/app`; spec 159
+lifted that, because the founder inside the product is the person most likely to have a question. No
+page imports the widget itself; the next page in either tree gets Archer by existing. It sits at
+`z-30`: above the sticky headers, below the mobile navigation drawer and every dialog and toast, so it
+never covers something someone just opened. It answers in English whatever language it is
+asked in, keeps its thread in `sessionStorage` so a reload does not lose it, and sets no cookie.
+Every state that is not an answer — the day's limit, the visitor's own, an unreachable model, an
+unconfigured deployment — falls back to the same four handwritten questions and the call to action,
+so the panel is never broken, only quieter. When it cannot help, or when someone asks for a person, it
+offers the support page (spec 144) and says the sign-in step out loud first: support lives inside the
+app, and a link that silently lands on `/login` reads as a broken one. The link is the panel's own
+constant, never a URL the model wrote. It is **not** the `ChatSlot` below: that one is
+repository-aware and signed-in, and remains unbuilt.
 
 Shell: collapsible sidebar + sticky top bar with breadcrumbs derived from the URL + ⌘K command
 palette + a reserved `ChatSlot` column for the future repository-aware assistant. The sidebar logo

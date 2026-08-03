@@ -13,6 +13,7 @@ import {
   type AuthoredSlots,
   type AuthoredToolchain
 } from "../../schemas/src/authoring.ts";
+import { SHADCN_UI, type UiKit, type UiKitPalette } from "../../schemas/src/ui-kits.ts";
 import { inferStack, type InferredStack, type Runtime } from "./toolchain.ts";
 import {
   aiUsageLabel,
@@ -20,16 +21,17 @@ import {
   authMethodLabel,
   backendSummary,
   commandName,
+  coreAction,
   commandPath,
   databaseLabel,
   featureLabel,
   frameworkLabel,
-  hostingLabel,
+  hostingName,
   isCustomStack,
-  productTypeLabel,
+  productTypeName,
   repoLabel,
   shipsCleanup,
-  tenancyLabel,
+  tenancyName,
   usesAzureRepos,
   usesSupabase
 } from "./model.ts";
@@ -346,7 +348,7 @@ function ciSetupStepsAzure(model: ProjectModel, stackName: string, inferred: Inf
 
 /** Deploy steps for the chosen host. Targets we cannot wire get an explicit, honest placeholder. */
 function deploySteps(model: ProjectModel): string {
-  const host = hostingLabel[model.hosting];
+  const host = hostingName(model);
   // Azure is a real target, not a gap: a founder who picked it gets steps that run, guarded on the
   // credential the way the Vercel path is. Self-hosting is genuinely unknowable — it is their server.
   if (model.hosting === "azure") {
@@ -431,8 +433,21 @@ interface ProviderVocabulary {
   cliBranchLink: string;
   /** Open a pull request. */
   cliPrCreate: string;
-  /** The CLI the founder needs installed. */
+  /** The CLI the founder needs installed, with whatever extension it takes to be useful. */
   cliName: string;
+  /** The same CLI named in three words, for a table cell and a bullet (spec 159). */
+  cliShort: string;
+  /** What still has to be added after the CLI installs, where anything does. */
+  cliExtra?: string;
+  /** The binary, for the check `/start` runs before installing anything (spec 159). */
+  cliBin: string;
+  /** Package ids for the two package managers a developer machine most often already has. */
+  cliBrew: string;
+  cliWinget: string;
+  /** Where to send a founder whose machine has neither, rather than improvising an install. */
+  cliDocs: string;
+  /** The sign-in the founder does themselves — never `/start`. */
+  cliAuth: string;
 }
 
 function provider(model: ProjectModel): ProviderVocabulary {
@@ -448,7 +463,14 @@ function provider(model: ProjectModel): ProviderVocabulary {
       cliBranchLink:
         "git checkout -b <nr>-<short> && git push -u origin <nr>-<short>, then az boards work-item relation add --id <n> --relation-type branch --target-url <branch-url>",
       cliPrCreate: "az repos pr create --source-branch <branch> --target-branch <target> --work-items <n>",
-      cliName: "the Azure CLI with the `azure-devops` extension (`az extension add --name azure-devops`)"
+      cliName: "the Azure CLI with the `azure-devops` extension (`az extension add --name azure-devops`)",
+      cliShort: "the Azure CLI (`az`)",
+      cliExtra: "az extension add --name azure-devops",
+      cliBin: "az",
+      cliBrew: "azure-cli",
+      cliWinget: "Microsoft.AzureCLI",
+      cliDocs: "https://learn.microsoft.com/cli/azure/install-azure-cli",
+      cliAuth: "az login"
     };
   }
   return {
@@ -460,7 +482,13 @@ function provider(model: ProjectModel): ProviderVocabulary {
     cliIssueView: "gh issue view <n> --json number,title,body,labels",
     cliBranchLink: "gh issue develop <n> --base feature/<name> --name <nr>-<short> --checkout",
     cliPrCreate: "gh pr create --base <target> --head <branch>",
-    cliName: "the GitHub CLI (`gh`)"
+    cliName: "the GitHub CLI (`gh`)",
+    cliShort: "the GitHub CLI (`gh`)",
+    cliBin: "gh",
+    cliBrew: "gh",
+    cliWinget: "GitHub.cli",
+    cliDocs: "https://github.com/cli/cli#installation",
+    cliAuth: "gh auth login"
   };
 }
 
@@ -477,11 +505,16 @@ const FIRST_RUN_COMMANDS = [".claude/commands/start.md", ".claude/commands/clean
  * `/start` and `/cleanup` are alternatives for the same reason (spec 91): one scaffolds a stack, the
  * other reads the stack that is already there. A repository holding both would be a repository where
  * one of them is wrong, and nothing in it says which.
+ *
+ * `THIRD_PARTY_NOTICES.md` ships only where there is something to attribute (spec 165): a foundation
+ * whose stack the founder named themselves installs no library of ours, and a notice for code that
+ * was never installed is a file they cannot explain.
  */
 export function shipsPath(model: ProjectModel, path: string): boolean {
   if (path.startsWith(".github/")) return !usesAzureRepos(model);
   if (path.startsWith("azure-pipelines")) return usesAzureRepos(model);
   if (FIRST_RUN_COMMANDS.includes(path)) return path === commandPath(model);
+  if (path === "THIRD_PARTY_NOTICES.md") return !isCustomStack(model) && !shipsCleanup(model);
   return true;
 }
 
@@ -521,10 +554,26 @@ const VITEST_MAJOR = "^3";
  */
 function designSystemStep(model: ProjectModel): string[] {
   const run = dlx(model);
-  const init = `${run} shadcn@latest init --yes --base-color neutral`;
+  const kit = model.uiKit;
+  // Pinned, unlike the framework scaffolders above (see `VITEST_MAJOR` for why they are not): this
+  // one writes `components.json` and the theme every later `add` resolves against, and
+  // `UI_ARCHITECTURE.md` now names the version it wrote. `@latest` there is a document that stops
+  // being true on someone else's release schedule (spec 165).
+  const cli = `${SHADCN_UI.pkg}@${SHADCN_UI.version}`;
+  // Every flag here is load-bearing, and each one was found by running this command rather than by
+  // reading about it. `--yes` alone is not non-interactive: `init` still asks which component
+  // library and which preset, and an assistant running `/start` cannot answer an arrow-key prompt —
+  // it waits until something times out. `-b radix` is the primitive set this project's documents
+  // name; `-p nova` is the library's own default preset. There is no `--base-color` flag: the base
+  // colour is a `components.json` field now, and the theme below overrides those values anyway.
+  const init = `${run} ${cli} init --yes -b radix -p nova`;
   const closing = [
     `   That writes \`components.json\` and the \`cn\` helper, and installs **no components**.`,
-    `   Components arrive one at a time, when a spec calls for one: \`${run} shadcn@latest add <name>\`.`
+    `   Components arrive one at a time, when a spec calls for one: \`${run} ${cli} add <name>\`.`,
+    ...(kit
+      ? [`   Set \`tailwind.baseColor\` to \`${kit.baseColor}\` in \`components.json\` — this direction's neutral family.`]
+      : []),
+    ...(kit ? themeStep(kit) : [])
   ];
   if (model.stack.framework === "vite") {
     return [
@@ -558,6 +607,245 @@ function designSystemStep(model: ProjectModel): string[] {
     "",
     ...closing
   ];
+}
+
+/**
+ * The theme the founder picked, written into the stylesheet `init` just created (spec 165).
+ *
+ * The values come from the same `UiKit` record the interview drew its preview from, so the screen a
+ * founder chose by looking at it and the theme they end up with cannot disagree. Written as CSS
+ * custom properties because that is what shadcn/ui's own theming is: there is nothing to install
+ * beyond the values, and nothing here is anyone else's code.
+ */
+function themeStep(kit: UiKit): string[] {
+  const vars = (p: UiKitPalette): string[] => [
+    `     --background: ${p.bg};`,
+    `     --card: ${p.surface};`,
+    `     --foreground: ${p.fg};`,
+    `     --muted-foreground: ${p.muted};`,
+    `     --border: ${p.border};`,
+    `     --primary: ${p.accent};`
+  ];
+  return [
+    "",
+    `   Then apply the **${kit.name}** theme this project chose. In the stylesheet \`init\` just`,
+    "   touched, set these on `:root` and the `.dark` block, keeping every other variable it wrote:",
+    "",
+    "   ```css",
+    "   :root {",
+    `     --radius: ${kit.design.radius};`,
+    ...vars(kit.light),
+    "   }",
+    "   .dark {",
+    ...vars(kit.dark),
+    "   }",
+    "   ```",
+    "",
+    `   That is the whole install — no component library beyond the primitives above, and no screens.`,
+    `   **${kit.name}** is a visual language, not a layout: ${kit.design.typography} ${kit.design.headline}`,
+    `   Surfaces are separated by ${kit.design.surfaces}, spacing is ${kit.design.spacing}, and the brand`,
+    `   leads with a ${kit.design.logo}. ${kit.design.motion}`,
+    `   ${kit.darkFirst ? "Dark is the default theme; light is the alternative." : "Light is the default theme; dark is the alternative."}`,
+    "   These values are the design system now; a hardcoded colour or radius in a component is a bug."
+  ];
+}
+
+/**
+ * A tool `/start` checks for, and installs when it is missing (spec 159).
+ *
+ * `brew` and `winget` are named by package id because those two cover the machines a founder is most
+ * likely to be on and both install non-interactively. `docs` is the honest floor: a machine with
+ * neither gets the ecosystem's own install page rather than an improvised curl-into-a-shell.
+ */
+interface DevTool {
+  name: string;
+  check: string;
+  reason: string;
+  brew?: string;
+  winget?: string;
+  docs: string;
+}
+
+/** The runtime each ecosystem needs before any of its commands mean anything. */
+const RUNTIME_TOOLS: Partial<Record<Runtime, Omit<DevTool, "reason">>> = {
+  node: {
+    name: "Node.js 20 or newer",
+    check: "node --version",
+    brew: "node",
+    winget: "OpenJS.NodeJS.LTS",
+    docs: "https://nodejs.org/en/download"
+  },
+  python: {
+    name: "Python 3.11 or newer",
+    check: "python3 --version",
+    brew: "python@3.12",
+    winget: "Python.Python.3.12",
+    docs: "https://www.python.org/downloads/"
+  },
+  go: { name: "Go", check: "go version", brew: "go", winget: "GoLang.Go", docs: "https://go.dev/dl/" },
+  dotnet: {
+    name: "the .NET SDK",
+    check: "dotnet --version",
+    brew: "dotnet-sdk",
+    winget: "Microsoft.DotNet.SDK.8",
+    docs: "https://dotnet.microsoft.com/download"
+  },
+  ruby: {
+    name: "Ruby 3.2 or newer",
+    check: "ruby --version",
+    brew: "ruby",
+    winget: "RubyInstallerTeam.RubyWithDevKit.3.3",
+    docs: "https://www.ruby-lang.org/en/documentation/installation/"
+  },
+  rust: {
+    name: "Rust (via rustup)",
+    check: "cargo --version",
+    brew: "rustup",
+    winget: "Rustlang.Rustup",
+    docs: "https://www.rust-lang.org/tools/install"
+  },
+  java: {
+    name: "a JDK, 17 or newer",
+    check: "java -version",
+    brew: "openjdk@21",
+    winget: "EclipseAdoptium.Temurin.21.JDK",
+    docs: "https://adoptium.net/"
+  },
+  php: {
+    name: "PHP 8.2 or newer, with Composer",
+    check: "php --version && composer --version",
+    brew: "php composer",
+    winget: "PHP.PHP.8.3",
+    docs: "https://getcomposer.org/download/"
+  },
+  flutter: {
+    name: "the Flutter SDK",
+    check: "flutter --version",
+    // No winget/brew formula that installs a usable Flutter with its Android toolchain — the
+    // official installer is the only honest answer here.
+    docs: "https://docs.flutter.dev/get-started/install"
+  }
+};
+
+/**
+ * Section 1 of `/start`: the tools this project cannot be built without (spec 159).
+ *
+ * Every earlier version assumed git, a runtime and a package manager were already there — so a
+ * founder on a fresh machine met `pnpm: command not found` in the first instruction they followed,
+ * with nothing in the foundation telling them what to do about it. The rule is check, then install
+ * only what is missing: never an upgrade of something the founder already has, and never a sign-in.
+ * `{{FIRST_COMMAND}}` holding a credential is exactly what §0's machine boundary forbids — the CLI
+ * is installed here so that the founder's own `gh auth login` in step 2 is one command, not two.
+ */
+function startTools(model: ProjectModel, inferred: InferredStack | null): string {
+  const vocab = provider(model);
+  const runtimeId: Runtime = isCustomStack(model) ? (inferred?.runtime ?? "other") : "node";
+  const runtime = RUNTIME_TOOLS[runtimeId];
+  const tools: DevTool[] = [
+    {
+      name: "Git",
+      check: "git --version",
+      reason: "section 3, and every branch you push after it",
+      brew: "git",
+      winget: "Git.Git",
+      docs: "https://git-scm.com/downloads"
+    }
+  ];
+  if (runtime) {
+    tools.push({ ...runtime, reason: `running ${model.name} at all — section 2 cannot start without it` });
+  }
+  tools.push({
+    name: vocab.cliShort,
+    check: `${vocab.cliBin} --version`,
+    reason: `step 2 of [START_HERE.md](../../START_HERE.md), and \`/pr-check\` opening pull requests later`,
+    brew: vocab.cliBrew,
+    winget: vocab.cliWinget,
+    docs: vocab.cliDocs
+  });
+
+  const brew = tools.map((t) => t.brew).filter((id): id is string => Boolean(id));
+  const winget = tools.filter((t) => t.winget);
+  const noPackage = tools.filter((t) => !t.brew && !t.winget);
+  const lines = [
+    "**Check first, install only what is missing.** Run every check below before installing anything.",
+    "",
+    "| Tool | Check | Why this project needs it |",
+    "| --- | --- | --- |",
+    ...tools.map((t) => `| **${t.name}** | \`${t.check}\` | ${t.reason} |`),
+    "",
+    "Install what is missing with the package manager this machine already has — **one** of these,",
+    "not all three:",
+    "",
+    "```bash",
+    "# macOS",
+    `brew install ${brew.join(" ")}`,
+    "",
+    "# Windows",
+    ...winget.map((t) => `winget install --id ${t.winget} -e`),
+    "",
+    "# Debian / Ubuntu — git comes from apt; take the rest from the install pages below",
+    "sudo apt-get update && sudo apt-get install -y git",
+    "```",
+    ""
+  ];
+  if (vocab.cliExtra) {
+    lines.push(
+      `Then add the part the spec commands actually read ${vocab.issueTerm}s through — the CLI alone`,
+      "does not have it:",
+      "",
+      "```bash",
+      vocab.cliExtra,
+      "```",
+      ""
+    );
+  }
+  const pages = tools.filter((t) => t.name !== "Git");
+  if (pages.length > 0) {
+    lines.push(
+      "Install pages, for a machine with neither package manager, or an apt version too old for this",
+      "project:",
+      "",
+      ...pages.map((t) => `- ${t.name} — ${t.docs}`),
+      ""
+    );
+  }
+  if (noPackage.length > 0) {
+    lines.push(
+      `**${noPackage.map((t) => t.name).join(" and ")}: use the install page above.** No package-manager`,
+      "formula here produces a toolchain that actually builds, and one that half-works costs an",
+      "afternoon to undo.",
+      ""
+    );
+  }
+  if (!isCustomStack(model) && packageManager(model) === "pnpm") {
+    lines.push(
+      "**pnpm comes with Node.** Run `corepack enable` — never `npm install -g pnpm`, which installs a",
+      "second copy that shadows the one this project pins.",
+      ""
+    );
+  }
+  return [
+    ...lines,
+    "**The five rules of this section:**",
+    "",
+    "1. **Check before you install.** A tool that answers its `--version` is done — say so, and move on.",
+    "2. **Never upgrade what is already there.** A machine-wide version bump is not this command's to",
+    "   make, and it can break every other project on the founder's laptop. If a version is genuinely",
+    "   too old for this project, say which and leave the decision to them.",
+    "3. **If an install fails, stop trying and say so.** Print the tool's own install page, and do not",
+    "   build from source, download an installer into this repository, or pipe a script into a shell.",
+    "   `sudo` may ask for a password you cannot answer from here — that is a report, not a puzzle.",
+    "   Then carry on with the sections that do not need it: a missing runtime stops section 2, a",
+    "   missing `git` stops section 3, and both belong in your final report.",
+    `4. **Sign in to nothing.** \`${vocab.cliAuth}\` is the founder's own, in step 2 of`,
+    "   [START_HERE.md](../../START_HERE.md). This command installs tools; it never holds a credential.",
+    "5. **A tool installed just now may not be on this shell's `PATH` yet.** If a command you have just",
+    "   installed successfully still reports \"not found\", that is what happened — say so and ask the",
+    "   founder to restart their terminal (and this session) before you continue. Do not install it a",
+    "   second time, and do not edit their shell profile to work around it.",
+    "",
+    "**Done when:** every check above either passes or is reported as something you could not install."
+  ].join("\n");
 }
 
 /**
@@ -617,7 +905,7 @@ function startBootstrap(model: ProjectModel, stackName: string, inferred: Inferr
       ? `npm create vite@latest ${dir} -- --template react-ts --no-interactive`
       : `pnpm create next-app@latest ${dir} --ts --tailwind --eslint --app --src-dir --import-alias "@/*" --use-pnpm --yes --disable-git --skip-install`;
   return [
-    "**Already has a `package.json`?** Then this section has run. Skip to section 2.",
+    "**Already has a `package.json`?** Then this section has run. Skip to section 3.",
     "",
     "1. **Scaffold into a throwaway directory.** Every flag is passed, so it asks nothing:",
     "",
@@ -703,36 +991,489 @@ function cmdName(model: ProjectModel, script: string): string {
 }
 
 /**
- * What "the bare minimum that runs" means for *this* project (spec 66).
+ * The `/start` ceiling: the MVP focus, built for real (spec 123 — amends constitution §0).
  *
- * The ceiling is as load-bearing as the floor. An assistant handed a foundation full of documents
- * about a product will happily build the product, and that is exactly what the spec loop exists to
- * prevent — so this says what to make and, at equal length, what not to.
+ * Previously "the bare minimum that runs" — one placeholder screen with the product's name swapped
+ * in. That ceiling produced something nobody was glad to open. The new one is a judgment, not a hard
+ * line: `/start` is trusted to build `mvpFocus` well, including the shell a real product needs to
+ * present it honestly, bounded by one test — everything created must trace back to something the
+ * founder actually wrote. Data and real auth stay out; see the two closing rules.
  */
 function startMinimum(model: ProjectModel): string {
-  const what = model.mvpFocus || model.description;
+  const what = coreAction(model);
   const entities = model.coreEntities
-    ? `The core objects this product is about: ${model.coreEntities} Name them where they belong — a type, a folder, a heading. Do not model them, do not persist them, do not build screens for them.`
-    : "No core objects were described in the interview, so do not invent any.";
+    ? `The core objects this product is about: ${model.coreEntities}`
+    : "No core objects were described in the interview — do not invent any.";
   // Styling is the stack, not a feature. Left unsaid, an assistant reads the ceiling below as
-  // forbidding the design system section 1 just installed and ships a plain-CSS screen — then
+  // forbidding the design system section 2 just installed and ships a plain-CSS screen — then
   // reports that the stack in CLAUDE.md is not the stack on disk, which was a real founder's first
   // experience of /start.
   const styling = isCustomStack(model)
-    ? "Style it the way this stack styles things — plainly, using what section 1 set up. Add no UI library that was not already there."
-    : "Style it with Tailwind, using the shadcn/ui primitives section 1 installed where one fits. That is this project's design system and using it is not a feature — but do not add components ahead of a spec that calls for them.";
+    ? "Style it the way this stack styles things — plainly, using what section 2 set up. Add no UI library that was not already there."
+    : model.uiKit
+      ? `Style it with the **${model.uiKit.name}** theme section 2 installed — its tokens, its \`${model.uiKit.design.radius}\` corners, its ${model.uiKit.design.spacing} spacing, ${model.uiKit.design.surfaces} between surfaces, and the brand leading with a ${model.uiKit.design.logo}. The founder chose that look by looking at it, so it should be recognisable. **What is on the screen is still theirs to have decided** — build what their answers describe, laid out the way this product needs, and let the theme make it look like the picture. Never copy a layout from a swatch. Overriding the theme with hand-written colours is a bug.`
+      : "Style it with Tailwind, using the shadcn/ui primitives section 2 installed. That is this project's design system, and using it is not a feature.";
+  // What the founder pointed at, if anything. The brief describes the references in words — nothing
+  // here has ever seen an image — so this is a pointer to the section, not a second copy of it.
+  const references =
+    model.uiReferenceLinks.length > 0 || model.uiReferenceImageCount > 0
+      ? "The founder showed us what they had in mind, and the brief's references section says what it said. Read it as direction — the layout, the density, the tone — never as something to copy: no logo, no brand name, no borrowed wording. This product is not theirs and must not look like it is."
+      : "The founder attached no visual references, so the brief's own direction is the whole of it. Follow it, and where it was thin, finish the screen to this project's design system rather than inventing a look nobody asked for.";
   return [
-    "Replace the generator's placeholder home page with one screen that is recognisably this",
-    `project: **${model.name}** — ${what}`,
+    "Read `docs/architecture/UI_ARCHITECTURE.md` before writing anything. It is the build brief for",
+    "what you are about to make — the screens, the navigation, the layout, the states, the design",
+    `language — written for this project. The core action it should perform: **${what}**`,
+    "",
+    // That answer comes from a question asking two things at once — what it must do first, and where
+    // it is heading (spec 165) — so it routinely contains both. Left unsaid, an assistant reads the
+    // long-term half as a build target and sails straight past the ceiling this section exists to
+    // set. The founder wrote the sentence; which half is buildable is ours to say.
+    "**Where that names both a first thing and a long-term one, the first thing is the ceiling.** A",
+    "clause about where this is heading is context for the decisions you make — never a second thing",
+    "to build. If the two are hard to tell apart, build the smaller one.",
+    "",
+    references,
+    "",
+    "**Build that action for real — not a placeholder screen.** A founder opening this for the first",
+    "time should recognise their product and see the beginning of the real thing, not a generator's",
+    "default page with the name swapped in.",
     "",
     entities,
     "",
     styling,
     "",
-    "**This is the ceiling, not a starting budget.** No features, no routes nobody asked for, no",
-    "database, no auth, nothing built ahead of a spec that calls for it. The founder should",
-    "open the page, recognise their product, and see plainly where to change it next. Everything",
-    "past that goes through `/createspec` — that is what the rest of this foundation is for."
+    "**The ceiling is `mvpFocus`, built well — a bound, not a hard line.** Build the surrounding shell a",
+    "real product needs to present that one action honestly: navigation, the loading/error/empty",
+    "states, a sign-in surface where the action makes no sense without one. Where `UI_ARCHITECTURE.md`",
+    "was thin, finish the screen to a reasonable standard with this project's own design system — the",
+    "layout, the spacing, placeholder content in the shape the real content will take. That is",
+    "presentation, and polish is allowed to fill a gap in taste. It is never allowed to fill a gap in",
+    "function.",
+    "",
+    "**Every screen, field, label and route you create must trace back to something the founder wrote**",
+    "— an interview answer, `mvpFocus`, the core objects above, or `UI_ARCHITECTURE.md`. That test",
+    "permits a sign-in screen when the product is plainly account-based, and forbids a settings page",
+    "nobody asked for, however tasteful. Where something cannot be traced, leave a",
+    "`[NEEDS CLARIFICATION]` note rather than deciding it yourself.",
+    "",
+    "**Auth follows the same rule as everything else: surface, never service.** Build the sign-in",
+    "screens and wire them to the auth this stack already provides when the core action requires one —",
+    "but provision no auth service, write no secret, and create no user table. Where the surface cannot",
+    "work without a real backend, say so plainly instead of faking a session.",
+    "",
+    "**No schema, no persistence.** Build against local or in-memory state. The table this action needs",
+    "is the founder's first spec, not this command's job — `/createspec` picks up from here.",
+    "",
+    "**Still a ceiling, not a starting budget.** No second feature, no capability the founder picked for",
+    "later, no database beyond what a spec calls for. The founder should open the page, recognise their",
+    "product doing its one real thing, and see plainly where `/createspec` picks up. Everything past",
+    "this goes through the spec loop — that is what the rest of this foundation is for.",
+    "",
+    "### Finish it",
+    "",
+    "**A screen that works is half the job.** The bar is a first version the founder is glad to show",
+    "someone, and the difference is almost never features — it is that the spacing is consistent, the",
+    "type has a hierarchy, the empty state says something useful, and nothing shifts or flashes while",
+    "it loads. `UI_ARCHITECTURE.md` has a section on each of those; they are not decoration, and they",
+    "are not a second pass to do later. Build them the first time.",
+    "",
+    "**Before you report done, walk the screen yourself and answer these honestly:**",
+    "",
+    "- With no data at all, does it look designed, or does it look broken?",
+    "- While it loads, does anything jump, flash, or go blank?",
+    "- If the action fails, does the person reading know what failed and what to do?",
+    "- Is every spacing value and every colour from the scale in `UI_ARCHITECTURE.md`, or did some",
+    "  get typed in by hand?",
+    "- Can the core action be completed with the keyboard alone, with focus visible the whole way?",
+    "- Read the words on screen: are they this product's words, or the generator's?",
+    "",
+    "Fix what those find before you say it is finished. If something cannot be fixed without a",
+    "decision the founder has not made, leave a `[NEEDS CLARIFICATION]` note and say so in your report",
+    "rather than choosing for them."
+  ].join("\n");
+}
+
+/**
+ * Where this brief's design direction came from, said plainly.
+ *
+ * One answer to read, whether the founder wrote it from nothing or started from one of the
+ * directions the question offers and edited it — the interview merged those into a single field
+ * precisely so nothing downstream has to reconcile two versions of the same taste (spec 159).
+ *
+ * The founder should never find taste attributed to them that they did not express, which is what
+ * the empty case is careful about: it says whose choice the default is.
+ */
+function uiDirectionSummary(model: ProjectModel): string {
+  if (model.uiDirection) return `In the founder's own words: ${model.uiDirection}`;
+  const defaultLook = isCustomStack(model)
+    ? `the plain, idiomatic look of ${frameworkLabel(model)} — no UI library assumed`
+    : "Tailwind + shadcn/ui, dark-mode first";
+  return (
+    "No design direction was described in the interview. Until you say otherwise, this project " +
+    `follows this foundation's own default: ${defaultLook}. This section is a starting point, not a ` +
+    "decision — replace it the moment you have an opinion."
+  );
+}
+
+/**
+ * The references the founder pointed at, and the one rule about them that is not negotiable.
+ *
+ * The rule is stated in the document rather than only in the prompt, because the document is what an
+ * assistant reads six months from now when nobody remembers the prompt: a reference is direction to
+ * interpret — density, hierarchy, tone, palette — never an asset to reproduce. Copying a named
+ * product's design one-to-one is reproducing their trade dress (spec 159).
+ */
+function uiReferences(model: ProjectModel): string {
+  const links = model.uiReferenceLinks;
+  const images = model.uiReferenceImageCount;
+  if (links.length === 0 && images === 0) {
+    return "The founder attached no references. Everything below comes from their words and from this foundation's own design system.";
+  }
+
+  const named = links.length > 0 ? `Products the founder pointed at: ${links.join(", ")}.` : null;
+  const shots =
+    images > 0
+      ? `${images} screenshot${images === 1 ? "" : "s"} were attached and read when this brief was written; ${images === 1 ? "it is" : "they are"} described here rather than kept, so this section is the whole of what they said.`
+      : null;
+
+  return [
+    [named, shots].filter((s): s is string => s !== null).join(" "),
+    "Read these as direction, never as something to copy: the layout, the density, the tone and the palette are what to learn from. Do not reproduce anyone's logo, brand name, wording or artwork — this product is not theirs and must not look like it is."
+  ].join("\n\n");
+}
+
+/** The screens the answers actually imply — named where they can be, marked where they cannot. */
+function uiScreens(model: ProjectModel): string {
+  const focus = coreAction(model);
+  const entities = model.coreEntities
+    ? `The core objects are ${model.coreEntities} — each one a founder works with needs somewhere to be listed and somewhere to be seen on its own.`
+    : "[NEEDS CLARIFICATION: the interview named no core objects, so the screens beyond the first cannot be derived — name them here before building past the first screen.]";
+  const signIn = model.derived.needsAuth
+    ? "This product has accounts, so it also has a sign-in surface: the screens, and nothing behind them until the founder's first spec builds it."
+    : "This product has no accounts, so there is no sign-in surface and no account menu.";
+  return [
+    `**The first screen** performs the product's core action: ${focus}`,
+    entities,
+    signIn,
+    "Navigation is whatever the shortest path to that core action needs and no more. A screen nobody has a reason to open is a screen that should not be built yet."
+  ].join("\n\n");
+}
+
+/** Layout and spacing — the part a screen cannot be finished without, and the interview never asks. */
+function uiLayout(model: ProjectModel): string {
+  const shell = model.derived.isWeb
+    ? "A persistent shell — navigation on the left or across the top, the working area filling the rest — with content width-capped so a wide display centres rather than stretches."
+    : "A native shell: the platform's own navigation pattern, its own back behaviour, and its own safe areas respected.";
+  return [
+    shell,
+    "One spacing scale, used everywhere. Related things sit closer together than unrelated ones, and the gap between sections is visibly larger than the gap inside one. Alignment is a grid, not a judgement per screen.",
+    "One type scale, three or four sizes at most: a page title, a section heading, body, and a smaller size for supporting text. Weight and colour carry hierarchy before size does."
+  ].join("\n\n");
+}
+
+/** Colour, in the terms a build needs rather than as a palette nobody picked. */
+function uiColor(model: ProjectModel): string {
+  if (isCustomStack(model)) {
+    return "Neutrals carry the interface; one accent carries action. Status colours mean exactly one thing each — success, warning, danger — and are never used decoratively. Define them once, in whatever this stack's convention for design tokens is, and never write a raw colour value in a component.";
+  }
+  return "Neutrals carry the interface; one accent carries action. Status colours mean exactly one thing each. Every value is a Tailwind design token defined once — a hardcoded hex in a component is a bug, because it is the one thing that cannot be changed later in one place. Dark mode is not an afterthought: both themes are defined at the same time.";
+}
+
+/** The component inventory — what to build once instead of five times. */
+function uiComponents(model: ProjectModel): string {
+  const base = isCustomStack(model)
+    ? `Build on whatever component convention ${frameworkLabel(model)} projects use. Add no UI library that is not already there.`
+    : "Build on the shadcn/ui primitives this project installs — extend them rather than forking them, and never write a second button.";
+  return [
+    base,
+    "The inventory this product needs is small and worth naming before writing any of it: the shell, one list surface, one detail surface, the form controls the core action needs, and the three state components below. Everything else is a variation on one of those until proven otherwise."
+  ].join("\n\n");
+}
+
+/** Interaction and motion — the difference between finished and merely complete. */
+function uiInteraction(): string {
+  return [
+    "Every action says what happened: a button that submits shows it is working, and the result is visible without hunting for it. Nothing silently succeeds.",
+    "Motion is short and purposeful — something entering, something leaving, something changing state. No animation on load for its own sake, and nothing that delays a person who knows where they are going.",
+    "Keyboard and focus are part of the design, not an audit item: every interactive element is reachable, focus is visible, and the primary action of a screen can be reached without a mouse."
+  ].join("\n\n");
+}
+
+/** States — the one section that never needs an interview answer, and the one most often skipped. */
+function uiStates(): string {
+  return [
+    "Loading, error, and empty are real components on every screen that fetches data — never a conditional buried in JSX, and never a blank flash while something loads.",
+    "**Empty is a designed screen, not an absence.** It says what would be here, and offers the action that puts something here. It is the first screen most founders' first user ever sees.",
+    "**Error says what failed and what to do next.** A stack trace, a spinner that never stops, and a silent no-op are all the same bug wearing different clothes."
+  ].join("\n\n");
+}
+
+/**
+ * What the first screen is actually built from — named, pinned, and licensed (spec 165).
+ *
+ * The section exists because the previous answer to "what does it look like?" was prose, and prose
+ * is interpreted: two runs of the same picked direction produced two different screens. Naming the
+ * theme and its version makes the document *checkable* — a founder can see what is installed, and so
+ * can the assistant that opens this file six months from now.
+ */
+function uiDesignSystem(model: ProjectModel): string {
+  const kit = model.uiKit;
+  if (!kit) {
+    if (shipsCleanup(model)) {
+      return "This project already had a stack when the foundation was written, so nothing here installed a design system. Whatever it is styled with is what it is styled with — the direction above describes it rather than replacing it.";
+    }
+    if (isCustomStack(model)) {
+      return `No theme is installed: ${frameworkLabel(model)} brings its own conventions, and this foundation does not put a second design system on top of them. The direction above is the whole brief — build to it using whatever this stack styles things with.`;
+    }
+    return `No curated direction was picked, so no theme was installed beyond the shadcn/ui defaults \`${commandName(model)}\` sets up. The direction above is the whole brief; finish the screen to it.`;
+  }
+  const { source } = kit;
+  return [
+    `**${kit.name}**, built on ${source.pkg}/ui \`${source.version}\` — installed by \`${commandName(model)}\`, pinned to that exact version so this section stays true.`,
+    `It is a **visual language, not a layout**: ${kit.design.typography} ${kit.design.headline} Surfaces are separated by ${kit.design.surfaces}, spacing is ${kit.design.spacing}, corners are \`${kit.design.radius}\`, and the brand leads with a ${kit.design.logo}. ${kit.design.motion}`,
+    `What is on each screen, and how someone moves between them, comes from the sections below — from what this product actually is. The theme decides how those screens look, never what they are.`,
+    `Base colour \`${kit.baseColor}\`. ${kit.darkFirst ? "Dark is the default theme; light is the alternative." : "Light is the default theme; dark is the alternative."} It suits ${kit.suits.charAt(0).toLowerCase()}${kit.suits.slice(1)}`,
+    `The theme's values are this project's design tokens. Build with them — a hardcoded colour or radius in a component is a bug, because it is the one thing that cannot be changed later in one place.`,
+    `Licensed ${source.licence}, © ${source.holder} — see \`THIRD_PARTY_NOTICES.md\`, which ships with this repository and has to stay in it.`
+  ].join("\n\n");
+}
+
+/**
+ * The attribution the foundation owes for the code it installs.
+ *
+ * Not new debt: `{{FIRST_COMMAND}}` has installed shadcn/ui into every Tailwind foundation since
+ * spec 66, and no generated repository carried the notice its licence requires. Spec 165 pins the
+ * version and therefore had to look the licence up — which is how a two-year-old obligation nobody
+ * had discharged turned out to be one line of work.
+ */
+function thirdPartyNotices(model: ProjectModel): string {
+  const { source } = model.uiKit ?? { source: SHADCN_UI };
+  const themed = model.uiKit
+    ? `This project's **${model.uiKit.name}** theme is Airrow's own work and carries no third-party claim; what is licensed below is the component library it is built on.`
+    : "This project installs the library's defaults — no curated theme was picked.";
+  return [
+    `\`${source.pkg}/ui\` \`${source.version}\` — ${source.homepage}`,
+    "",
+    themed,
+    "",
+    "```",
+    source.licenceText,
+    "```"
+  ].join("\n");
+}
+
+/** Deterministic fallback for the design-language section — stack-correct either way. */
+function uiDesignLanguage(model: ProjectModel): string {
+  if (isCustomStack(model)) {
+    return `Styled the way ${frameworkLabel(model)} projects style things — plainly, using whatever this stack's own convention is. No UI library is assumed on top of it.`;
+  }
+  return "Tailwind v4 design tokens for color, spacing, radii and type — never a hardcoded hex or pixel value in a component. shadcn/ui primitives, extended rather than forked. Dark mode first.";
+}
+
+/**
+ * The real, step-by-step path from a generated foundation to a deployed, working product (spec 123).
+ *
+ * Deterministic — never authored. These are procedures a founder runs against live accounts, and the
+ * constitution already treats that class of content differently (`SETUP_STEPS` is on the same list,
+ * `authoring.ts:23`): it must be *correct*, not well phrased. A wrong key name here costs an
+ * afternoon; a wrong *command* is worse. Every command below is one this file already derived —
+ * `CMD_*` or the provider CLI named in `provider()` — nothing here invents a new one.
+ */
+function infrastructureSetup(model: ProjectModel): string {
+  return [
+    usesSupabase(model) ? supabaseSetupSection(model) : postgresSetupSection(model),
+    hostingSetupSection(model),
+    repoAndCiSection(model),
+    verifyEndToEndSection(model)
+  ].join("\n\n");
+}
+
+function envFileNoun(model: ProjectModel): string {
+  return shipsCleanup(model) ? "this project's environment file" : "`.env.local` (copied from `.env.example`)";
+}
+
+function supabaseSetupSection(model: ProjectModel): string {
+  const publicPrefix = { nextjs: "NEXT_PUBLIC_", vite: "VITE_", custom: "" }[model.stack.framework];
+  const imported = shipsCleanup(model);
+  return [
+    "## 1. Supabase project",
+    "",
+    `1. ${imported ? "If you do not already have one, create" : "Create"} a project at [supabase.com](https://supabase.com) — the free tier is enough to start.`,
+    "2. **Project Settings → API** has the three values this project needs:",
+    "",
+    `   - \`${publicPrefix}SUPABASE_URL\` — the project URL. Safe in the browser.`,
+    `   - \`${publicPrefix}SUPABASE_ANON_KEY\` — the anon/public key. Safe in the browser; Row-Level Security is what actually protects the data behind it.`,
+    "   - `SUPABASE_SERVICE_ROLE_KEY` — bypasses RLS entirely. **Never** give it the public prefix, never send it to the browser, never commit it. Server-only, always.",
+    "",
+    `3. Put all three in ${envFileNoun(model)}.`,
+    "4. **Apply the migrations:** `supabase login`, then `supabase link --project-ref <ref>` (the ref is in the project URL), then `supabase db push`. Every schema change from here is a new file in `supabase/migrations` — never a dashboard edit; a dashboard edit is invisible to everyone who did not make it.",
+    "5. **Auth** is on by default — nothing to enable for email/password. Social providers or SSO need their own setup under Authentication → Providers, matching what the interview named."
+  ].join("\n");
+}
+
+function postgresSetupSection(model: ProjectModel): string {
+  const imported = shipsCleanup(model);
+  // A database the founder named is not assumed to be Postgres, so it is not told it has a
+  // `DATABASE_URL` or a `psql` — what it is told is what is true of every database: a credential
+  // that stays server-side, migrations that are committed, and the things it does not give you for
+  // free (spec 159).
+  const named = model.stack.database === "other";
+  return [
+    "## 1. Database",
+    "",
+    `1. ${imported ? "If you do not already have one, provision" : "Provision"} ${named ? `**${databaseLabel(model)}**` : `a **${databaseLabel(model)}** instance`} and note how this project connects to it.`,
+    named
+      ? `2. Put that connection detail in ${envFileNoun(model)} — server-only, never sent to the browser, whatever that database calls it.`
+      : `2. Put \`DATABASE_URL\` in ${envFileNoun(model)} — server-only, never sent to the browser.`,
+    `3. **Apply the migrations** with ${named ? "that database's own migration tool" : "whatever this stack's migration tool is"} — every schema change is a committed migration, never a hand-edit.`,
+    "4. **Auth, storage and realtime updates are yours to build** — this database gives you none of them out of the box. Spec each one like any other capability, through `/createspec`."
+  ].join("\n");
+}
+
+function hostingSetupSection(model: ProjectModel): string {
+  if (model.hosting === "vercel") {
+    return [
+      "## 2. Vercel project",
+      "",
+      "1. Create a project at [vercel.com](https://vercel.com) and import this repository once it is pushed (step 3 below).",
+      "2. **Environment Variables** (Project Settings → Environment Variables) — paste in every value from your environment file. Vercel needs its own copy; it never reads your local `.env.local`.",
+      `3. Framework preset: ${model.stack.framework === "vite" ? "Vite" : "Next.js"} — Vercel usually detects it from \`package.json\`; confirm it if not.`,
+      "4. Put `VERCEL_TOKEN` in this repository's CI secrets — the deploy workflow already generated for you uses it to deploy on every push, and every pull request gets its own preview URL."
+    ].join("\n");
+  }
+  if (model.hosting === "azure") {
+    return [
+      "## 2. Azure App Service",
+      "",
+      "1. Create an **Azure App Service** for this project (App Service → Create).",
+      "2. Download its publish profile and put it in CI secrets as `AZURE_WEBAPP_PUBLISH_PROFILE`; set `AZURE_WEBAPP_NAME` as a variable.",
+      "3. Configure the app's own environment variables (Configuration → Application settings) with the same values as your environment file.",
+      "4. The generated deploy workflow ships as a placeholder for Azure — finish it against your App Service before relying on it."
+    ].join("\n");
+  }
+  if (model.hosting === "other") {
+    // Named, not known. The steps say what is true of every target — an environment, the variables,
+    // a workflow nobody here could wire — and name theirs rather than describing a server they may
+    // not have (spec 159).
+    return [
+      `## 2. ${hostingName(model)}`,
+      "",
+      `1. Set up the ${hostingName(model)} environment this project deploys to, the way that target expects — one per environment if it works that way.`,
+      "2. Set its environment variables to match your environment file. Nothing reads your local one.",
+      `3. The generated deploy workflow ships as a placeholder: nothing here has seen ${hostingName(model)}, so the steps that reach it are yours to write. Finish them before relying on the workflow.`
+    ].join("\n");
+  }
+  return [
+    "## 2. Your own server",
+    "",
+    "1. Prepare the server this project deploys to — the runtime installed, a process manager, a reverse proxy in front of it.",
+    "2. Set its environment variables to match your environment file.",
+    "3. The generated deploy workflow ships as a placeholder for self-hosting — finish it against your own deploy process before relying on it."
+  ].join("\n");
+}
+
+/**
+ * The CLI step in every setup list, which is a different instruction depending on the origin.
+ *
+ * `/start` now installs the CLI itself (spec 159), so telling a founder to install it again is one
+ * more step between them and a working repository. `/cleanup` installs nothing, so an imported
+ * project still gets the full instruction.
+ */
+function cliSetupStep(model: ProjectModel): string {
+  const vocab = provider(model);
+  const purpose = `so the spec commands can read ${vocab.issueTerm}s and open pull requests`;
+  return shipsCleanup(model)
+    ? `Install ${vocab.cliName} and run \`${vocab.cliAuth}\`, ${purpose}.`
+    : `**Sign in:** \`${vocab.cliAuth}\`, ${purpose}. \`/start\` installed ${vocab.cliName} for you — install it yourself only if it reported that it could not.`;
+}
+
+function repoAndCiSection(model: ProjectModel): string {
+  const vocab = provider(model);
+  if (usesAzureRepos(model)) {
+    return [
+      "## 3. Git integration",
+      "",
+      `1. Push this foundation to an **Azure Repos** repository — ${commandName(model)} already created the \`develop\` branch locally.`,
+      `2. **Register the pipelines.** Pipelines → New pipeline → Azure Repos Git → this repo → Existing YAML file: \`${vocab.ciFile}\`, then again for \`${vocab.deployFile}\`. Azure DevOps does not discover YAML from a directory the way Actions does — an unregistered pipeline simply never runs.`,
+      "3. **Set the branch policies** under Repos → Branches → `main` / `develop` → Branch policies: require a pull request and a passing build.",
+      `4. ${cliSetupStep(model)}`
+    ].join("\n");
+  }
+  return [
+    "## 3. Git integration",
+    "",
+    `1. Create an empty repository on GitHub and push this foundation — ${commandName(model)} already created the \`develop\` branch locally.`,
+    "2. **Protect `main` and `develop`** (Settings → Branches): require a pull request and a passing CI check. The workflows in `.github/workflows/` start running the moment they land on GitHub — nothing else to register.",
+    `3. ${cliSetupStep(model)}`
+  ].join("\n");
+}
+
+function verifyEndToEndSection(model: ProjectModel): string {
+  const run = packageManager(model) === "npm" ? "npm run" : "pnpm";
+  const deployLine =
+    model.hosting === "self_host"
+      ? "3. Deploy to your server and confirm the app reaches it."
+      : "3. Merge, or push to `develop` per your deploy workflow — a preview or DEV deployment should appear within a few minutes.";
+  return [
+    "## 4. Verify end to end",
+    "",
+    `1. \`${run} dev\` locally — the app should start and reach the database.`,
+    "2. Push to a branch and open a pull request — CI should run and go green.",
+    deployLine,
+    "",
+    "If any of these three fails, stop there rather than guessing further down the list — the earlier",
+    "step is almost always the real cause."
+  ].join("\n");
+}
+
+/**
+ * One line for the first-session table in `CLAUDE.md` (spec 159): what the founder gets for typing
+ * the one command this foundation ships. A row in a table, so it is a sentence, not a paragraph.
+ */
+function firstCommandEffect(model: ProjectModel): string {
+  return shipsCleanup(model)
+    ? `Reads ${model.name} as it actually is and rewrites these documents to match. Changes no code, deletes nothing`
+    : `Installs the tools, scaffolds the stack, builds the first screen and verifies it — then removes itself`;
+}
+
+/**
+ * What the assistant says when a command finishes (spec 159).
+ *
+ * The workflow is eight commands long and a founder is running it for the first time. Knowing what
+ * `/implement` did is not the same as knowing what to type next — and the gap nobody could guess is
+ * the one outside the terminal: a pushed branch does not merge itself, and which button does that
+ * lives in a web interface this foundation never sees. One line per command, the next action only.
+ */
+function afterEachCommand(model: ProjectModel): string {
+  const vocab = provider(model);
+  const host = repoLabel(model);
+  const first = shipsCleanup(model)
+    ? `| \`/cleanup\` | These documents now describe the code that is really here. Next: \`/createspec "<the first thing you want to change>"\`. |`
+    : `| \`/start\` | ${model.name} runs. Next: step 2 of [START_HERE.md](START_HERE.md) — the ${databaseLabel(model)} and ${hostingName(model)} accounts only they can create — or \`/createspec "<your first change>"\` if they would rather build something first. |`;
+  const merge = usesAzureRepos(model)
+    ? `Run the \`${vocab.cliPrCreate}\` line it printed, then in **Azure DevOps → Repos → Pull requests**: wait for the build policy to go green, then **Complete** the PR (squash, and delete the source branch).`
+    : `Run the \`${vocab.cliPrCreate}\` line it printed, then on **${host} → Pull requests**: wait for the CI check to go green, then **Squash and merge**, and delete the branch when it offers.`;
+  return [
+    "End every command with one short line: what to do next, and only that. Not a summary of what you",
+    "just did — the founder watched that happen.",
+    "",
+    "| After | Tell them |",
+    "| --- | --- |",
+    first,
+    `| \`/createspec\` | The spec and its branch exist. Next: \`/clarify\`, which asks about anything the spec left open. |`,
+    `| \`/clarify\` | Every open question in the spec is answered. Next: \`/implement\`. |`,
+    `| \`/implement\` | Built, tested, and the verification bar passed. Next: \`/analyze\`, which checks the work against the spec. |`,
+    `| \`/analyze\` | The spec is checked off and closed. Next: \`/push\`. |`,
+    `| \`/push\` | The branch is on ${host}. Next: \`/pr-check\`, which confirms it merges cleanly and prints the command that opens the pull request. |`,
+    `| \`/pr-check\` | ${merge} |`,
+    "| `/security` | The findings are in `SECURITY_AUDIT.md`, which is gitignored and stays on this machine. Next: read **Needs you, outside the code** — those are theirs to decide, and anything that changes behaviour goes through `/createspec` like everything else. |",
+    "",
+    `After that merge the issue branch is finished. The same route takes the work the rest of the way:`,
+    "`feature/<name>` → `develop` → `main`, one pull request each, never skipped — and the next change",
+    "starts at `/createspec` again.",
+    "",
+    "If a command failed or stopped early, say what would unblock it instead. Never point at the next",
+    "step of a step that did not finish."
   ].join("\n");
 }
 
@@ -744,9 +1485,37 @@ function startMinimum(model: ProjectModel): string {
  * describe the stack it already has. Only the prose is rendered: the four commands that follow it
  * stay as `{{CMD_*}}` tokens in the template, so an unauthored one still reaches the founder as a
  * `[NEEDS CLARIFICATION]` marker and the manifest can still see which files the model's words are in.
+ *
+ * It opens with the one thing the founder installs by hand (spec 159). Everything else this project
+ * needs is section 1 of `/start` — but nothing in this guide can run until there is an assistant to
+ * type it into, and a founder who has to work that out from a `command not found` has been let down
+ * by the first paragraph of the first file.
  */
 function firstStep(model: ProjectModel): string {
-  const run = ["Open your AI assistant in this repository and run:", "", "```", commandName(model), "```", ""];
+  const run = [
+    "**First, install [Claude Code](https://docs.claude.com/en/docs/claude-code)** — it is what reads",
+    "and runs every `/command` in this guide, and this foundation is written for it. Follow its own",
+    "install page and sign in when it asks; if you already have Node 20 or newer,",
+    "`npm install -g @anthropic-ai/claude-code` does the same job.",
+    "",
+    ...(shipsCleanup(model)
+      ? [
+          "That is the only thing this guide asks you to install. `/cleanup` installs nothing — it reads",
+          "the project you already have, so whatever builds it today is enough."
+        ]
+      : [
+          "That is the only thing you install by hand. Git, this project's runtime, its package manager",
+          "and the CLI for your repository host are all step 1 of the command below — you do not need",
+          "any of them before you start."
+        ]),
+    "",
+    "Then open Claude Code in this repository and run:",
+    "",
+    "```",
+    commandName(model),
+    "```",
+    ""
+  ];
   if (shipsCleanup(model)) {
     return [
       ...run,
@@ -759,12 +1528,26 @@ function firstStep(model: ProjectModel): string {
       "When it finishes, the commands these documents name are the ones that actually work here:"
     ].join("\n");
   }
+  const vocab = provider(model);
   return [
     ...run,
-    "It scaffolds the stack, wires the toolchain, initialises git locally, and leaves you the smallest",
-    `version of ${model.name} that actually runs — enough to open, change and continue from, and no`,
-    "more. It touches nothing outside this directory: no accounts, no services, no secrets. It is safe to",
-    "run again.",
+    "It works through six steps and prints a progress bar after each one, so you can see where it is:",
+    "",
+    `- **1 · Tools** — checks for git, this stack's runtime and ${vocab.cliShort}, and installs only`,
+    "  what is missing. It signs in to nothing.",
+    "- **2 · Stack** — the framework and the toolchain, so the four commands below are real.",
+    "- **3 · Git** — a local repository on `main`, plus `develop` and your first `feature/<name>`.",
+    `- **4 · The first screen** — ${model.name}'s core action, built and finished.`,
+    "- **5 · Verify** — every command run, with its real output shown.",
+    "- **6 · Hand back** — this step rewritten, and the command removed.",
+    "",
+    `It leaves you the smallest version of ${model.name} that actually runs — enough to open, change`,
+    "and continue from, and no more. Beyond installing those tools it touches nothing outside this",
+    "directory: no accounts, no services, no secrets, and nothing you have to sign in to.",
+    "",
+    "Safe to run again if it stops early. Once it has finished and verified the result, it rewrites this",
+    "step to say so and removes itself — there is nothing left for it to do, and everything after it goes",
+    "through the loop in section 5.",
     "",
     "When it finishes, these are real commands:"
   ].join("\n");
@@ -788,9 +1571,10 @@ function commandRule(model: ProjectModel): string {
     ].join("\n");
   }
   return [
-    "- **`/start` sets up, the spec loop builds.** `/start` takes this project to the bare minimum that",
-    "  runs — enough to open, change and continue from. That is its ceiling, not a starting budget.",
-    "  Everything past it goes through a spec: no spec, no feature."
+    "- **`/start` sets up, the spec loop builds.** `/start` scaffolds the stack and builds the MVP",
+    "  focus for real, to the design in `docs/architecture/UI_ARCHITECTURE.md`. That is its ceiling —",
+    "  not a second feature, not schema, not real auth. Everything past it goes through a spec: no",
+    "  spec, no feature."
   ].join("\n");
 }
 
@@ -878,7 +1662,7 @@ export function deriveScaffoldValues(
   // renders the stack uses it. Falls back to the raw answer when nothing was authored — still
   // theirs, still honest, just untidy.
   const stackName = stackNameFor(model, authored);
-  const hosting = hostingLabel[model.hosting];
+  const hosting = hostingName(model);
   // TypeScript, Tailwind and shadcn/ui are the golden path's fixed choices — asserting them over a
   // founder who told us they are on Django would make the first line of their docs a falsehood.
   const frontend = isCustomStack(model) ? "" : "TypeScript · Tailwind + shadcn/ui · ";
@@ -888,11 +1672,11 @@ export function deriveScaffoldValues(
   const values: Record<string, string> = {
     PROJECT_NAME: model.name,
     PROJECT_SLUG: model.slug,
-    PROJECT_TAGLINE: model.mvpFocus || "",
+    PROJECT_TAGLINE: coreAction(model),
     PROJECT_DESCRIPTION: model.description,
-    DOMAIN_OVERVIEW: `${model.name} is ${aOrAn(productTypeLabel[model.productType])} for ${audienceLabel[model.audience]}. ${model.description}`,
+    DOMAIN_OVERVIEW: `${model.name} is ${aOrAn(productTypeName(model))} for ${audienceLabel[model.audience]}. ${model.description}`,
     VISION: model.vision,
-    MVP_FOCUS: model.mvpFocus,
+    MVP_FOCUS: coreAction(model),
     PROBLEM: model.problem,
     NON_GOALS: nonGoalsText(model),
     CAPABILITY_SCOPE: capabilityScope(model),
@@ -909,9 +1693,25 @@ export function deriveScaffoldValues(
     STACK_DETAIL: `${stackName} · ${frontend}${backendSummary(model)} · deployed to ${hosting} · code on ${repoLabel(model)}`,
     REPO_PROVIDER: repoLabel(model),
     SETUP_STEPS: setupSteps(model, stackName),
+    START_TOOLS: startTools(model, inferred),
     START_BOOTSTRAP: startBootstrap(model, stackName, inferred),
     START_MINIMUM: startMinimum(model),
+    UI_DIRECTION_SUMMARY: uiDirectionSummary(model),
+    UI_DESIGN_SYSTEM: uiDesignSystem(model),
+    THIRD_PARTY_NOTICES: thirdPartyNotices(model),
+    UI_REFERENCES: uiReferences(model),
+    UI_SCREENS: uiScreens(model),
+    UI_LAYOUT: uiLayout(model),
+    UI_COLOR: uiColor(model),
+    UI_COMPONENTS: uiComponents(model),
+    UI_INTERACTION: uiInteraction(),
+    UI_STATES: uiStates(),
+    UI_DESIGN_LANGUAGE: uiDesignLanguage(model),
+    INFRASTRUCTURE_SETUP: infrastructureSetup(model),
     FIRST_COMMAND: commandName(model),
+    FIRST_COMMAND_PATH: commandPath(model),
+    FIRST_COMMAND_EFFECT: firstCommandEffect(model),
+    AFTER_EACH_COMMAND: afterEachCommand(model),
     FIRST_STEP: firstStep(model),
     COMMAND_RULE: commandRule(model),
     CLEANUP_CLAIM: cleanupClaim(command, stackName),
@@ -967,14 +1767,14 @@ export function deriveScaffoldValues(
       model.hosting === "vercel"
         ? "Golden-path hosting."
         : `Chosen in the interview — the DEV deploy workflow ships as a placeholder for ${hosting}.`),
-    dec("TENANCY_MODEL", tenancyLabel[model.tenancy], "interview", "Data isolation model chosen in the interview — drives the access-control invariant."),
+    dec("TENANCY_MODEL", tenancyName(model), "interview", "Data isolation model chosen in the interview — drives the access-control invariant."),
     dec("AUTH_MODEL", model.authModel.map((a) => authMethodLabel[a]).join(", "), "interview", "Sign-in methods chosen in the interview."),
     dec("ROLES", roles, model.roles === "none" ? "default" : "interview", "Derived from the tenancy and roles answers."),
     dec("CAPABILITY_SCOPE", model.features.join(", ") || "(none)", "interview", "Capabilities selected for year one, plus the identity features implied by tenancy/auth."),
     dec("SECURITY_POSTURE", model.dataSensitivity, "interview", "Data-sensitivity answer — drives the encryption/audit posture."),
     dec("SCALE_POSTURE", model.scale, "interview", "Scale target for v1 — drives the caching/database posture.")
   ];
-  if (!model.mvpFocus) {
+  if (!coreAction(model)) {
     decisions.push(dec("PROJECT_TAGLINE", "(unset)", "default", "No MVP focus given — left for the founder to fill."));
   }
   decisions.push(
@@ -1085,11 +1885,17 @@ function capabilitySpecBrief(feature: FeatureId, model: ProjectModel): string {
       return "The internal-only surface, who may reach it, and every action it can take. Cover the audit trail for privileged actions.";
     case "audit_logs":
       return "An append-only record of actor, action, entity, and timestamp. Cover retention, who may read it, and the absence of update/delete paths.";
+    case "other":
+      // The founder's own words, and never anything beyond them: nothing here knows what they
+      // described, so the brief says what any first spec must and leaves the substance to them.
+      return model.capabilitiesOther
+        ? `${model.capabilitiesOther} Spec it the way you would any capability: what it does, who may reach it, what happens when it fails, and the denial test that proves the boundary holds.`
+        : "[NEEDS CLARIFICATION: you selected a capability of your own but did not describe it — say what it does before speccing it.]";
   }
 }
 
 function tenancyModel(model: ProjectModel): string {
-  const base = `Data is organized as ${tenancyLabel[model.tenancy]}.`;
+  const base = `Data is organized as ${tenancyName(model)}.`;
   if (model.derived.multiTenant) {
     return `${base} Every table carries \`organization_id\`, access control is enforced in the database, and every new table ships with a denial test proving a non-member cannot read it.`;
   }
@@ -1110,6 +1916,12 @@ function authModelText(model: ProjectModel): string {
 
 function integrationsText(model: ProjectModel): string {
   if (model.integrations) return model.integrations;
+  // Asked alongside the core objects since spec 165 — the two questions were circling the same
+  // ground, so they became one. A founder who named Stripe there named it here, and pointing at
+  // that answer is more use than a section that claims nothing was named.
+  if (model.coreEntities) {
+    return `Named alongside the core objects, if at all: ${model.coreEntities}\n\nRecord each external system here as you integrate it.`;
+  }
   if (model.derived.hasPayments) {
     return "[NEEDS CLARIFICATION: payments were selected but no payment provider was named — decide the provider before the first payments spec.]";
   }
@@ -1215,14 +2027,14 @@ function repoSetupSteps(model: ProjectModel, from: number): string[] {
       `${n(1)}. **Register the pipelines.** Pipelines → New pipeline → Azure Repos Git → this repo → Existing YAML file: \`${vocab.ciFile}\` for CI, then again for \`${vocab.deployFile}\`. Azure DevOps does not pick up YAML from a directory the way Actions does — an unregistered pipeline simply never runs.`,
       `${n(2)}. **Set the branch policies** the branch model depends on, under Repos → Branches → \`main\` / \`develop\` → Branch policies: require a pull request, require the CI build to pass, and block direct pushes. In this workflow these are the rules — there is no committed file enforcing them.`,
       `${n(3)}. **Create the Boards structure:** one area path (or team) per \`feature/<name>\`, so a ${vocab.issueTerm} always belongs to exactly one feature. That mapping is what \`/createspec\` asks you about.`,
-      `${n(4)}. Install ${vocab.cliName} and run \`az login\`, so the spec commands can read ${vocab.issueTerm}s and open pull requests.`,
+      `${n(4)}. ${cliSetupStep(model)}`,
       `${n(5)}. ${deployTargetSetup(model)}, and put the credentials in ${vocab.secretsHome}.`
     ];
   }
   return [
     `${n(0)}. ${hostStep}`,
     `${n(1)}. **Protect \`main\` and \`develop\`** (Settings → Branches): require a pull request and a passing CI check. The workflows in \`.github/workflows/\` run on their own once pushed.`,
-    `${n(2)}. Install ${vocab.cliName} and run \`gh auth login\`, so the spec commands can read ${vocab.issueTerm}s and open pull requests.`,
+    `${n(2)}. ${cliSetupStep(model)}`,
     `${n(3)}. ${deployTargetSetup(model)}, and put the credentials in ${vocab.secretsHome}.`
   ];
 }
@@ -1233,14 +2045,17 @@ function deployTargetSetup(model: ProjectModel): string {
   // "Create the Azure project" would sit two steps below "create an Azure DevOps project" and mean
   // something entirely different. Name the service.
   if (model.hosting === "azure") return "Create the **Azure App Service** you will deploy to";
-  return `Create the ${hostingLabel[model.hosting]} project you will deploy to`;
+  // A named target is set up in whatever way it is set up — nothing here knows, and "create the
+  // Fly.io project" would be a guess at a verb (spec 159).
+  if (model.hosting === "other") return `Set up the ${hostingName(model)} target you will deploy to`;
+  return `Create the ${hostingName(model)} project you will deploy to`;
 }
 
 function firstSpecHint(model: ProjectModel): string {
-  if (!model.mvpFocus) {
+  if (!coreAction(model)) {
     return "Start with the single flow the product is useless without. [NEEDS CLARIFICATION: the MVP focus was left blank — decide it before writing the first spec.]";
   }
-  return `Start with the flow the MVP is useless without: **${model.mvpFocus}** Spec that one flow end to end — not the whole product.`;
+  return `Start with the flow the MVP is useless without: **${coreAction(model)}** Spec that one flow end to end — not the whole product.`;
 }
 
 function architectureInvariants(model: ProjectModel): string {

@@ -14,12 +14,26 @@ const projectUsage = vi.hoisted(() =>
 );
 vi.mock("@/lib/data/store", () => ({ countGenerations, isAdminUser, projectUsage }));
 
+const claimPro = vi.hoisted(() => vi.fn(async (): Promise<string | null> => null));
+const grantStanding = vi.hoisted(() =>
+  vi.fn(async (): Promise<{ activeUntil: string | null; queued: number }> => ({
+    activeUntil: null,
+    queued: 0
+  }))
+);
+vi.mock("@/lib/data/referrals", () => ({ claimPro, grantStanding }));
+
+const creditsAvailable = vi.hoisted(() => vi.fn(async () => 0));
+const consumeCredit = vi.hoisted(() => vi.fn(async () => false));
+vi.mock("@/lib/data/credits", () => ({ creditsAvailable, consumeCredit }));
+
 import {
   FREE_GENERATION_LIMIT,
   FREE_REPAIR_LIMIT,
   REPAIR_WINDOW_HOURS,
   allowanceMessage,
-  checkAllowance
+  checkAllowance,
+  claimAllowance
 } from "./allowance";
 
 /** Anchored in UTC so the window arithmetic is the same on every machine and in CI (§V). */
@@ -37,6 +51,10 @@ describe("checkAllowance", () => {
     vi.clearAllMocks();
     isAdminUser.mockResolvedValue(false);
     projectUsage.mockResolvedValue({ count: 0, firstAt: null });
+    claimPro.mockResolvedValue(null);
+    grantStanding.mockResolvedValue({ activeUntil: null, queued: 0 });
+    creditsAvailable.mockResolvedValue(0);
+    consumeCredit.mockResolvedValue(false);
   });
 
   describe("the free foundation", () => {
@@ -241,6 +259,199 @@ describe("checkAllowance", () => {
 
       expect(result).toMatchObject({ allowed: false, unlimited: false });
     });
+  });
+
+  /* ── A week from an invitation (spec 122) ─────────────────────────────────
+   *
+   * Two properties carry this feature, and they pull in opposite directions: an earned week has to
+   * lift the ceiling, and it must not be *spent* by a screen that is only reporting where the
+   * founder stands. Hence two entry points, and tests that hold each to its own promise.
+   */
+  describe("a week from an invitation", () => {
+    const WEEK_END = "2026-08-08T00:00:00.000Z";
+
+    it("lifts the free ceiling while it is running", async () => {
+      countGenerations.mockResolvedValue(FREE_GENERATION_LIMIT + 3);
+      grantStanding.mockResolvedValue({ activeUntil: WEEK_END, queued: 0 });
+
+      const result = await checkAllowance({ orgId: "org1", plan: "free" });
+
+      expect(result).toMatchObject({ allowed: true, grant: "referral", unlimited: true });
+    });
+
+    it("reports without starting one", async () => {
+      // The regression this exists for: `checkAllowance` runs on the projects list and in Settings.
+      countGenerations.mockResolvedValue(FREE_GENERATION_LIMIT);
+      grantStanding.mockResolvedValue({ activeUntil: null, queued: 1 });
+
+      const result = await checkAllowance({ orgId: "org1", plan: "free" });
+
+      expect(claimPro).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ allowed: false, denial: "free-spent" });
+    });
+
+    it("starts one when the founder is actually generating", async () => {
+      countGenerations.mockResolvedValue(FREE_GENERATION_LIMIT);
+      claimPro.mockResolvedValue(WEEK_END);
+
+      const result = await claimAllowance({ orgId: "org1", plan: "free" });
+
+      expect(claimPro).toHaveBeenCalledWith("org1", expect.any(Date));
+      expect(result).toMatchObject({ allowed: true, grant: "referral" });
+    });
+
+    it("falls through to the free ceiling when the week has run out", async () => {
+      countGenerations.mockResolvedValue(FREE_GENERATION_LIMIT);
+      claimPro.mockResolvedValue(null);
+
+      const result = await claimAllowance({ orgId: "org1", plan: "free" });
+
+      expect(result).toMatchObject({ allowed: false, denial: "free-spent" });
+    });
+
+    it("never touches a grant belonging to a workspace Stripe already covers", async () => {
+      // What keeps an earned week queued instead of burning behind a subscription that made it
+      // unnecessary — the property the whole "queued" design exists to produce.
+      countGenerations.mockResolvedValue(FREE_GENERATION_LIMIT + 1);
+
+      await claimAllowance({ orgId: "org1", plan: "pro" });
+
+      expect(claimPro).not.toHaveBeenCalled();
+      expect(grantStanding).not.toHaveBeenCalled();
+    });
+
+    it("never touches a grant belonging to an admin", async () => {
+      isAdminUser.mockResolvedValue(true);
+      countGenerations.mockResolvedValue(0);
+
+      await claimAllowance({ orgId: "org1", plan: "free", userId: "user1" });
+
+      expect(claimPro).not.toHaveBeenCalled();
+    });
+  });
+});
+
+/**
+ * Generations support handed back (spec 150).
+ *
+ * The rule these pin down is that a credit is the **last** resort. Anything free — the foundation
+ * itself, a repair inside the window, an earned week, Pro — has to be spent first, or support's
+ * gesture is quietly consumed by a founder who never needed it.
+ */
+describe("generation credits", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    isAdminUser.mockResolvedValue(false);
+    projectUsage.mockResolvedValue({ count: 0, firstAt: null });
+    claimPro.mockResolvedValue(null);
+    grantStanding.mockResolvedValue({ activeUntil: null, queued: 0 });
+    creditsAvailable.mockResolvedValue(0);
+    consumeCredit.mockResolvedValue(false);
+  });
+
+  it("lets a founder past a spent free foundation", async () => {
+    countGenerations.mockResolvedValue(FREE_GENERATION_LIMIT);
+    creditsAvailable.mockResolvedValue(2);
+
+    await expect(checkAllowance({ orgId: "org1", plan: "free" })).resolves.toMatchObject({
+      allowed: true,
+      grant: "credit",
+      remaining: 2
+    });
+  });
+
+  it("is not consulted while the free foundation is still there", async () => {
+    countGenerations.mockResolvedValue(0);
+    creditsAvailable.mockResolvedValue(3);
+
+    await expect(claimAllowance({ orgId: "org1", plan: "free" })).resolves.toMatchObject({
+      grant: "free"
+    });
+    expect(consumeCredit).not.toHaveBeenCalled();
+  });
+
+  it("is not consulted while a free repair is still open", async () => {
+    countGenerations.mockResolvedValue(FREE_GENERATION_LIMIT);
+    generatedTimes(1);
+    creditsAvailable.mockResolvedValue(3);
+
+    await expect(
+      claimAllowance({
+        orgId: "org1",
+        plan: "free",
+        projectId: "p1",
+        now: hoursAfterFirstRun(1)
+      })
+    ).resolves.toMatchObject({ grant: "repair" });
+    expect(consumeCredit).not.toHaveBeenCalled();
+  });
+
+  it("waits behind Pro rather than being spent by it", async () => {
+    // A workspace that buys Pro keeps the credit: Pro short-circuits far above, so it is never even
+    // read, and it is still there if the subscription ends (spec 150, edge cases).
+    countGenerations.mockResolvedValue(FREE_GENERATION_LIMIT);
+    creditsAvailable.mockResolvedValue(1);
+
+    await expect(claimAllowance({ orgId: "org1", plan: "pro" })).resolves.toMatchObject({
+      grant: "pro"
+    });
+    expect(consumeCredit).not.toHaveBeenCalled();
+    expect(creditsAvailable).not.toHaveBeenCalled();
+  });
+
+  it("waits behind an earned week too", async () => {
+    countGenerations.mockResolvedValue(FREE_GENERATION_LIMIT);
+    claimPro.mockResolvedValue("2026-08-07T12:00:00.000Z");
+    creditsAvailable.mockResolvedValue(1);
+
+    await expect(claimAllowance({ orgId: "org1", plan: "free" })).resolves.toMatchObject({
+      grant: "referral"
+    });
+    expect(consumeCredit).not.toHaveBeenCalled();
+  });
+
+  it("reports without spending — looking at a screen must not cost a credit", async () => {
+    countGenerations.mockResolvedValue(FREE_GENERATION_LIMIT);
+    creditsAvailable.mockResolvedValue(1);
+
+    await checkAllowance({ orgId: "org1", plan: "free" });
+
+    expect(consumeCredit).not.toHaveBeenCalled();
+  });
+
+  it("spends one when the generation actually runs", async () => {
+    countGenerations.mockResolvedValue(FREE_GENERATION_LIMIT);
+    creditsAvailable.mockResolvedValue(2);
+    consumeCredit.mockResolvedValue(true);
+
+    await expect(claimAllowance({ orgId: "org1", plan: "free" })).resolves.toMatchObject({
+      allowed: true,
+      grant: "credit",
+      remaining: 1
+    });
+    expect(consumeCredit).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses when the last credit was taken by a concurrent generation", async () => {
+    // Two runs started at once, one credit between them. `consumeCredit` is conditional on the row
+    // still being unspent, so the loser is told no rather than generating for free.
+    countGenerations.mockResolvedValue(FREE_GENERATION_LIMIT);
+    creditsAvailable.mockResolvedValue(1);
+    consumeCredit.mockResolvedValue(false);
+
+    await expect(claimAllowance({ orgId: "org1", plan: "free" })).resolves.toMatchObject({
+      allowed: false,
+      denial: "free-spent"
+    });
+  });
+
+  it("leaves the refusal exactly as it was when there are no credits", async () => {
+    countGenerations.mockResolvedValue(FREE_GENERATION_LIMIT);
+    generatedTimes(1 + FREE_REPAIR_LIMIT);
+
+    await expect(
+      claimAllowance({ orgId: "org1", plan: "free", projectId: "p1", now: hoursAfterFirstRun(1) })
+    ).resolves.toMatchObject({ allowed: false, denial: "repairs-spent" });
   });
 });
 

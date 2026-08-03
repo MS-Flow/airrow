@@ -9,16 +9,30 @@ import { FOOTER_LINKS } from "./footer-links";
  * the routes and anchors that actually exist (spec 23).
  */
 const APP_DIR = fileURLToPath(new URL("../../app", import.meta.url));
-const LANDING = fs.readFileSync(path.join(APP_DIR, "page.tsx"), "utf8");
 
-/** Route groups — `(legal)` — are transparent in the URL, so they count as roots too. */
-function routeRoots(): string[] {
+/**
+ * Route groups — `(public)`, `(legal)` — are transparent in the URL, so they count as roots too.
+ * Nested since spec 158, where `(public)/(legal)/terms/page.tsx` is what serves `/terms`, so the
+ * walk recurses instead of looking one level down.
+ */
+function routeRoots(dir: string = APP_DIR): string[] {
   const groups = fs
-    .readdirSync(APP_DIR, { withFileTypes: true })
+    .readdirSync(dir, { withFileTypes: true })
     .filter((e) => e.isDirectory() && e.name.startsWith("("))
-    .map((e) => path.join(APP_DIR, e.name));
-  return [APP_DIR, ...groups];
+    .flatMap((e) => routeRoots(path.join(dir, e.name)));
+  return [dir, ...groups];
 }
+
+/** `/` itself: the one `page.tsx` sitting at a route root, wherever the groups have put it. */
+function landingSource(): string {
+  const found = routeRoots()
+    .map((root) => path.join(root, "page.tsx"))
+    .find((file) => fs.existsSync(file));
+  if (!found) throw new Error("no page.tsx at any route root — where did `/` go?");
+  return fs.readFileSync(found, "utf8");
+}
+
+const LANDING = landingSource();
 
 const LINKS = FOOTER_LINKS;
 

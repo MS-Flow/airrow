@@ -21,16 +21,43 @@ Every feature, screen, and generated file is judged against these.
 - **Preparation, and a starting point.** Airrow's hosted product generates engineering *foundations* —
   documents, rules, workflow and CI — never application code. The `/start` command it ships **inside**
   a generated repository is the deliberate exception: run explicitly by the founder, on their own
-  machine, it scaffolds the stack and sets the project up to the bare minimum that runs, using the
-  information already in the repo. **Bare minimum is the ceiling** — enough to open, change and
-  continue from, never a guess at the product. Everything past that goes through the spec loop.
-  A foundation generated for a project that **already exists** ships `/cleanup` in its place: run the
-  same way, it reads the codebase that is there and rewrites the foundation's documents to describe
-  it. Its ceiling is narrower — it changes no code and deletes nothing. A foundation ships exactly one
-  of the two, decided by where the project came from. Airrow's servers still never write application
-  code, and ZIP delivery is still a complete foundation on its own. (Amended by
-  [spec 66](../../specs/66-start-command.md), which records the previous wording, and extended by
-  [spec 91](../../specs/91-cleanup-command.md).)
+  machine, it installs the tools that machine is missing — git, the stack's runtime, the repo host's
+  CLI, and nothing it was not asked for, signing in to none of them — scaffolds the stack, and then
+  builds the product's core action — `mvpFocus` — for real,
+  to the design in `UI_ARCHITECTURE.md`, using only information already in the repo. **The ceiling is
+  `mvpFocus`, built well** — not a second feature, not a roadmap item, not a capability picked for
+  later, and never a guess at the product: everything created must trace back to something the
+  founder actually wrote, or it is left as a `[NEEDS CLARIFICATION]` marker rather than invented.
+  Presentation may go further than function — `/start` may finish the screen to the design language
+  already in the repo where the founder's own direction was thin — but schema, persistence and any
+  real auth service stay out; those are the founder's first spec. Everything past `mvpFocus` goes
+  through the spec loop. **`/start` is re-runnable until it succeeds, and removes itself once it
+  has** — only after its own verification bar has actually passed, so an interrupted or failing run
+  always leaves the founder the command that would finish the job. It rewrites `START_HERE.md`'s
+  step 1 before it deletes itself, in that order, so the first file anyone opens never points at a
+  command that is no longer there
+  ([spec 159](../../specs/159-ui-reference-start.md), which records the previous "re-runnable by
+  design" wording). A foundation generated for a project that **already exists** ships `/cleanup`
+  in its place: run the same way, it reads the codebase that is there and rewrites the foundation's
+  documents to describe it. Its ceiling is narrower — it changes no code and deletes nothing. A
+  foundation ships exactly one of the two, decided by where the project came from. Airrow's servers
+  still never write application code, and ZIP delivery is still a complete foundation on its own.
+  **`/security` ships with every foundation, whatever its origin, and is the third command that may
+  touch code** — narrowly: it reviews the whole repository for vulnerabilities and fixes only what
+  changes nothing a user can see, proposing everything else and waiting for the founder's yes. It
+  installs nothing, sends nothing anywhere, attacks nothing, and rewrites no history; its report,
+  `SECURITY_AUDIT.md`, lists the holes still open and stays out of version control. Airrow runs it on
+  nobody's behalf — like the other two, it runs on the founder's machine, when they ask.
+  **What `/start` installs is named, pinned and attributed** ([spec 165](../../specs/165-installable-ui-directions.md)):
+  a curated design direction is a theme on top of a **permissively licensed** library at an **exact
+  version**, never a range and never `@latest`, so the version `UI_ARCHITECTURE.md` names is the
+  version the founder got. Airrow ships the name and the command, never the library's code, and every
+  foundation that installs it carries the licence notice it owes.
+  (Amended by [spec 66](../../specs/66-start-command.md), which records the previous wording, extended
+  by [spec 91](../../specs/91-cleanup-command.md), amended again by
+  [spec 123](../../specs/123-foundation-starts-strong.md) — which records the "bare minimum that runs"
+  wording spec 66 introduced — and extended by
+  [spec 157](../../specs/157-security-command.md), which added `/security`.)
 - **The output is the product.** Generated repos must read like a senior CTO wrote them for *this*
   project — never like a filled-in template. Generic output is a top-severity bug.
 - **Adaptive, never bureaucratic.** The interview asks only questions whose answers change the output.
@@ -51,9 +78,15 @@ Every feature, screen, and generated file is judged against these.
   Route Handlers → feature `queries.ts` / `actions.ts` → the DataStore
   (`apps/web/src/lib/data/store.ts`). Never reach around a layer; routes are thin, logic lives in
   features, pure logic lives in packages.
-- **External calls are server-side only, in one place each.** Claude API only via the generation
-  engine's authoring provider; Supabase / GitHub App only via the DataStore and server actions.
-  Never from client components; never from `packages/engine` or `packages/schemas`.
+- **External calls are server-side only, in one place each.** The Claude API has exactly **two**
+  callers, and adding a third takes an amendment: the generation engine's authoring provider
+  (`features/generation/author.ts`), which writes foundations, and the landing chat's provider
+  (`features/chat/provider.ts`), which answers visitors. They share no key — the chat is a public,
+  unauthenticated surface and carries its own, so abuse of it can never reach generation's budget.
+  Supabase / GitHub App only via the DataStore and server actions. Never from client components;
+  never from `packages/engine` or `packages/schemas`. (Amended by
+  [spec 141](../../specs/141-landing-chat.md), which records the previous wording: "Claude API only
+  via the generation engine's authoring provider".)
 - **The engine stays pure.** `packages/engine` is a headless `generate(projectModel) → RepoTree +
   Manifest`. `packages/engine` and `packages/schemas` **never** import from `apps/*` and **never**
   read `process.env` (config is injected).
@@ -69,7 +102,12 @@ Every feature, screen, and generated file is judged against these.
 ## II. Data invariants
 - **Tenancy by `organization_id`.** Every resource hangs off an organization; each user gets a
   personal org at signup. Authorization is decided server-side — never trust client-supplied
-  org/project IDs.
+  org/project IDs. **One table is exempt, and only because there is no tenant to point at:**
+  `chat_rate_limits` counts answers for anonymous visitors on the public landing page. What replaces
+  tenancy there is that nobody may read it — `authenticated` is granted nothing on the table and
+  cannot execute the functions that write it, proven by denial tests like every other table
+  ([spec 141](../../specs/141-landing-chat.md)). A resource that *has* an organization still hangs
+  off one.
 - **RLS everywhere, with denial tests.** Every table has Row-Level Security scoped through org
   membership, and server code *additionally* scopes queries (defense in depth). No exceptions,
   including "internal" tables. Access control ships in the same change as the new table/resource.
@@ -77,7 +115,9 @@ Every feature, screen, and generated file is judged against these.
   committed in `supabase/migrations`. Never hand-edit the schema in the Supabase dashboard.
 - **Customer IP is protected.** Interview answers and artifacts are encrypted at rest, reached only
   via RLS-scoped paths, and served from Storage via short-expiry signed URLs. Deleting a project
-  cascades to its interviews, models, jobs, artifacts, and Storage objects. Logs carry IDs and
+  cascades to its interviews, models, jobs, artifacts, **the UI reference images the founder
+  attached**, and Storage objects — the last of those explicitly, since Storage has no foreign key to
+  cascade along ([spec 159](../../specs/159-ui-reference-start.md)). Logs carry IDs and
   metadata only — never answer content or generated document bodies.
 - **Manifest of record.** Generation records per file (source, template id + version, prompt version,
   model, inputs hash) in Postgres — do not bypass it. Full schema: `DATABASE_DESIGN.md`.

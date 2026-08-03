@@ -28,8 +28,8 @@ export const SITE_URL = "https://airrow.app";
 /**
  * The templates we manage, and the auth-config fields each one lands in.
  *
- * Only the confirmation email today — the rest of the transactional mail (password reset, email
- * change, invite) is deliberately a separate issue, and adding one here is a row plus its HTML file.
+ * Signup, password reset and email change (spec 171 added the last two, which spec 113 left as "a row
+ * plus its HTML file" — it was). The invite mail is still Supabase's, because Airrow does not send one.
  */
 export const TEMPLATES = [
   {
@@ -37,6 +37,18 @@ export const TEMPLATES = [
     subject: "Confirm your email address",
     subjectField: "mailer_subjects_confirmation",
     contentField: "mailer_templates_confirmation_content"
+  },
+  {
+    file: "recovery.html",
+    subject: "Choose a new Airrow password",
+    subjectField: "mailer_subjects_recovery",
+    contentField: "mailer_templates_recovery_content"
+  },
+  {
+    file: "email-change.html",
+    subject: "Confirm your new Airrow email address",
+    subjectField: "mailer_subjects_email_change",
+    contentField: "mailer_templates_email_change_content"
   }
 ];
 
@@ -54,13 +66,17 @@ export const TEMPLATES = [
 export const REDIRECT_URLS = [
   "https://airrow.app/auth/confirm",
   "https://airrow.app/auth/callback",
+  "https://airrow.app/auth/reset",
   "https://airrow-dev.vercel.app/auth/confirm",
   "https://airrow-dev.vercel.app/auth/callback",
+  "https://airrow-dev.vercel.app/auth/reset",
   "https://dev.airrow.app/auth/confirm",
   "https://dev.airrow.app/auth/callback",
+  "https://dev.airrow.app/auth/reset",
   // Preview deploys get a fresh hostname every time, so they cannot be enumerated.
   "https://*.vercel.app/auth/confirm",
-  "https://*.vercel.app/auth/callback"
+  "https://*.vercel.app/auth/callback",
+  "https://*.vercel.app/auth/reset"
 ];
 
 /** Everything about sending except the key, which is a secret and comes from the environment. */
@@ -91,7 +107,7 @@ export function requireCredentials(env) {
   const missing = REQUIRED_CREDENTIALS.filter((name) => !env[name]);
   if (missing.length > 0) {
     throw new MissingCredentialsError(
-      `Saknar ${missing.join(", ")}. Se docs/guides/INFRASTRUCTURE_SETUP.md § 7 (Auth email).`
+      `Saknar ${missing.join(", ")}. Se docs/guides/INFRASTRUCTURE_SETUP.md § 6.`
     );
   }
 

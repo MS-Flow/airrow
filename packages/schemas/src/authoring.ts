@@ -16,6 +16,8 @@
 // engine falls back to its deterministic value, which already emits `[NEEDS CLARIFICATION: …]`
 // rather than inventing one.
 import { z } from "zod";
+import { interviewQuestions } from "./questions.ts";
+import type { AnswerId } from "./types.ts";
 
 /**
  * The slots an LLM may write — prose a reader judges as writing.
@@ -143,7 +145,8 @@ export type AuthoredSlots = Partial<Record<ProseSlot, string | null>>;
 export const AUTHORED_DOCUMENTS = [
   "docs/VISION.md",
   "docs/architecture/SYSTEM_OVERVIEW.md",
-  "docs/README.md"
+  "docs/README.md",
+  "docs/architecture/UI_ARCHITECTURE.md"
 ] as const;
 
 export type AuthoredDocumentPath = (typeof AUTHORED_DOCUMENTS)[number];
@@ -162,7 +165,16 @@ export function isAuthoredDocument(path: string): path is AuthoredDocumentPath {
 export const DOCUMENT_MAX_CHARS: Record<AuthoredDocumentPath, number> = {
   "docs/VISION.md": 3000,
   "docs/architecture/SYSTEM_OVERVIEW.md": 6000,
-  "docs/README.md": 2500
+  "docs/README.md": 2500,
+  // Sized as a build brief, not a page — this is the document `/start` reads to decide what to build,
+  // so an undersized ceiling costs more here than on any other document: see the note above
+  // DOCUMENT_MAX_CHARS on what an undersized ceiling actually does (silent fallback, every time).
+  //
+  // 7000 for ten sections. Spec 159 grew the document from four sections to nine and recorded this
+  // raise as done; it was not, and the ceiling stayed at the four-section 5000 — so the brief has
+  // been one long answer away from silently falling back to its template ever since. Spec 165 adds
+  // the tenth (design system) and makes the raise real.
+  "docs/architecture/UI_ARCHITECTURE.md": 7000
 };
 
 /**
@@ -321,4 +333,58 @@ export type AuthoredToolchain = Partial<Record<ToolchainSlot, string | null>>;
 /** The commands in `raw` that satisfy the contract. Anything else stays deterministic. */
 export function pickValidToolchain(raw: unknown): AuthoredToolchain {
   return pickValid<AuthoredToolchain>(raw, authoredToolchainSchema.shape);
+}
+
+/* ── Refusing the answers outright ────────────────────────────────────────────
+ *
+ * Everything above is about a response that came back imperfect. This is about the model saying the
+ * answers do not describe a software product at all — the one verdict that stops a generation instead
+ * of degrading it (spec 128). It arrives with the answers that led the model there, and those ids are
+ * all the founder is ever told: what they read is written from the interview's own question titles,
+ * never from the response.
+ */
+
+/**
+ * The answers a rejection may name: the ones the founder typed into.
+ *
+ * A picked option cannot be "not a software product" — it came from a list we wrote — so only what the
+ * founder typed is ever flagged. Derived from the interview rather than listed again, so a text
+ * question added tomorrow is flaggable the day it ships.
+ *
+ * `guided_text` counts as typed: it may be *seeded* from a direction we wrote, but the founder owns
+ * the field from the first keystroke. Deriving this from `type === "text"` alone silently dropped
+ * `uiDirection` the day it gained its starting points (spec 159).
+ *
+ * **A satellite answer counts too, and for the same reason.** `uiReferenceLinks` stopped being a
+ * question when the design screen absorbed it (spec 165), while staying a field the founder types
+ * into. Leaving it to fall out of a question-derived list would have re-run spec 159's regression on
+ * the very next answer: a model unable to point at the reference list that made an interview
+ * unusable. `uiKit` is deliberately not here — it is a picked option, and a picked option cannot be
+ * the reason answers do not describe a software product.
+ */
+const TYPED_QUESTION_TYPES: ReadonlySet<string> = new Set(["text", "guided_text"]);
+
+/** Satellites the founder types into, as opposed to picks. See `SATELLITE_ANSWERS`. */
+const TYPED_SATELLITES: readonly AnswerId[] = ["uiReferenceLinks"];
+
+export const FLAGGABLE_ANSWERS: readonly AnswerId[] = [
+  ...interviewQuestions.filter((q) => TYPED_QUESTION_TYPES.has(q.type)).map((q) => q.id),
+  ...TYPED_SATELLITES
+];
+
+const FLAGGABLE_ANSWER_SET: ReadonlySet<string> = new Set(FLAGGABLE_ANSWERS);
+
+/**
+ * The answers in `raw` that name a real free-text question, deduplicated.
+ *
+ * An allowlist for the same reason the slots have one: this is a model naming things, and a name the
+ * interview does not recognise must reach no screen. Anything else — an invented id, a sentence, a
+ * number — is dropped, and a rejection that names nothing usable is still a rejection.
+ */
+export function pickFlaggedAnswers(raw: unknown): AnswerId[] {
+  if (!Array.isArray(raw)) return [];
+  const flagged = raw.filter(
+    (value): value is AnswerId => typeof value === "string" && FLAGGABLE_ANSWER_SET.has(value)
+  );
+  return [...new Set(flagged)];
 }

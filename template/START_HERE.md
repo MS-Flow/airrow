@@ -7,6 +7,17 @@ application — that part is yours. You stay in control of the code: what gets b
 decided one spec at a time, by you, with an AI assistant doing the typing. The steps below are in the
 order that works: get the foundation working, then connect the accounts, then start building.
 
+### How the commands work
+
+Everything written as `/something` in this guide — `{{FIRST_COMMAND}}`, `/createspec`, `/clarify`,
+`/implement`, `/analyze`, `/push`, `/pr-check`, `/security` — is a file in
+[`.claude/commands/`](.claude/commands), not a program on your machine.
+Claude Code is what this foundation is built for.
+
+- Type the command as an ordinary message, e.g. `/createspec "add sign-in"`.
+- The assistant reads the matching file and follows it — asking you questions where it needs to,
+  running `git`, your package manager, and everything else itself, inside the conversation.
+
 ---
 
 ## 1. Get it running
@@ -25,23 +36,26 @@ make from here has to pass it before it merges.
 
 ## 2. Connect what needs an account
 
-These need a human and, usually, a credit card. `{{FIRST_COMMAND}}` deliberately does none of them.
+The full walkthrough — every key, every screen, and how to verify it worked — is
+[docs/guides/DEVELOPER_GUIDE.md § Getting to a deployed product](docs/guides/DEVELOPER_GUIDE.md#getting-to-a-deployed-product);
+the steps below are the short version.
 
 {{SETUP_STEPS}}
 
 Branch direction is strict and never skipped —
 [docs/architecture/BRANCHING.md](docs/architecture/BRANCHING.md) has the full model.
 
-## 3. Read these four files, in this order
+## 3. Read these five files, in this order
 
-| #   | File                                                                         | Why                                                 |
-| --- | ---------------------------------------------------------------------------- | --------------------------------------------------- |
-| 1   | [CLAUDE.md](CLAUDE.md)                                                       | What your AI assistant reads first, every session   |
-| 2   | [.claude/spec-kit/constitution.md](.claude/spec-kit/constitution.md)         | The rules. When anything disagrees with it, it wins |
-| 3   | [docs/VISION.md](docs/VISION.md)                                             | What you're building and where it goes              |
-| 4   | [docs/architecture/SYSTEM_OVERVIEW.md](docs/architecture/SYSTEM_OVERVIEW.md) | How the system is shaped                            |
+| #   | File                                                                         | Why                                                   |
+| --- | ----------------------------------------------------------------------------- | ------------------------------------------------------ |
+| 1   | [CLAUDE.md](CLAUDE.md)                                                       | What your AI assistant reads first, every session     |
+| 2   | [.claude/spec-kit/constitution.md](.claude/spec-kit/constitution.md)         | The rules. When anything disagrees with it, it wins   |
+| 3   | [docs/VISION.md](docs/VISION.md)                                             | What you're building and where it goes                |
+| 4   | [docs/architecture/SYSTEM_OVERVIEW.md](docs/architecture/SYSTEM_OVERVIEW.md) | How the system is shaped                              |
+| 5   | [docs/architecture/UI_ARCHITECTURE.md](docs/architecture/UI_ARCHITECTURE.md) | What it looks like, and how someone moves through it  |
 
-Read them yourself — they are short. Your assistant reads them too, which is why keeping them current
+Read them yourself - Your assistant reads them and updates them too, which is why keeping them current
 matters more than keeping them long.
 
 ## 4. Write your first spec
@@ -102,6 +116,12 @@ Anything you have not decided is left as a `[NEEDS CLARIFICATION]` marker rather
 That is the whole workflow, and it is the same six steps whether you are adding a button or a billing
 system. Repeat it per change and the documentation stays true as the codebase grows — which is the
 only reason an assistant is still useful to you in month six.
+
+**Outside the loop: `/security`.** It reads the whole project, fixes the security holes that can be
+closed without changing anything you would notice, asks before anything that would, and writes
+`SECURITY_AUDIT.md` — what it fixed, what it found, and what is still open. That file is gitignored on
+purpose: it is a list of the ways in that are still there, and it belongs on your machine, not in your
+repository. Run it whenever something new is exposed to the internet — and before you launch.
 
 ## 6. When something is unclear
 

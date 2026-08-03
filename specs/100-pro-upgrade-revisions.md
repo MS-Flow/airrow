@@ -537,7 +537,7 @@ from one field, and three times Stripe had said something more specific in anoth
 instead of the plan; the status instead of the cancellation flag; the flag instead of `cancel_at`. The
 fix each time was the same shape — ask the system that knows, and derive rather than assume.
 
-**Going live is now written down.** `INFRASTRUCTURE_SETUP.md` §6 covers what test mode does not carry
+**Going live is now written down.** `INFRASTRUCTURE_SETUP.md` §7 covers what test mode does not carry
 over — live product and price, live keys, a live webhook endpoint and its own signing secret, the
 customer portal Stripe requires you to switch on before `Manage billing` works — plus the two things
 code cannot decide: VAT (Checkout is created without `automatic_tax`, which is a deliberate decision to

@@ -25,6 +25,8 @@ interface JobView {
   totalFiles: number;
   currentPath: string | null;
   error: string | null;
+  /** Set when the run stopped because the answers were refused — see `rejectAnswers` (spec 128). */
+  rejectedAnswers: string[] | null;
 }
 
 export function GenerationProgress({
@@ -68,6 +70,12 @@ export function GenerationProgress({
           // Just long enough for the last tick to register as finished, not a pause.
           setTimeout(() => router.push(`/app/projects/${projectId}`), 400);
         }
+        // Refused answers are not a failure to retry — retrying the same words would be refused
+        // again. The interview says which answers, and is the only place they can be changed.
+        if (data.job.rejectedAnswers !== null && !done.current) {
+          done.current = true;
+          router.push(`/app/projects/${projectId}/interview`);
+        }
       } catch {
         /* transient poll failure — next tick retries */
       }
@@ -81,7 +89,9 @@ export function GenerationProgress({
     };
   }, [projectId, router]);
 
-  const failed = job?.status === "failed";
+  // A refused run is on its way to the interview, so it never shows the retry panel on the way past:
+  // "Retry generation" on answers that were just declined is an offer to be declined again.
+  const failed = job?.status === "failed" && job.rejectedAnswers === null;
   const percent = job ? (job.stagesDone.length / JOB_STAGE_COUNT) * 100 : 0;
 
   return (

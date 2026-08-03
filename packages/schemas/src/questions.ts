@@ -1,20 +1,52 @@
 // Declarative interview schema v1. Pure data + pure evaluator — no runtime deps.
 // This is the single source of truth for the interview UI and engine resolution.
 
-import type { Framework, InterviewAnswers, ProductType } from "./types.ts";
+import type { AnswerId, Framework, InterviewAnswers, ProductType } from "./types.ts";
 
-export const INTERVIEW_SCHEMA_VERSION = "1";
+export const INTERVIEW_SCHEMA_VERSION = "5";
 
 export interface QuestionOption {
   value: string;
   label: string;
   description?: string;
   /**
+   * For a `guided_text` question: the words this option writes into the field when it is picked
+   * (spec 159). The founder then edits or extends them, and what they end up with is the answer —
+   * which is why the prefill is written as something a founder could plausibly have typed, not as a
+   * label. An option with no prefill is the "start from nothing" one.
+   */
+  prefill?: string;
+  /**
+   * Picking this option is how the founder asks to show us instead (spec 165).
+   *
+   * On a question that takes `references`, this is the one that reveals them. It is a property of the
+   * option rather than a hardcoded id because it is a *role* — "the escape from the five" — and the
+   * five may change without that role moving.
+   */
+  opensReferences?: boolean;
+  /**
    * The golden path for this question, when it is the same one for everybody. Where the answer
    * depends on an earlier one, use `Question.suggest` instead — never both.
    */
   recommended?: boolean;
 }
+
+/**
+ * An answer that belongs to a question without being one, keyed by its owning question.
+ *
+ * Two of them, and both belong to the design question — which is now the *only* UI question there
+ * is. `uiKit` records which curated direction was picked; `uiReferenceLinks` holds the products the
+ * founder pointed at. Neither is a screen of its own: everything about how this product should look
+ * is asked once, in one place.
+ *
+ * They still have to be pruned when their owner disappears, which is what this map is for:
+ * `pruneHiddenAnswers` walks the questions, so an answer no question claims would otherwise be
+ * dropped on every save.
+ */
+export const SATELLITE_ANSWERS: Partial<Record<AnswerId, AnswerId>> = {
+  uiKit: "uiDirection",
+  uiReferenceLinks: "uiDirection"
+};
 
 export interface Condition {
   questionId: keyof InterviewAnswers;
@@ -40,7 +72,27 @@ export interface Question {
   id: keyof InterviewAnswers;
   title: string;
   help?: string;
-  type: "single" | "multi" | "text";
+  /**
+   * One type beyond the original three, added by spec 159 and widened by spec 165.
+   *
+   * `guided_text` is one free-text answer with starting points above it: picking one writes its words
+   * into the field, where the founder edits or extends them. It is not a choice *and* a text answer —
+   * it is a text answer the founder does not have to start from nothing, which is why there is one
+   * answer at the end of it and not two.
+   *
+   * Spec 159's `references` type is gone: its one question folded into the design question rather
+   * than sitting on the screen after it (see `references` below).
+   */
+  type: "single" | "multi" | "text" | "guided_text";
+  /**
+   * This question also takes references — pasted links and, for a signed-in founder, screenshots.
+   *
+   * A flag rather than a question type, because references are not what is being asked: they are a
+   * second way of answering the question already on the screen. The links land in
+   * `uiReferenceLinks` and the images in `ui_references`, exactly as they did when this was a screen
+   * of its own — bytes never belong in an answer object rewritten on every keystroke (spec 159).
+   */
+  references?: boolean;
   options?: QuestionOption[];
   placeholder?: string;
   required: boolean;
@@ -61,15 +113,53 @@ export interface Question {
  */
 export const ANSWER_MAX_CHARS = {
   problem: 400,
-  vision: 300,
+  // Raised from 300 when this question absorbed the MVP focus (spec 165): it now carries two
+  // answers, and a cap sized for one of them would have cut the second off mid-sentence.
+  vision: 500,
   mvpFocus: 300,
   coreEntities: 600,
+  uiDirection: 500,
+  uiReferenceLinks: 300,
+  // No longer asked (spec 159 removed the question), but still the ceiling on the field: an answer
+  // saved before it went, or one an import analysis derived, is still validated against it.
   nonGoals: 400,
   frameworkOther: 300,
+  productTypeOther: 200,
+  tenancyOther: 300,
+  capabilitiesOther: 300,
+  databaseOther: 200,
+  hostingOther: 200,
   integrations: 300
 } as const;
 
-const WEB_PRODUCT_TYPES = ["saas", "marketplace", "ai_agent", "mobile_app", "api", "browser_extension"];
+/** How many products the founder may point at. Five is more than anyone needs to make a point. */
+export const MAX_UI_REFERENCE_LINKS = 5;
+
+/**
+ * How many screenshots one project may carry, and how large each may be.
+ *
+ * Four because a design direction that takes five screenshots to convey is not a direction; 2 MB
+ * because a full-page screenshot fits in it and an unoptimised export does not. Both are checked
+ * server-side — the field's own limits are a courtesy, not the boundary.
+ */
+export const MAX_UI_REFERENCE_IMAGES = 4;
+export const MAX_UI_REFERENCE_IMAGE_BYTES = 2 * 1024 * 1024;
+
+/** What an attached reference may be. Three formats every screenshot tool produces. */
+export const UI_REFERENCE_MEDIA_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+
+/**
+ * The founder's reference links, split the one way every reader of them splits.
+ *
+ * Here rather than beside the Zod schema that validates them, so the engine can use it without
+ * taking a dependency on Zod — `questions.ts` is pure data and pure functions by design.
+ */
+export function splitReferenceLinks(raw: string): string[] {
+  return raw
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
 
 /** The stack a product type points at before the founder says otherwise. */
 export interface StandardStack {
@@ -116,7 +206,11 @@ export const STANDARD_STACK: Record<ProductType, StandardStack> = {
     framework: "custom",
     describe:
       "Vite with React and TypeScript, CRXJS for the extension manifest and build, npm for packages, Vitest for tests"
-  }
+  },
+  // A product none of the eight covered: nothing here knows what it is normally built in, so the
+  // recommendation is the question that asks — `custom` puts the founder in front of the stack field
+  // rather than in front of a web app they never asked for (spec 159).
+  other: { framework: "custom" }
 };
 
 /** One `Suggestion.value` map per field of the table above — derived, so the two cannot drift. */
@@ -144,8 +238,26 @@ export const interviewQuestions: Question[] = [
       { value: "api", label: "API / developer tool", description: "A product other developers build on" },
       { value: "internal_tool", label: "Internal tool", description: "Software for your own company or team" },
       { value: "browser_extension", label: "Browser extension", description: "Lives inside the browser" },
-      { value: "hobby", label: "Side project / for fun", description: "A passion project or experiment — not (yet) a business" }
+      { value: "hobby", label: "Side project / for fun", description: "A passion project or experiment — not (yet) a business" },
+      {
+        value: "other",
+        label: "Something else — describe it",
+        description: "A game, a CLI tool, firmware, a desktop app. Your documents are written for what you name."
+      }
     ]
+  },
+  {
+    // The escape hatch, built exactly like `frameworkOther`: an option that admits the list was
+    // incomplete, and a field that makes the admission useful. Eight types covered the products we
+    // had seen; the ninth answer used to be whichever of them was least wrong (spec 159).
+    id: "productTypeOther",
+    title: "What are you building?",
+    help: "A sentence is enough. Everything generated for you is written for this rather than for the nearest option on the last screen.",
+    type: "text",
+    required: true,
+    showIf: [{ questionId: "productType", in: ["other"] }],
+    maxChars: ANSWER_MAX_CHARS.productTypeOther,
+    placeholder: "e.g. A compression library other people's products embed, plus the service that meters it."
   },
   {
     // Asked first among the written answers, and asked separately from the vision: without it every
@@ -158,60 +270,92 @@ export const interviewQuestions: Question[] = [
     required: true,
     maxChars: ANSWER_MAX_CHARS.problem,
     placeholder:
-      "e.g. Independent property managers track applications across email and spreadsheets, so good tenants go days without an answer and get lost to bigger agencies."
+      "e.g. Teams moving large media libraries pay for storage they never look at, and every tool that promises to shrink it either mangles the files or takes a week to run."
   },
   {
+    // Two questions in one, and the pairing is the point: the first thing it must do is only
+    // meaningful next to where it is going, and a founder answering them on consecutive screens
+    // wrote the same sentence twice (spec 165). `mvpFocus` is no longer asked and its **field
+    // stays** — the `nonGoals` treatment from spec 159, for a stronger reason: it is `/start`'s
+    // ceiling in the constitution and appears in six generated documents, so removing the field
+    // would be a constitution change rather than one fewer question. Readers of it fall back to
+    // this answer (`coreAction`), and an import analysis can still derive one.
     id: "vision",
-    title: "Where is this heading long-term?",
-    help: "One sentence on what it becomes if it succeeds. Your AI assistants build toward this.",
+    title: "What must it do first, and where is it heading?",
+    help: "The one thing it has to do to be useful at all — then, in a sentence, what it becomes if it works. Your AI assistants build the first and aim at the second.",
     type: "text",
     required: true,
     maxChars: ANSWER_MAX_CHARS.vision,
-    placeholder: "e.g. The default operating system for independent property managers."
-  },
-  {
-    id: "mvpFocus",
-    title: "What's the first thing it needs to do?",
-    help: "The one core action of the MVP — this drives your roadmap and first specs. One sentence.",
-    type: "text",
-    required: true,
-    maxChars: ANSWER_MAX_CHARS.mvpFocus,
-    placeholder: "e.g. Let a property manager create a listing and receive tenant applications online."
-  },
-  {
-    id: "audience",
-    title: "Who is it for?",
-    help: "B2B and B2C foundations differ: tenancy, onboarding, billing, compliance.",
-    type: "single",
-    required: true,
-    showIf: [{ questionId: "productType", in: WEB_PRODUCT_TYPES }],
-    options: [
-      { value: "b2b", label: "Businesses (B2B)", description: "Teams and companies pay" },
-      { value: "b2c", label: "Consumers (B2C)", description: "Individuals use and pay" },
-      { value: "both", label: "Both", description: "Prosumer or two-sided" }
-    ]
-  },
-  {
-    id: "coreEntities",
-    title: "What are the core objects in your product?",
-    help: "The 3–7 most important things and how they relate. Skip it if you're not sure yet — you can fill it in later.",
-    type: "text",
-    required: false,
-    maxChars: ANSWER_MAX_CHARS.coreEntities,
-    placeholder: "e.g. Landlords own Properties; a Property has many Listings; a Listing receives Applications from Tenants."
-  },
-  {
-    // Written into the generated CLAUDE.md, where it is the only thing standing between a coding
-    // agent and a week of work nobody asked for. Optional, because a founder who has none yet
-    // should not be made to invent them.
-    id: "nonGoals",
-    title: "What is this explicitly not doing?",
-    help: "The things you keep being tempted by and are deliberately leaving out. Your AI assistants will respect these.",
-    type: "text",
-    required: false,
-    maxChars: ANSWER_MAX_CHARS.nonGoals,
     placeholder:
-      "e.g. No accounting or rent collection — those stay in the tools people already pay for. No native mobile app in year one."
+      "e.g. Let someone drop in a folder and get it back materially smaller, losslessly, in minutes. Long-term, the compression layer everything else quietly runs on."
+  },
+  {
+    // Two readers: the founder, who wants to know what their product looks like, and the assistant
+    // running `/start`, for whom this is a build brief — so the help text pushes toward something
+    // specific enough to act on, not merely a mood board. Never a hard requirement: a thin or empty
+    // answer still produces a usable, if less specific, `UI_ARCHITECTURE.md`.
+    // One question where there were two (spec 159, revised). Asking for a design brief and then
+    // asking which of five directions was closest made the founder answer the same question twice,
+    // and left the engine holding two answers that could disagree. The starting points now write
+    // themselves into this field instead: pick one and it is your sentence, to edit or extend or
+    // delete. What comes out is one answer, in the founder's own words, whether or not they started
+    // from ours.
+    //
+    // And as of spec 165 a picked direction is more than words: each one points at a real theme,
+    // pinned, that `/start` installs. What it is *not* is a layout. The picture is a specimen of the
+    // look — colour, type, corner, spacing — and the screens themselves come from what the founder
+    // wrote about their product. A picked picture that decided the navigation would be a template
+    // overruling the answers, which is the opposite of the point.
+    //
+    // Everything about how this product should look is now asked here and nowhere else: the
+    // references screen spec 159 gave its own question folded back in, so a founder answers the
+    // design question once instead of being asked about the same subject on two consecutive screens
+    // (spec 165). `uiReferenceLinks` is still an answer — it is simply no longer a question.
+    id: "uiDirection",
+    title: "How should it look and feel?",
+    help: "Pick the palette and type you like — that theme gets installed, so your first screen looks like it from day one. The screens themselves are built from what you write below, not from the picture.",
+    type: "guided_text",
+    required: false,
+    references: true,
+    maxChars: ANSWER_MAX_CHARS.uiDirection,
+    placeholder:
+      "e.g. Calm and uncluttered. The screen someone lives in is the job list — everything else is secondary. Dark mode matters; our users are engineers and they work late.",
+    options: [
+      {
+        value: "soft_minimal",
+        label: "Soft minimal",
+        description: "Warm off-white, deep green, a lot of air.",
+        prefill:
+          "Soft and minimal: a warm off-white ground, near-black text and one deep accent. Generous whitespace, hairline borders rather than shadows, and a large wordmark that leads every page. One typeface, with size and weight doing all the work. Almost nothing moves."
+      },
+      {
+        value: "bold_contrast",
+        label: "Bold contrast",
+        description: "Near-black, soft red, oversized type. Looks new.",
+        prefill:
+          "Bold and high-contrast: a near-black ground with one soft red accent, dark by default. Oversized headings against small quiet body text, flat surfaces separated by colour rather than borders, and monospace for anything technical. Motion is short and deliberate."
+      },
+      {
+        value: "stark_terminal",
+        label: "Stark & technical",
+        description: "Near-black, phosphor green, monospace accents. Terminal feeling.",
+        prefill:
+          "Stark and technical, like a terminal: a near-black ground with one phosphor-green accent, monospace everywhere at one size and one weight, and colour as the only emphasis. Sharp corners, single-pixel outlines instead of shadows, and no marketing voice — the output is the headline. A cursor blinks; nothing else moves."
+      },
+      {
+        // The sixth option, and the only one that installs nothing: no prefill, no theme, no blocks.
+        //
+        // It used to read "None of these — my own words", which named the *absence* of a choice and
+        // then left the founder in front of an empty box. What someone who rejects five pictures
+        // actually wants is to show us the one they had in mind, so this option now opens the way to
+        // do that — the link field and the upload, which is where the references screen went when it
+        // folded into this question (spec 165).
+        value: "show_instead",
+        label: "None of these — I'll show you",
+        description: "Paste a link, or upload a screenshot. Nothing is installed.",
+        opensReferences: true
+      }
+    ]
   },
   {
     id: "tenancy",
@@ -223,8 +367,27 @@ export const interviewQuestions: Question[] = [
       { value: "single_user", label: "Per user", description: "Each person sees only their own data" },
       { value: "organizations", label: "Teams / organizations", description: "Multi-tenant workspaces; members share data" },
       { value: "marketplace", label: "Two-sided marketplace", description: "Buyers and sellers with separate access" },
-      { value: "internal", label: "Single internal org", description: "One company; everyone is in the same tenant" }
+      { value: "internal", label: "Single internal org", description: "One company; everyone is in the same tenant" },
+      {
+        value: "other",
+        label: "Something else — describe it",
+        description: "An isolation model none of these describes. Your data documents are written from what you write."
+      }
     ]
+  },
+  {
+    // Not folded into `tenancy`'s options as prose: this answer decides the row-level security
+    // strategy, and a described model has to be read as the founder wrote it rather than mapped onto
+    // the nearest of four. Nothing derives `organization_id` from it — see `Tenancy` (spec 159).
+    id: "tenancyOther",
+    title: "How is your data organized and isolated?",
+    help: "Who can see whose data, and what the boundary is. This is the hardest thing to change later, so be concrete.",
+    type: "text",
+    required: true,
+    showIf: [{ questionId: "tenancy", in: ["other"] }],
+    maxChars: ANSWER_MAX_CHARS.tenancyOther,
+    placeholder:
+      "e.g. Each team is a tenant, but a library can be shared read-only with an outside reviewer for a fixed period."
   },
   {
     id: "authModel",
@@ -238,18 +401,6 @@ export const interviewQuestions: Question[] = [
       { value: "social", label: "Social login", description: "Google, GitHub, etc." },
       { value: "sso", label: "Enterprise SSO", description: "SAML / OIDC for B2B customers" },
       { value: "public", label: "No accounts (public)", description: "Anonymous — no sign-in" }
-    ]
-  },
-  {
-    id: "roles",
-    title: "How sophisticated should roles & permissions be?",
-    help: "You chose a multi-member tenancy — Airrow will spec the permission model.",
-    type: "single",
-    required: true,
-    showIf: [{ questionId: "tenancy", in: ["organizations", "marketplace"] }],
-    options: [
-      { value: "simple", label: "Simple", description: "Owner, admin, member — enough for most products" },
-      { value: "granular", label: "Granular", description: "Custom roles / per-resource permissions" }
     ]
   },
   {
@@ -268,8 +419,23 @@ export const interviewQuestions: Question[] = [
       { value: "analytics", label: "Analytics", description: "Product usage insight" },
       { value: "realtime", label: "Realtime", description: "Live updates, collaboration" },
       { value: "admin", label: "Admin panel", description: "Internal operations UI" },
-      { value: "audit_logs", label: "Audit logs", description: "Who did what, when" }
+      { value: "audit_logs", label: "Audit logs", description: "Who did what, when" },
+      {
+        value: "other",
+        label: "Something else — describe it",
+        description: "The capability this product needs that no box above covers"
+      }
     ]
+  },
+  {
+    id: "capabilitiesOther",
+    title: "What else does it need to do?",
+    help: "The capability none of the boxes covered. It gets its own section in your roadmap and its own first spec, like every other one you picked.",
+    type: "text",
+    required: true,
+    showIf: [{ questionId: "capabilities", in: ["other"] }],
+    maxChars: ANSWER_MAX_CHARS.capabilitiesOther,
+    placeholder: "e.g. A public benchmark page — every run scored, so the ratio is something anyone can check."
   },
   {
     id: "aiUsage",
@@ -287,37 +453,17 @@ export const interviewQuestions: Question[] = [
     ]
   },
   {
-    id: "integrations",
-    title: "Which external systems will you integrate?",
-    help: "Name the services you already know you'll connect. Skip if none yet.",
+    // Asked here rather than up with the product questions, because half of it is about the
+    // capabilities just chosen: a founder who has this moment ticked payments and email knows what
+    // they are connecting to, and asking before that made them guess at a list they had not seen.
+    id: "coreEntities",
+    title: "What does it keep track of, and what does it connect to?",
+    help: "The 3–7 things your product is really about and how they relate — plus any service you already know you'll connect for the capabilities you just picked. Skip it if you're not sure yet; you can fill it in later.",
     type: "text",
     required: false,
-    showIf: [{ questionId: "capabilities", in: ["payments", "email", "notifications", "analytics", "ai"] }],
-    maxChars: ANSWER_MAX_CHARS.integrations,
-    placeholder: "e.g. Stripe for billing, Resend for email, Slack for alerts, HubSpot for CRM."
-  },
-  {
-    id: "dataSensitivity",
-    title: "How sensitive is your data?",
-    help: "Drives encryption, audit, and security posture across the generated standards.",
-    type: "single",
-    required: true,
-    options: [
-      { value: "standard", label: "Standard", description: "Normal user data, best-practice security" },
-      { value: "pii", label: "PII at scale", description: "Lots of personal data or payment details" },
-      { value: "regulated", label: "Regulated", description: "Health, finance, or data about minors — compliance regime applies" }
-    ]
-  },
-  {
-    id: "scale",
-    title: "What scale are you designing for first?",
-    type: "single",
-    required: true,
-    options: [
-      { value: "validate", label: "Validate first", description: "Optimize for speed of learning — hundreds of users" },
-      { value: "growth", label: "Growth-ready", description: "Expect rapid adoption — design for tens of thousands" },
-      { value: "high_scale", label: "High scale", description: "Millions of users / heavy load from the start" }
-    ]
+    maxChars: ANSWER_MAX_CHARS.coreEntities,
+    placeholder:
+      "e.g. A Team owns Libraries; a Library holds Files; every File has Jobs and a score for the ratio achieved. Stripe for billing, Resend for the finished-job email."
   },
   {
     // Every stack question states what it *changes* in the output, not just what it means. A founder
@@ -387,8 +533,23 @@ export const interviewQuestions: Question[] = [
         value: "postgres",
         label: "Self-hosted Postgres",
         description: "Your own Postgres. Same schema and migrations, but auth and file storage are yours to build — your setup steps say so."
+      },
+      {
+        value: "other",
+        label: "Something else — describe it",
+        description: "MySQL, SQLite, Mongo, Firebase, DynamoDB. Your setup steps and data documents are written for what you name."
       }
     ]
+  },
+  {
+    id: "databaseOther",
+    title: "Which database?",
+    help: "Name it, and where it runs — managed or your own. Your setup steps, your data documents and the migration advice in them are written for this.",
+    type: "text",
+    required: true,
+    showIf: [{ questionId: "database", in: ["other"] }],
+    maxChars: ANSWER_MAX_CHARS.databaseOther,
+    placeholder: "e.g. MongoDB Atlas, with Mongoose for the schema and migrate-mongo for migrations."
   },
   {
     id: "hosting",
@@ -412,30 +573,33 @@ export const interviewQuestions: Question[] = [
         value: "self_host",
         label: "Self-host",
         description: "Your own servers or containers. The deploy workflow ships as a placeholder you complete."
+      },
+      {
+        value: "other",
+        label: "Something else — describe it",
+        description: "Fly, Railway, Netlify, Cloudflare, AWS, an app store. The deploy workflow ships as a placeholder named for what you say."
       }
     ]
   },
   {
+    id: "hostingOther",
+    title: "Where will you deploy?",
+    help: "Name the target. Your deploy steps and the setup guide are written for it — and the generated workflow ships as a placeholder you finish, since nothing here can wire a target it has not seen.",
+    type: "text",
+    required: true,
+    showIf: [{ questionId: "hosting", in: ["other"] }],
+    maxChars: ANSWER_MAX_CHARS.hostingOther,
+    placeholder: "e.g. Fly.io, one app per environment, deployed with flyctl from CI."
+  },
+  {
     id: "repoProvider",
     title: "Where will your code live?",
+    help: "Decides the CI workflow, the branch-policy setup, and which CLI your assistant uses to open PRs — GitHub Actions and `gh`, or Azure Pipelines and `az`.",
     type: "single",
     required: true,
     options: [
       { value: "github", label: "GitHub", recommended: true, description: "Best Claude Code & CI ecosystem" },
       { value: "azure_devops", label: "Azure DevOps", description: "For Microsoft-centric organizations" }
-    ]
-  },
-  {
-    id: "team",
-    title: "Who's building it?",
-    help: "Shapes workflow, branching, and how much process Airrow prescribes.",
-    type: "single",
-    required: true,
-    options: [
-      { value: "solo", label: "Just me", description: "Solo founder + AI assistants" },
-      { value: "small_team", label: "2–5 people", description: "Founding team" },
-      { value: "startup", label: "Growing startup", description: "Multiple engineers, needs coordination" },
-      { value: "agency", label: "Agency", description: "Building for clients, repeatable process" }
     ]
   }
 ];
@@ -496,18 +660,35 @@ export function visibleQuestions(answers: InterviewAnswers): Question[] {
 /** Drop answers belonging to questions that are no longer visible. */
 export function pruneHiddenAnswers(answers: InterviewAnswers): InterviewAnswers {
   const pruned: InterviewAnswers = {};
+  const visible = new Set<AnswerId>();
   for (const q of interviewQuestions) {
-    if (isQuestionVisible(q, answers)) {
-      const v = answers[q.id];
-      if (v !== undefined) (pruned as Record<string, unknown>)[q.id] = v;
-    }
+    if (!isQuestionVisible(q, answers)) continue;
+    visible.add(q.id);
+    const v = answers[q.id];
+    if (v !== undefined) (pruned as Record<string, unknown>)[q.id] = v;
+  }
+  // An answer set by a question rather than *as* one survives exactly as long as that question does.
+  for (const [satellite, owner] of Object.entries(SATELLITE_ANSWERS)) {
+    if (owner === undefined || !visible.has(owner)) continue;
+    const v = answers[satellite as AnswerId];
+    if (v !== undefined) (pruned as Record<string, unknown>)[satellite] = v;
   }
   return pruned;
 }
 
-/** First visible question with no answer; null when complete. */
+/**
+ * First visible **required** question with no answer; null when the interview may be submitted.
+ *
+ * `required` is honoured here as of spec 159, and that is a fix rather than a refinement: this
+ * function decides both where a resumed interview lands and whether the submit button is enabled, so
+ * ignoring `required` made every optional question mandatory in the interface while
+ * `validateCompleteAnswers` — the actual gate — had always let them pass. `coreEntities` said "Skip
+ * it if you're not sure yet" and could not be skipped. An optional question is still shown, in its
+ * place in the order; it simply no longer blocks the way past it.
+ */
 export function firstUnanswered(answers: InterviewAnswers): Question | null {
   for (const q of visibleQuestions(answers)) {
+    if (!q.required) continue;
     const v = answers[q.id];
     if (v === undefined || (Array.isArray(v) && v.length === 0) || (typeof v === "string" && v.trim() === "")) {
       return q;
