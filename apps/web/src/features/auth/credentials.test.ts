@@ -75,7 +75,8 @@ describe("changePasswordAction, from Settings", () => {
     );
 
     expect(verifyPassword).toHaveBeenCalledWith("ada@example.com", "old-one");
-    expect(updatePassword).toHaveBeenCalledWith("Hunter22x");
+    // `others`, not `global`: they are signed in legitimately and stay that way on this device.
+    expect(updatePassword).toHaveBeenCalledWith("Hunter22x", "others");
     expect(to).toBe("/app/settings?status=password-changed");
   });
 
@@ -136,35 +137,42 @@ describe("changePasswordAction, from a reset link", () => {
   beforeEach(() => inRecovery.mockResolvedValue(true));
 
   it("takes no current password, because the link was the proof", async () => {
-    await landsOn(() => changePasswordAction(form({ ...GOOD, from: "password" })));
+    await landsOn(() => changePasswordAction(form({ ...GOOD, from: "reset" })));
 
     expect(verifyPassword).not.toHaveBeenCalled();
-    expect(updatePassword).toHaveBeenCalledWith("Hunter22x");
   });
 
   /*
-   * Settings, not `/app`. The dashboard was the first choice and reads no query string at all, so the one
-   * confirmation a locked-out founder needs — it worked, and the other sessions are gone — was dropped on
-   * arrival. Asserted here because nothing about the redirect itself would have shown it.
+   * The bug this flow was reported for: clicking the link in the email signed the founder in. Supabase
+   * cannot change a password without a session, so one has to exist — but it must not outlive the change.
+   * `global` takes this session with it; `others` (what Settings uses) would have left it alive.
    */
-  it("lands somewhere that can actually confirm the change", async () => {
-    const to = await landsOn(() => changePasswordAction(form({ ...GOOD, from: "password" })));
+  it("ends this session too, so the emailed link never becomes a sign-in", async () => {
+    await landsOn(() => changePasswordAction(form({ ...GOOD, from: "reset" })));
 
-    expect(to).toBe("/app/settings?status=password-changed");
+    expect(updatePassword).toHaveBeenCalledWith("Hunter22x", "global");
   });
 
-  it("spends the marker, so a second change asks for the current password", async () => {
-    await landsOn(() => changePasswordAction(form({ ...GOOD, from: "password" })));
+  it("returns the founder to sign-in, to use the password they just chose", async () => {
+    const to = await landsOn(() => changePasswordAction(form({ ...GOOD, from: "reset" })));
+
+    expect(to).toBe("/login?status=password-changed");
+  });
+
+  // The marker is also what shuts `/app` (middleware.ts) — carrying it past the change would bounce the
+  // founder back to a reset screen they have already finished.
+  it("spends the marker", async () => {
+    await landsOn(() => changePasswordAction(form({ ...GOOD, from: "reset" })));
 
     expect(clearRecovery).toHaveBeenCalled();
   });
 
   it("still refuses a password that does not meet the rules", async () => {
     const to = await landsOn(() =>
-      changePasswordAction(form({ password: "short", confirmPassword: "short", from: "password" }))
+      changePasswordAction(form({ password: "short", confirmPassword: "short", from: "reset" }))
     );
 
-    expect(to).toBe("/app/password?error=weak-password");
+    expect(to).toBe("/reset-password?error=weak-password");
     expect(updatePassword).not.toHaveBeenCalled();
   });
 });

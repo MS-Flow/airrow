@@ -288,17 +288,25 @@ export async function hasPassword(): Promise<boolean> {
 }
 
 /**
- * Replace the current password, then end every *other* session.
+ * Replace the current password, then end sessions.
  *
- * The revoke is the point of a reset: a password is usually changed because someone else may know it,
- * and leaving their session alive would make the change decorative. `scope: "others"` keeps the founder
- * signed in on the device they are standing at, which is where they just did the work.
+ * Revoking is the point of a change: a password is usually replaced because someone else may know it,
+ * and leaving their session alive would make the change decorative. Which sessions go depends on how the
+ * founder got here, so the caller says:
+ *
+ * - `"others"` — from Settings, where they are signed in legitimately and stay signed in on this device.
+ * - `"global"` — from a reset link, where *this* session is the one that must not survive. It was created
+ *   only so Supabase would accept a new password; keeping it would turn an email into a way into the
+ *   account. They sign in again with what they just chose, which is also the proof it worked.
  */
-export async function updatePassword(password: string): Promise<{ ok: true } | { ok: false; message: string }> {
+export async function updatePassword(
+  password: string,
+  scope: "others" | "global"
+): Promise<{ ok: true } | { ok: false; message: string }> {
   const supabase = await supabaseServer();
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { ok: false, message: error.message };
-  await supabase.auth.signOut({ scope: "others" });
+  await supabase.auth.signOut({ scope });
   return { ok: true };
 }
 

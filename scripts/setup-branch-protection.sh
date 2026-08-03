@@ -9,7 +9,18 @@
 #                                   `verify` (.github/workflows/ci.yml)
 #                                     — typecheck, lint, test och build; trasig kod når aldrig develop.
 #   branch-push-protection        main, develop  — kräver pull request (1 godkännande),
-#                                 blockerar force-push och radering av grenen.
+#                                 tillåter endast merge-commit, blockerar force-push och
+#                                 radering av grenen.
+#
+# Varför bara `merge` in i develop/main: en squash lägger hela grenens arbete på målgrenen som
+# EN ny commit utan släktskap bakåt. Feature-grenen lever vidare efteråt, så nästa merge har
+# kvar samma merge-bas som förra gången och ser båda sidor ha skrivit om samma filer var för
+# sig — konflikt i varenda fil som hunnit skilja sig. Det hände `feature/ui` (PR #173) och
+# `feature/infrastructure` (14 add/add-konflikter, spec 113 duplicerad).
+#
+# Squash är däremot rätt för `NNN-kort` → `feature/*`: en sammanhållen skiva, en ren titel, och
+# grenen dör direkt efteråt så det finns ingen historik att tappa. Därför sätts detta bara på
+# develop/main — repots squash-knapp lämnas påslagen för issue-grenarna.
 #
 # Varför INTE `feature/**` i required-check-regeln: ett ruleset utvärderar en required
 # status check vid *varje* ref-uppdatering, inte bara vid merge. `validate-source-branch`
@@ -99,6 +110,7 @@ apply_ruleset "branch-push-protection" "$(cat <<'JSON'
     {
       "type": "pull_request",
       "parameters": {
+        "allowed_merge_methods": ["merge"],
         "required_approving_review_count": 1,
         "dismiss_stale_reviews_on_push": false,
         "require_code_owner_review": false,
