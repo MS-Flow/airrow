@@ -8,6 +8,7 @@
 // So the event is emitted from both, guarded on the account being new — the same test
 // `attachPendingReferral` already applies for the same reason, and deliberately the same window, so
 // the two never disagree about which accounts are fresh.
+import { notifyUserCreated } from "@/features/notifications/notify";
 import { getOrgForUser } from "@/lib/data/store";
 import { distinctIdForOrg } from "./events";
 import { capture } from "./server";
@@ -43,6 +44,10 @@ export async function captureSignup(
     if (!org) return;
 
     capture("signup", distinctIdForOrg(org.id), { method });
+    // Slack gets the *name*, PostHog gets the id (spec 203). Sent from here rather than from the two
+    // auth routes because this is the one place that already knows an arrival is a new account
+    // rather than a sign-in — and writing that rule twice is how the two would disagree.
+    notifyUserCreated(org.name, method);
   } catch {
     // Silent by contract. Nothing about measurement is worth failing the request in which somebody
     // finally got an account.
