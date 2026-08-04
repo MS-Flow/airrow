@@ -60,13 +60,21 @@ export default function CookiesPage() {
         follow you to other sites, and is never joined to an account, a workspace or a project.
       </p>
       <p>
+        We also use <strong>PostHog</strong> to see where people get stuck: that an interview was
+        started, which question it was abandoned at, that a foundation was generated or downloaded.
+        It is configured to keep nothing on your device either — no cookie, no local storage — which
+        means it cannot recognise you when you come back, and we accept a less precise count rather
+        than ask you for a cookie. It never receives your name, your email address, your interview
+        answers or anything Airrow generated for you.
+      </p>
+      <p>
         This is why you are not asked to consent to it. The rule that makes consent banners necessary
         is about storing or reading information on your device; measurement that does neither does not
         trigger it. We rely on our legitimate interest in knowing whether people can find the service
         at all, and we have chosen a tool that buys that answer at the lowest cost to you.
       </p>
       <p>
-        It runs only on the public pages. Nothing you do while signed in to your workspace is
+        Both run only on the public pages. Nothing you do while signed in to your workspace is
         measured this way.
       </p>
       <p>

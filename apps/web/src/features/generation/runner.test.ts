@@ -50,6 +50,15 @@ vi.mock("./author", () => ({
 const generate = vi.hoisted(() => vi.fn());
 vi.mock("@airrow/engine", () => ({ generate }));
 
+const analytics = vi.hoisted(() => ({
+  captures: [] as { name: string; distinctId: string; properties: Record<string, unknown> }[]
+}));
+vi.mock("@/features/analytics/server", () => ({
+  capture: (name: string, distinctId: string, properties: Record<string, unknown>) => {
+    analytics.captures.push({ name, distinctId, properties });
+  }
+}));
+
 import { runGenerationJob } from "./runner";
 
 const model = { name: "Acme" } as unknown as ProjectModel;
@@ -77,10 +86,61 @@ describe("runGenerationJob", () => {
       if (patch.status) order.push(`status:${patch.status}`);
     });
     generate.mockReturnValue({ files: [{ path: "README.md" }], manifest: { fileCount: 1 } });
+    analytics.captures = [];
   });
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  // The middle of the funnel (spec 182). Added after `/analyze` found the emitter had no test at
+  // all — it typechecked, which is not the same as firing.
+  describe("the foundation_generated event", () => {
+    it("fires once the foundation exists, naming the workspace and project", async () => {
+      await runToCompletion();
+
+      expect(analytics.captures).toEqual([
+        {
+          name: "foundation_generated",
+          distinctId: "org_org1",
+          properties: { project: "proj1", reused: false }
+        }
+      ]);
+    });
+
+    it("marks a run that reused the previous prose", async () => {
+      // The same distinction the allowance ledger makes: nothing was paid for, and a founder tuning
+      // one answer is not a founder generating something new.
+      store.findAuthoredByInputs.mockResolvedValue({
+        slots: { VISION: "A stored vision that is long enough to survive validation." }
+      });
+
+      await runToCompletion();
+
+      expect(analytics.captures[0]?.properties).toEqual({ project: "proj1", reused: true });
+    });
+
+    it("does not fire when the generation fails", async () => {
+      // An event here would count a failure as a delivery — the one direction this number must not
+      // be wrong in, because it feeds the generate→download ratio.
+      generate.mockImplementation(() => {
+        throw new Error("engine exploded");
+      });
+
+      await runToCompletion();
+
+      expect(analytics.captures).toEqual([]);
+    });
+
+    it("does not fire when the answers were refused", async () => {
+      // A rejected run ends the job without a foundation (spec 128), and is kept out of the funnel
+      // for the same reason it is kept out of the allowance ledger.
+      authorFoundation.mockResolvedValue({ status: "rejected", answers: ["problem"] });
+
+      await runToCompletion();
+
+      expect(analytics.captures).toEqual([]);
+    });
   });
 
   it("never reports success before the artifact is actually saved", async () => {

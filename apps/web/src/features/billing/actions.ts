@@ -8,6 +8,8 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { distinctIdForOrg } from "@/features/analytics/events";
+import { capture } from "@/features/analytics/server";
 import { requireSession } from "@/lib/auth";
 import { getSubscription, linkStripeCustomer } from "@/lib/data/store";
 import { stripe, stripeConfigured, stripeCouponFounding, stripePrices } from "@/lib/stripe";
@@ -130,6 +132,14 @@ export async function startCheckoutAction(formData: FormData): Promise<BillingRe
   // the same reason the price id does: a coupon accepted from the form would let anyone discount
   // their own subscription to whatever the account has lying around (spec 179).
   const coupon = price.interval === "year" ? stripeCouponFounding() : null;
+
+  // The intent, recorded before Stripe is asked anything (spec 182). Deliberately not conditional on
+  // the call succeeding: `checkout_started → paid` is the ratio this event exists for, and an
+  // abandoned or failed checkout is exactly the case it has to be able to count.
+  capture("checkout_started", distinctIdForOrg(org.id), {
+    interval: price.interval,
+    founding: coupon !== null
+  });
 
   // Customer creation is inside the same guard: it is a Stripe call too, and it fails the same way.
   return fromStripe(

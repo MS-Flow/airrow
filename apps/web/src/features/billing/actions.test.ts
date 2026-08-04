@@ -13,7 +13,15 @@ const customersCreate = vi.hoisted(() => vi.fn());
 const sessionsCreate = vi.hoisted(() => vi.fn());
 const portalCreate = vi.hoisted(() => vi.fn());
 const stripeCouponFounding = vi.hoisted(() => vi.fn<() => string | null>(() => "founding100"));
+const analytics = vi.hoisted(() => ({
+  captures: [] as { name: string; distinctId: string; properties: Record<string, unknown> }[]
+}));
 
+vi.mock("@/features/analytics/server", () => ({
+  capture: (name: string, distinctId: string, properties: Record<string, unknown>) => {
+    analytics.captures.push({ name, distinctId, properties });
+  }
+}));
 vi.mock("@/lib/auth", () => ({ requireSession }));
 vi.mock("next/headers", () => ({ headers: async () => new Map([["host", "airrow.test"]]) }));
 vi.mock("@/lib/data/store", () => ({ getSubscription, linkStripeCustomer }));
@@ -59,6 +67,40 @@ describe("startCheckoutAction", () => {
     customersCreate.mockResolvedValue({ id: "cus_new" });
     sessionsCreate.mockResolvedValue({ url: "https://checkout.stripe.test/s/1" });
     stripeCouponFounding.mockReturnValue("founding100");
+    analytics.captures = [];
+  });
+
+  // The funnel's second-to-last step (spec 182). It had no test at all until `/analyze` noticed:
+  // the call typechecked, which is not the same as firing.
+  it("records the checkout, with the interval that was chosen", async () => {
+    await startCheckoutAction(form("month"));
+
+    expect(analytics.captures).toEqual([
+      {
+        name: "checkout_started",
+        distinctId: "org_org1",
+        properties: { interval: "month", founding: false }
+      }
+    ]);
+  });
+
+  it("marks a yearly checkout as founding, because that is where the coupon rides", async () => {
+    await startCheckoutAction(form("year"));
+
+    expect(analytics.captures[0]?.properties).toEqual({ interval: "year", founding: true });
+  });
+
+  it("records the checkout even when Stripe refuses to open it", async () => {
+    // `checkout_started → paid` is the ratio this event exists for, so an abandoned or failed
+    // checkout is exactly the case it has to count. Recording only the successes would make the
+    // conversion rate read as 100%.
+    sessionsCreate.mockRejectedValue(new Error("Stripe is down"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await startCheckoutAction(form("month"));
+
+    expect(result.error).toBeTruthy();
+    expect(analytics.captures).toHaveLength(1);
   });
 
   it("reuses the customer already recorded instead of creating another", async () => {

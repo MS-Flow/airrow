@@ -23,6 +23,8 @@ import {
   setProjectStatus,
   updateJob
 } from "@/lib/data/store";
+import { distinctIdForOrg } from "@/features/analytics/events";
+import { capture } from "@/features/analytics/server";
 import { loadUiReferenceImages } from "@/lib/data/ui-references";
 import { loadTemplate } from "@/lib/template/load";
 import { AUTHORING_MODEL, PROMPT_VERSION, authorFoundation } from "./author";
@@ -204,6 +206,16 @@ export async function runGenerationJob(
       finishedAt: new Date().toISOString()
     });
     await setProjectStatus(job.projectId, "ready");
+
+    // The middle of the funnel, and the last event before delivery (spec 182). Emitted here rather
+    // than at the route because this is where a foundation is known to exist: every path above this
+    // line ends the job without one. `reused` separates a founder tuning one answer from one
+    // generating something new — the same distinction the allowance ledger makes, for the same
+    // reason.
+    capture("foundation_generated", distinctIdForOrg(orgId), {
+      project: job.projectId,
+      reused: reused !== null
+    });
   } catch (err) {
     await updateJob(jobId, {
       status: "failed",

@@ -467,13 +467,13 @@ export const interviewQuestions: Question[] = [
     // capabilities just chosen: a founder who has this moment ticked payments and email knows what
     // they are connecting to, and asking before that made them guess at a list they had not seen.
     id: "coreEntities",
-    title: "What does it keep track of, and what does it connect to?",
-    help: "The 3–7 things your product is really about and how they relate — plus any service you already know you'll connect for the capabilities you just picked. Skip it if you're not sure yet; you can fill it in later.",
+    title: "What are the core pages, and what does it connect to?",
+    help: "The 3–7 screens someone actually moves between, and what each one is for — plus any service you already know you'll connect for the capabilities you just picked. Skip it if you're not sure yet; you can fill it in later.",
     type: "text",
     required: false,
     maxChars: ANSWER_MAX_CHARS.coreEntities,
     placeholder:
-      "e.g. A Team owns Libraries; a Library holds Files; every File has Jobs and a score for the ratio achieved. Stripe for billing, Resend for the finished-job email."
+      "e.g. A dashboard listing your libraries; a library page holding its files; a file page showing each job and the ratio achieved. Stripe for billing, Resend for the finished-job email."
   },
   {
     // Every stack question states what it *changes* in the output, not just what it means. A founder

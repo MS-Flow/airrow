@@ -50,6 +50,7 @@ export function AuthedInterview({
   return (
     <InterviewRuntime
       projectName={projectName}
+      mode="account"
       initialAnswers={answers}
       questions={questionsFor(origin)}
       regenerating={regenerating}
