@@ -9,7 +9,7 @@ import {
   interviewQuestions,
   splitReferenceLinks
 } from "./questions.ts";
-import { UI_KITS } from "./ui-kits.ts";
+import { KEEP_EXISTING_UI, UI_KITS } from "./ui-kits.ts";
 
 export * from "./types.ts";
 export * from "./questions.ts";
@@ -82,6 +82,13 @@ export const uiReferenceUploadSchema = z.object({
   bytes: z.number().int().positive().max(MAX_UI_REFERENCE_IMAGE_BYTES)
 });
 
+/**
+ * The ceiling on a hidden delivery's folder name, shared by the strict rule below and the answer the
+ * interview collects before it (spec 199) — one number, so the field cannot accept a name the store
+ * would reject on length.
+ */
+export const HIDDEN_FOLDER_MAX_CHARS = 48;
+
 export const interviewAnswersSchema = z
   .object({
     productType: productTypeSchema,
@@ -101,9 +108,13 @@ export const interviewAnswersSchema = z
     // and a founder's saved project could no longer generate at all because of a theme they had
     // long since stopped being offered. Dropping it costs them the pick and nothing else. The
     // closed list still does its job: nothing outside it ever reaches `uiKitFor`.
+    // `KEEP_EXISTING_UI` joins the kit ids rather than sitting outside them: it is an answer to the
+    // same question, and an imported project that keeps its own look must survive this boundary the
+    // same way a picked direction does (spec 199).
     uiKit: z.preprocess(
-      (value) => (UI_KITS.some((k) => k.id === value) ? value : undefined),
-      z.enum(UI_KITS.map((k) => k.id) as [string, ...string[]]).optional()
+      (value) =>
+        value === KEEP_EXISTING_UI || UI_KITS.some((k) => k.id === value) ? value : undefined,
+      z.enum([KEEP_EXISTING_UI, ...UI_KITS.map((k) => k.id)] as [string, ...string[]]).optional()
     ),
     uiReferenceLinks: referenceLinksAnswer,
     nonGoals: textAnswer(ANSWER_MAX_CHARS.nonGoals),
@@ -124,7 +135,13 @@ export const interviewAnswersSchema = z
     hosting: z.enum(["vercel", "azure", "self_host", "other"]),
     hostingOther: textAnswer(ANSWER_MAX_CHARS.hostingOther),
     repoProvider: z.enum(["github", "azure_devops"]),
-    team: z.enum(["solo", "small_team", "startup", "agency"])
+    team: z.enum(["solo", "small_team", "startup", "agency"]),
+    // Asked as questions, never kept as answers (spec 199): the save writes them through to
+    // `import_sources.delivery` and strips them here. They are validated all the same, because
+    // "stripped later" is not a reason to let an unchecked value through a boundary.
+    deliveryLayout: z.enum(["integrated", "hidden"]),
+    hiddenFolder: z.string().trim().max(HIDDEN_FOLDER_MAX_CHARS),
+    existingDocs: z.enum(["describe", "adopt", "leave"])
   })
   .partial();
 
@@ -160,7 +177,7 @@ export const importedFileSchema = z.object({
 export const hiddenFolderSchema = z
   .string()
   .min(1)
-  .max(48)
+  .max(HIDDEN_FOLDER_MAX_CHARS)
   .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/, "Use lowercase letters, numbers and dashes.");
 
 /** Integrated, or hidden under a folder the founder named (spec 187). */

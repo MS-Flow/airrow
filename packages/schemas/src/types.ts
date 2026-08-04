@@ -116,10 +116,35 @@ export interface InterviewAnswers {
    * not silently cancel an install they chose. So it is stored, and only the "my own words" option
    * clears it.
    *
+   * An imported project has a fourth answer the other paths do not: `KEEP_EXISTING_UI` — the look is
+   * already there, and the foundation describes it rather than proposing one (spec 199). It is a
+   * value of this field rather than a flag beside it, so one field still decides the theme and there
+   * is nothing for a second field to disagree with. `uiKitFor` returns null for it, which is what
+   * makes "described, never installed" hold without a branch anywhere.
+   *
    * Not a question of its own: there is one design screen, and this is set from the picker on it.
    * `SATELLITE_ANSWERS` in `questions.ts` is what keeps it alive through `pruneHiddenAnswers`.
    */
   uiKit?: string;
+  /**
+   * How an imported foundation lands: alongside the founder's code, or inside one folder git ignores
+   * (spec 187, asked first by spec 199).
+   *
+   * **Transient.** It is asked as a question, so it lives here — but it is never kept here. The save
+   * writes it through to `import_sources.delivery`, which stays the one durable record and the one
+   * thing the engine reads, and strips it from the answers blob (`TRANSIENT_ANSWERS`). Two copies of
+   * a decision this consequential would eventually disagree, and the engine would read the wrong one.
+   */
+  deliveryLayout?: DeliveryLayout["kind"];
+  /** The folder a hidden foundation nests under. Transient for the same reason as `deliveryLayout`. */
+  hiddenFolder?: string;
+  /**
+   * What to do about the documents and conventions the project already has — a README, ADRs, an
+   * existing assistant instruction file (spec 199). Asked only of an imported project, and only when
+   * the foundation lands integrated: a hidden one may change nothing outside its folder, so
+   * `describe` would be the only answer available and a question with one answer is not a question.
+   */
+  existingDocs?: "describe" | "adopt" | "leave";
   /**
    * Products the founder pointed at, as they typed them — whitespace-separated, at most five.
    *

@@ -1,7 +1,7 @@
 "use client";
 
 // The signed-in interview: the shared runtime bound to a real project's server actions.
-import type { AnswerId, InterviewAnswers } from "@airrow/schemas";
+import { questionsFor, type AnswerId, type InterviewAnswers, type ProjectOrigin } from "@airrow/schemas";
 import { DeleteProjectDialog } from "@/features/projects/DeleteProjectDialog";
 import { deleteProjectAction } from "@/features/projects/actions";
 import { InterviewRuntime } from "./InterviewRuntime";
@@ -16,21 +16,43 @@ export function AuthedInterview({
   projectId,
   projectName,
   initialAnswers,
+  origin,
   regenerating = false,
   rejectedAnswers = null
 }: {
   projectId: string;
   projectName: string;
   initialAnswers: InterviewAnswers;
+  /** Where this project came from, which decides which phrasing of the interview it gets (spec 199). */
+  origin: ProjectOrigin;
   regenerating?: boolean;
   /** The answers the last run was refused for, if it was — spec 128. */
   rejectedAnswers?: AnswerId[] | null;
 }) {
+  /**
+   * How the foundation lands is seeded only for a project that has already had one delivered.
+   *
+   * `import_sources.delivery_layout` has no undecided state — it defaults to `integrated` — so
+   * seeding it always would silently pre-answer the first question and walk a fresh import straight
+   * past the one choice their team can see. A regenerating project is different: what is stored
+   * there is what was actually delivered, so it is an answer the founder gave, and re-asking it
+   * would send someone who came back to change one sentence through the whole interview again.
+   */
+  const answers: InterviewAnswers =
+    origin.kind === "imported" && regenerating
+      ? {
+          ...initialAnswers,
+          deliveryLayout: origin.delivery.kind,
+          ...(origin.delivery.kind === "hidden" ? { hiddenFolder: origin.delivery.folder } : {})
+        }
+      : initialAnswers;
+
   return (
     <InterviewRuntime
       projectName={projectName}
       mode="account"
-      initialAnswers={initialAnswers}
+      initialAnswers={answers}
+      questions={questionsFor(origin)}
       regenerating={regenerating}
       rejectedAnswers={rejectedAnswers}
       persist={(answers) => void saveAnswersAction(projectId, answers)}

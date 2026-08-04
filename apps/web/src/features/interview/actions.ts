@@ -3,25 +3,68 @@
 // Interview persistence + submission (F-301 FR-4/FR-6).
 import { redirect } from "next/navigation";
 import {
+  TRANSIENT_ANSWERS,
+  deliveryLayoutSchema,
   interviewAnswersSchema,
   pruneHiddenAnswers,
+  questionsFor,
   validateCompleteAnswers,
   type InterviewAnswers
 } from "@airrow/schemas";
-import { resolveProjectModel } from "@airrow/engine";
+import { hiddenFolderFrom, resolveProjectModel } from "@airrow/engine";
 import { requireSession } from "@/lib/auth";
 import {
   completeInterview,
   createJob,
   createModelVersion,
+  getImportSource,
   getProject,
   latestJob,
   saveInterviewAnswers,
+  setDeliveryLayout,
   setProjectStatus
 } from "@/lib/data/store";
 import { listUiReferences } from "@/lib/data/ui-references";
 import { allowanceMessage, claimAllowance } from "@/features/generation/allowance";
 import { projectOrigin } from "@/features/import/origin";
+
+/**
+ * Take how the foundation should land out of the answers, and put it where it belongs (spec 199).
+ *
+ * The interview asks it, so it arrives as an answer — but `import_sources.delivery` is the one
+ * durable record and the one thing the engine reads, so this writes it there and hands back the
+ * answers without it. Two copies of a decision this consequential would eventually disagree, and
+ * generation would read the wrong one.
+ *
+ * Spec 187's rules are enforced here rather than restated: the folder is normalised the way the
+ * founder typed it and then validated as a single path segment, and hidden is refused outright for
+ * an import with no code in it, because a foundation cannot hide inside a codebase that is not there.
+ */
+async function writeDeliveryThrough(
+  projectId: string,
+  answers: InterviewAnswers
+): Promise<InterviewAnswers> {
+  const rest = { ...answers };
+  for (const id of TRANSIENT_ANSWERS) delete rest[id];
+  if (answers.deliveryLayout === undefined) return rest;
+
+  const source = await getImportSource(projectId);
+  if (!source) return rest;
+
+  const parsed = deliveryLayoutSchema.safeParse(
+    answers.deliveryLayout === "hidden"
+      ? { kind: "hidden", folder: hiddenFolderFrom(answers.hiddenFolder ?? "") }
+      : { kind: "integrated" }
+  );
+  // An unusable folder name leaves the stored choice exactly as it was. The founder is still typing
+  // it — a save every 350ms must not be able to write a half-typed name, and must not throw at
+  // someone mid-word either.
+  if (!parsed.success) return rest;
+  if (parsed.data.kind === "hidden" && !source.analysis.stackDetected) return rest;
+
+  await setDeliveryLayout(source.id, parsed.data);
+  return rest;
+}
 
 export async function saveAnswersAction(projectId: string, raw: unknown): Promise<{ ok: boolean }> {
   const { org } = await requireSession();
@@ -29,7 +72,13 @@ export async function saveAnswersAction(projectId: string, raw: unknown): Promis
   if (!project) return { ok: false };
   const parsed = interviewAnswersSchema.safeParse(raw);
   if (!parsed.success) return { ok: false };
-  await saveInterviewAnswers(projectId, pruneHiddenAnswers(parsed.data as InterviewAnswers));
+  const answers = await writeDeliveryThrough(projectId, parsed.data as InterviewAnswers);
+  // Pruned against the set this project was actually asked, so an answer to an import-only question
+  // is not dropped for belonging to no question the greenfield set has.
+  await saveInterviewAnswers(
+    projectId,
+    pruneHiddenAnswers(answers, questionsFor(await projectOrigin(projectId)))
+  );
   return { ok: true };
 }
 
@@ -41,7 +90,10 @@ export async function submitInterviewAction(
   const project = await getProject(org.id, projectId);
   if (!project) return { error: "Project not found." };
 
-  const pruned = pruneHiddenAnswers((raw ?? {}) as InterviewAnswers);
+  // The layout is written through before the answers are validated, so the origin the model is
+  // stamped with below already carries the founder's final choice (spec 199).
+  const answers = await writeDeliveryThrough(projectId, (raw ?? {}) as InterviewAnswers);
+  const pruned = pruneHiddenAnswers(answers, questionsFor(await projectOrigin(projectId)));
   const validated = validateCompleteAnswers(pruned);
   if (!validated.ok) return { error: validated.error };
 
