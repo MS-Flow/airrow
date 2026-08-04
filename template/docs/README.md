@@ -1,7 +1,5 @@
 # Documentation
-Root keeps only `README.md`, `START_HERE.md`, and `CLAUDE.md`; everything else is here. **Rules and
-workflow live in the single source of truth,
-[`../.claude/spec-kit/constitution.md`](../.claude/spec-kit/constitution.md).**
+{{DOCS_INDEX_INTRO}}
 
 | Doc | What |
 |-----|------|
@@ -12,7 +10,7 @@ workflow live in the single source of truth,
 |-----|------|
 | [SYSTEM_OVERVIEW.md](architecture/SYSTEM_OVERVIEW.md) | Living high-level map: purpose, data flow, roles, entities |
 | [UI_ARCHITECTURE.md](architecture/UI_ARCHITECTURE.md) | What it looks like, the screens, navigation, states, design language |
-| [BRANCHING.md](architecture/BRANCHING.md) | Branch + PR workflow (issue → feature → develop → main) |
+| [BRANCHING.md](architecture/BRANCHING.md) | {{BRANCHING_DOC_SUMMARY}} |
 
 ## `guides/`
 | Doc | What |

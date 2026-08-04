@@ -1,10 +1,6 @@
 # {{PROJECT_NAME}} — Developer Guide
 
-## Setup
-```bash
-{{CMD_DEV}}        # start the dev server
-```
-{{STACK_SUMMARY}}
+{{SETUP_SECTION}}
 
 ## Verification bar (run before any PR)
 ```bash

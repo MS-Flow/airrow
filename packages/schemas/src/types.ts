@@ -63,6 +63,13 @@ export type Hosting = "vercel" | "azure" | "self_host" | "other";
  * generated documents then describe *their* database rather than assuming Postgres of it (spec 159).
  */
 export type Database = "supabase" | "postgres" | "other";
+/**
+ * How a team already branches (spec 212). Only two shapes are worth naming, because only two change
+ * what a document can say: everything merges back into the trunk, or there is a long-lived
+ * integration branch under it. `other` is the team's own, named in `branchingModelOther`, and the
+ * documents then describe *their* model rather than asserting one.
+ */
+export type BranchingModel = "trunk" | "integration_branch" | "other";
 
 /** Raw interview answers, keyed by question id. Order mirrors the interview flow. */
 export interface InterviewAnswers {
@@ -145,6 +152,23 @@ export interface InterviewAnswers {
    * `describe` would be the only answer available and a question with one answer is not a question.
    */
   existingDocs?: "describe" | "adopt" | "leave";
+  /**
+   * How the team branches today (spec 212). Asked only of an imported project landing **hidden**.
+   *
+   * Hidden promises the team's repository keeps its own branch rules, and a foundation that then
+   * prescribes `trunk ← develop ← feature ← issue` over a team that branches differently contradicts
+   * its own promise. Nothing else in the model carries the real one, so it is asked — and only where
+   * the answer changes a document, which is hidden alone: an integrated foundation is being adopted
+   * into the repository, and `/cleanup` establishes Airrow's model there as spec 91 defined.
+   *
+   * **Persisted**, unlike `deliveryLayout` and `hiddenFolder`. Those are transient because they have
+   * a second home in `import_sources.delivery` and two copies would eventually disagree; this one has
+   * no second home, so dropping it would mean a regeneration silently rewriting `BRANCHING.md` into
+   * something the founder never chose.
+   */
+  branchingModel?: BranchingModel;
+  /** The team's own branching model in their words, when `branchingModel` is `other`. */
+  branchingModelOther?: string;
   /**
    * Products the founder pointed at, as they typed them — whitespace-separated, at most five.
    *
@@ -272,6 +296,24 @@ export interface ProjectModel {
   uiReferenceImageCount: number;
   /** What the product deliberately is not doing. Empty when unanswered. */
   nonGoals: string;
+  /**
+   * What to do about the documents the project already has (asked by spec 199, read by spec 212).
+   *
+   * `"describe"` wherever the question was not asked, and that is a fact rather than a fallback: a
+   * greenfield project has no existing documents for the answer to be about, and a hidden import may
+   * do nothing *but* describe them — changing anything outside its folder is the one thing that
+   * layout forbids (spec 187).
+   */
+  existingDocs: "describe" | "adopt" | "leave";
+  /**
+   * How the team already branches, when we asked — which is a hidden import and nowhere else
+   * (spec 212).
+   *
+   * `null` everywhere else, and every reader treats it the same way: describe the branch model this
+   * foundation ships. That is correct for a greenfield repository, which has none of its own, and for
+   * an integrated import, which is adopting this one.
+   */
+  branching: { model: BranchingModel; describedByFounder: string } | null;
   derived: {
     multiTenant: boolean;
     hasPayments: boolean;

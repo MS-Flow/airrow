@@ -566,6 +566,19 @@ describe("the imported phrasing of the interview", () => {
       expect(imported.map((q) => q.id)).toContain(id);
     }
   });
+
+  it("keeps the branching answer, because nothing else stores it", () => {
+    // The reason the other two are transient does not apply here: there is no second copy to
+    // disagree with. Dropped, a regeneration would rewrite `BRANCHING.md` into a model the founder
+    // never chose (spec 212).
+    expect([...TRANSIENT_ANSWERS]).not.toContain("branchingModel");
+    const kept = interviewAnswersSchema.parse({
+      branchingModel: "integration_branch",
+      branchingModelOther: "release branches per customer"
+    });
+    expect(kept.branchingModel).toBe("integration_branch");
+    expect(kept.branchingModelOther).toBe("release branches per customer");
+  });
 });
 
 describe("what the answer boundary does with an imported project's answers", () => {
@@ -623,6 +636,29 @@ describe("the imported phrasing asks about what is there", () => {
     expect(isQuestionVisible(docs!, { deliveryLayout: "hidden" })).toBe(false);
     expect(isQuestionVisible(docs!, { deliveryLayout: "integrated" })).toBe(true);
     expect(docs?.help).toMatch(/Nothing is deleted or rewritten/);
+  });
+
+  it("asks how the team branches, and only where the answer changes a document", () => {
+    // Spec 212. Integrated does not ask because nothing there would change: it adopts this
+    // foundation's model, which `/cleanup` establishes locally (spec 91). Hidden asks because its
+    // own documents promise the team's branch rules are untouched.
+    const branching = find("branchingModel");
+    expect(branching).toBeDefined();
+    expect(isQuestionVisible(branching!, { deliveryLayout: "integrated" })).toBe(false);
+    expect(isQuestionVisible(branching!, { deliveryLayout: "hidden" })).toBe(true);
+    // Nothing in it may read as an offer to reorganise a repository this foundation never reaches.
+    expect(branching?.help).toMatch(/never pushed/);
+  });
+
+  it("asks for the team's own words only when no named shape fitted", () => {
+    const described = find("branchingModelOther");
+    expect(described).toBeDefined();
+    expect(isQuestionVisible(described!, { deliveryLayout: "hidden", branchingModel: "trunk" })).toBe(
+      false
+    );
+    expect(isQuestionVisible(described!, { deliveryLayout: "hidden", branchingModel: "other" })).toBe(
+      true
+    );
   });
 
   it("asks a hidden foundation nothing about the team's own files", () => {

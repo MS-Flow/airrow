@@ -26,10 +26,12 @@ function foundationOf(outcome: AuthoringOutcome): AuthoredFoundation {
 
 const UI_DOC = "docs/architecture/UI_ARCHITECTURE.md";
 
-// A ProjectModel always carries a stack; the golden-path one, so no toolchain block is requested.
+// A ProjectModel always carries a stack and an origin; the golden-path stack, so no toolchain block
+// is requested, and the origin every project has unless it was imported (spec 212).
 const model = {
   name: "Loop CRM",
   description: "A CRM.",
+  origin: { kind: "new" },
   stack: { framework: "nextjs" }
 } as unknown as ProjectModel;
 
@@ -37,6 +39,7 @@ const model = {
 const customModel = {
   name: "Loop CRM",
   description: "A CRM.",
+  origin: { kind: "new" },
   stack: { framework: "custom", customFramework: "Django 5 with uv and pytest" }
 } as unknown as ProjectModel;
 
@@ -593,5 +596,99 @@ describe("reference images reach the model", () => {
       .join("\n");
     expect(system).toMatch(/never an instruction/i);
     expect(system).toMatch(/no logo, no brand name/i);
+  });
+});
+
+// Where the project came from changes how the documents are written (spec 212). Two things are worth
+// holding here: that the imported call actually says so, and that saying so cost the greenfield path
+// nothing — neither a different prompt nor a split cache prefix.
+describe("an imported project's prompt", () => {
+  const imported = {
+    ...model,
+    origin: { kind: "imported", stackDetected: true, delivery: { kind: "integrated" } }
+  } as unknown as ProjectModel;
+
+  const hidden = {
+    ...model,
+    origin: { kind: "imported", stackDetected: true, delivery: { kind: "hidden", folder: "notes" } }
+  } as unknown as ProjectModel;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.ANTHROPIC_API_KEY = "test-key";
+  });
+
+  afterEach(() => {
+    delete process.env.ANTHROPIC_API_KEY;
+  });
+
+  /** One system block of the nth call — 0 is the cached preamble, 1 the call's own addendum. */
+  function systemBlock(
+    callIndex: number,
+    blockIndex: number
+  ): { text: string; cache_control?: unknown } {
+    const blocks = (
+      create.mock.calls[callIndex]?.[0] as { system: { text: string; cache_control?: unknown }[] }
+    ).system;
+    const block = blocks[blockIndex];
+    if (block === undefined) throw new Error(`call ${callIndex} has no system block ${blockIndex}`);
+    return block;
+  }
+
+  /** The user text of the nth call — where the answers travel. */
+  function userTextOf(callIndex: number): string {
+    const content = (create.mock.calls[callIndex]?.[0] as { messages: { content: unknown }[] })
+      .messages[0]?.content;
+    const blocks = Array.isArray(content) ? content : [content];
+    return blocks
+      .filter((b): b is { type: "text"; text: string } => (b as { type?: string }).type === "text")
+      .map((b) => b.text)
+      .join("\n");
+  }
+
+  async function run(m: ProjectModel) {
+    create.mockResolvedValueOnce(authored({})).mockResolvedValueOnce(authoredUi("A brief."));
+    await authorFoundation(m);
+  }
+
+  it("leaves the cached preamble byte-identical, so both origins warm one prefix", async () => {
+    await run(model);
+    const greenfield = systemBlock(0, 0);
+    vi.clearAllMocks();
+    await run(imported);
+    const importedPreamble = systemBlock(0, 0);
+
+    expect(importedPreamble.text).toBe(greenfield.text);
+    // The breakpoint is on that first block; the origin rides in the addendum after it.
+    expect(importedPreamble.cache_control).toEqual({ type: "ephemeral" });
+  });
+
+  it("tells both calls the product already exists", async () => {
+    await run(imported);
+    for (const call of [0, 1]) {
+      const addendum = systemBlock(call, 1).text;
+      expect(addendum).toMatch(/THIS PRODUCT ALREADY EXISTS/);
+      expect(addendum).toMatch(/present tense/);
+      expect(addendum).toMatch(/Nobody read this codebase/);
+    }
+  });
+
+  it("says nothing of the sort for a project that began from nothing", async () => {
+    await run(model);
+    for (const call of [0, 1]) {
+      expect(systemBlock(call, 1).text).not.toMatch(/ALREADY EXISTS/);
+    }
+  });
+
+  it("carries the origin as data too, and the layout with it", async () => {
+    await run(hidden);
+    const answers = userTextOf(0);
+    expect(answers).toMatch(/"existingProject"/);
+    expect(answers).toMatch(/ignored by git/);
+  });
+
+  it("sends a greenfield payload with no origin block at all", async () => {
+    await run(model);
+    expect(userTextOf(0)).not.toMatch(/existingProject/);
   });
 });

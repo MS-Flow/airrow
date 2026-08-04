@@ -31,8 +31,7 @@ Claude Code is what this foundation is built for.
 {{CMD_TEST}}       # tests
 ```
 
-If all four are clean, the foundation is working. This is the **verification bar** — every change you
-make from here has to pass it before it merges.
+{{VERIFICATION_BAR_CLAIM}}
 
 ## 2. Connect what needs an account
 

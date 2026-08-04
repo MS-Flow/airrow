@@ -1,0 +1,30 @@
+{
+  "files": {
+    ".claude/commands/analyze.md": "06e6547606aa8acffeb4b85febc7f04baee23bde6e6b8bdfc8057a0a58fcbe54",
+    ".claude/commands/clarify.md": "f0e5e34b6a61e6d8c339add9240d03a15413a71caf04909be7d35a6cd80c8fb7",
+    ".claude/commands/createspec.md": "5b4bd9989026a5238229f7ec9be817e3fff5233a11e8f126b15eb93abc4eef65",
+    ".claude/commands/implement.md": "19c04a2f89aaf12fbbc6db995452340d0266af168f651caa8002483209ed44cb",
+    ".claude/commands/pr-check.md": "c3bd148923cf5eea36de7bb9a34293e6ba4079a5ea57931baf4bd1133274a61d",
+    ".claude/commands/push.md": "badaf6089a58032d05aac975ecdbedafc2d7239bc1908f278cb2b51ea989e2ac",
+    ".claude/commands/security.md": "6ca82423184fb69aefaadcfce3b5adb9fe2d7198002cc5304ba594e181dd6b72",
+    ".claude/commands/start.md": "fb0e00ddf1f1273219c53c05645aa3c0917d13eeb8dfbf4f95f49d7d2138e06d",
+    ".claude/spec-kit/constitution.md": "b0366213a582f59f03034a12bf7bbc8068e522e93f15dd5da3bf4e5eef88ab33",
+    ".claude/spec-kit/spec-template.md": "565d0b3e79e8794aa186f26196e8be7d1fb27c927e59cf0c8143ecf5ab35bef1",
+    ".github/workflows/branch-policy.yml": "cbe6ef836d13f1676c3779d5489d77432fb72438025c7cfebd36cd57b19ad4f2",
+    ".github/workflows/ci.yml": "ea69c68fe6679a626016a54245594144fe6cdc5c8bc11d5f1762eb37e8623a2c",
+    ".github/workflows/close-issue-on-merge.yml": "020cd4acb85ed8e1cf5a1b38715663ffd2a36b6c9b1904f797dd0b138552539e",
+    ".github/workflows/deploy-dev.yml": "0a15e88308c77a928fbf437d43dccefc0e4134390f24e75b2dbb11e6de8ddcd6",
+    "CLAUDE.md": "831b497fcce78b28547977b8d5a1a846beba969816c571188e7a1663608295f4",
+    "docs/architecture/BRANCHING.md": "a18ae94fba7f22683bb6b1a96bbea43314f73a41acdb6f8807e848cc84db7189",
+    "docs/architecture/SYSTEM_OVERVIEW.md": "77802f56c10442caa1a8a74cad266da0ae4531ea140238f20062687692791388",
+    "docs/architecture/UI_ARCHITECTURE.md": "10e0932c580f51afcd23bb36cfd1f1a1dfff267e2bde58ccdd0254e0938321b4",
+    "docs/guides/DEVELOPER_GUIDE.md": "0f2a710deda07c19112df7c935ff9ad11c0d1c92019836dbd4ef09c461a4088e",
+    "docs/README.md": "672e1bc6d679e8d752010e27668ee14ac6cb7d58d6f66abfac0663a4f2c3ad06",
+    "docs/VISION.md": "13dc66a95ff2341c25d840f16b0bc0478ac3354e93ed352aa30cdc21425e1519",
+    "README.md": "b3d436e23cea7b6221c8f2802c60ae03061a5b2d4fcf721b397a71eb3439ce36",
+    "specs/README.md": "333c65dd95a23dd1e02d260d2441ed6f878448feafa9192af0afa09acd28cc6a",
+    "START_HERE.md": "b0920bc5da68b0ed7b7e7958f81c45811ae5e06727de0a50cd7aa53ae06fff35",
+    "THIRD_PARTY_NOTICES.md": "cddce76d88a2d06c273a2b6164c0f44c1eb9083de7ed905b8a332600f1ab221a"
+  },
+  "count": 25
+}

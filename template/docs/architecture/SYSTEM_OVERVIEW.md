@@ -1,6 +1,6 @@
 # {{PROJECT_NAME}} — System Overview
 
-A living, high-level map of the system. Keep it short and current.
+{{SYSTEM_OVERVIEW_PROVENANCE}}
 
 ## Purpose
 {{DOMAIN_OVERVIEW}}

@@ -36,7 +36,7 @@ import {
  * Bump when a prompt changes in a way that would produce different prose from identical answers.
  * Recorded per file in the manifest, and part of what a regeneration is keyed on.
  */
-export const PROMPT_VERSION = "11";
+export const PROMPT_VERSION = "12";
 
 /**
  * Claude Haiku 4.5. Settled here after two other tries (spec 123 "The authoring ceiling" and its
@@ -378,6 +378,44 @@ function stackFor(model: ProjectModel): unknown {
 }
 
 /**
+ * What changes when the product already exists (spec 212).
+ *
+ * Appended to each call's addendum, which is **after** the cache breakpoint: `INVARIANT_PREAMBLE` is
+ * the shared prefix both calls and every project warm, and branching it would split that prefix in
+ * two for a difference of a few hundred characters. The addendum is per-call anyway, so this rides
+ * along at no cost to anything.
+ *
+ * It is an instruction rather than data because it changes how to write, not what to write about.
+ * The answers themselves stay data — `<answers>` is never an instruction, whatever it says — so the
+ * origin appears in both places and they say the same thing: `answersSection` states the fact, this
+ * states what to do about it.
+ *
+ * The empty string for a greenfield project is deliberate: the prompt that has always worked is left
+ * exactly as it was, byte for byte, so nothing about the path that was not broken moves.
+ */
+function originAddendum(model: ProjectModel): string {
+  if (model.origin.kind !== "imported") return "";
+  return `
+
+THIS PRODUCT ALREADY EXISTS. The answers describe a codebase that is running today, not a plan for
+one. The founder confirmed what is there rather than choosing it — "what does it already do", "how do
+people sign in today", "which stack is it built in". Write about it in the present tense, as a system
+that exists: what it does, how it is built, who it serves. Never "we will build", "the MVP will",
+"in scope for v1" — v1 shipped.
+
+WHAT YOU HAVE NOT SEEN. Nobody read this codebase. These answers came from an interview, prefilled by
+an analysis that read manifest files — names and versions, never source. So describe what the answers
+support and stop there: no invented modules, no file layout, no data flow nobody stated. Where a
+document would normally assert an architecture, say what it is based on instead. A generated document
+that is confidently wrong about a codebase its reader can open is worse than a short one that is
+honest about where it came from. The founder runs /cleanup next, which reads the actual code and
+rewrites these documents — writing as if you had already done that is the one failure to avoid.
+
+WHAT AIRROW DID NOT DO. It wrote documents. It did not inspect, convert, migrate, restructure or
+retain any of this project's code, and nothing you write may suggest otherwise.`;
+}
+
+/**
  * Answers go in wrapped and clearly labelled as data. This does not stop a determined injection —
  * nothing at the prompt layer does — it just removes the easy cases. The containment that actually
  * holds is the engine's allowlist and the Zod contract, both of which apply to whatever comes back.
@@ -428,7 +466,24 @@ function answersSection(model: ProjectModel): string {
     dataSensitivity: model.dataSensitivity,
     hosting: model.hosting,
     stack: stackFor(model),
-    team: model.team
+    team: model.team,
+    // Where the project came from, as a fact about it (spec 212). Only ever present for an import,
+    // so a greenfield payload is byte-identical to the one that has always been sent — which is also
+    // what keeps the UI call's cache read reusing the main call's prefix.
+    ...(model.origin.kind === "imported"
+      ? {
+          existingProject: {
+            codebaseRunningToday: model.origin.stackDetected,
+            // Named for what it means to the writing rather than for the layout: the model has no
+            // business knowing what "hidden" is, only that the foundation sits in a folder of its own
+            // and changes nothing around it.
+            foundationScope:
+              model.origin.delivery.kind === "hidden"
+                ? "one folder inside the repository, ignored by git; nothing outside it changes"
+                : "alongside the project's own files"
+          }
+        }
+      : {})
   };
   return `<answers>\n${JSON.stringify(answers, null, 2)}\n</answers>`;
 }
@@ -622,12 +677,19 @@ export async function authorFoundation(
   const [main, ui] = await Promise.all([
     callAuthoring(
       client,
-      MAIN_ADDENDUM,
+      MAIN_ADDENDUM + originAddendum(model),
       userPromptForMain(model),
       MAIN_MAX_TOKENS,
       model.stack.framework === "custom"
     ),
-    callAuthoring(client, UI_ADDENDUM, userPromptForUi(model), UI_MAX_TOKENS, false, references)
+    callAuthoring(
+      client,
+      UI_ADDENDUM + originAddendum(model),
+      userPromptForUi(model),
+      UI_MAX_TOKENS,
+      false,
+      references
+    )
   ]);
 
   if (main.status !== "authored" && ui.status !== "authored") {
