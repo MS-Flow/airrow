@@ -233,9 +233,54 @@ describe("what the hidden documents tell the founder", () => {
   const doc = (o: ProjectOrigin, p: string): string =>
     prose(generated(o).find((f) => f.path === deliveredPath(model(o), p))?.content ?? "");
 
-  it("says to start the assistant inside the folder, naming the folder it actually got", () => {
+  // Spec 215 replaced "open Claude Code in `<folder>/`" with a route that carries the project too.
+  // The first session is the one that cannot take the shortcut: `/sync` is what links these commands
+  // to the repository root, so until it has run there is nothing there to find. Started in the folder
+  // alone, `/sync` would have this foundation and not the project it exists to describe.
+  it("bootstraps the first session with the folder and the project both, naming the folder it got", () => {
     const startHere = doc(HIDDEN, "START_HERE.md");
-    expect(startHere).toContain(`in \`${FOLDER}/\``);
+    expect(startHere).toContain(`cd ${FOLDER} && claude --add-dir ..`);
+    expect(startHere).toContain(`\`cd ${FOLDER}\` starts the session **inside this folder**`);
+    expect(startHere).toContain("`--add-dir ..` hands it the directory above");
+    // And that it is a bootstrap, not the permanent arrangement.
+    expect(startHere).toContain("after one run a plain `claude` there has them");
+  });
+
+  // Named only where it is load-bearing. An older CLI fails *silently* on the linking route, which
+  // is the failure worth a line; the layouts that do not use it are left exactly as they were, and
+  // the greenfield golden fixture is what proves that.
+  // A founder who has never used Claude Code does not know that the command opens something they
+  // then type into. Saying "run this" and stopping is an instruction that only reads as complete to
+  // someone who already knew the answer.
+  it("says the command opens a session, and that the /commands are typed into it", () => {
+    const startHere = doc(HIDDEN, "START_HERE.md");
+    expect(startHere).toContain("takes over your terminal and waits for you");
+    expect(startHere).toContain("Everything in this guide that starts with a `/` is typed there");
+  });
+
+  // The escape hatch for the founder who is already in a session at the root and does not want to
+  // restart it. These are plain Markdown files, so naming one works where the slash form does not —
+  // and saying so is also the no-lock-in promise (§0) made concrete rather than asserted.
+  it("offers the plain-words route for a session already open at the repository root", () => {
+    const startHere = doc(HIDDEN, "START_HERE.md");
+    expect(startHere).toContain("Already have Claude Code open at the top of the repository?");
+    expect(startHere).toContain(`read \`${FOLDER}/.claude/commands/sync.md\` and do what it says`);
+    expect(startHere).toContain("What you give up by asking this way is the autocomplete");
+  });
+
+  // Spec 215 gave `/sync` three entries it may create outside the folder, which made the old
+  // "changes nothing outside this folder" promise false. A foundation that overpromises about what
+  // it will touch in a shared repository is the one defect this whole mode cannot afford.
+  it("no longer promises /sync changes nothing outside the folder, because it may now offer to", () => {
+    const startHere = doc(HIDDEN, "START_HERE.md");
+    expect(startHere).not.toContain("changes nothing outside this folder");
+    expect(startHere).toContain("The only thing it ever puts outside this folder is a shortcut");
+    expect(startHere).toContain("it asks first");
+  });
+
+  it("names a minimum Claude Code version, because the route fails silently on an older one", () => {
+    expect(doc(HIDDEN, "START_HERE.md")).toContain("Claude Code 2.1.123 or newer");
+    expect(doc(INTEGRATED, "START_HERE.md")).not.toContain("Claude Code 2.1.123");
   });
 
   it("does not say that to a founder whose foundation owns the repository", () => {

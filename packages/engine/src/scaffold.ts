@@ -1563,6 +1563,16 @@ function afterEachCommand(model: ProjectModel): string {
 }
 
 /**
+ * The Claude Code version this foundation's setup was verified against (spec 215).
+ *
+ * Named rather than vague ("a recent version") for the same reason spec 165 pins the UI library to an
+ * exact version: the founder can check it, and a claim they can check is a claim we have to keep. The
+ * routes that need it — linking commands into the repository root, `--add-dir`, `CLAUDE.local.md`
+ * imports — fail *silently* on an older CLI, which is the failure mode worth spending a line on.
+ */
+const MIN_CLAUDE_CODE_VERSION = "Claude Code 2.1.123";
+
+/**
  * Step 1 of `START_HERE.md`, which is a different step depending on what the founder already has
  * (spec 91).
  *
@@ -1582,6 +1592,18 @@ function firstStep(model: ProjectModel): string {
     "and runs every `/command` in this guide, and this foundation is written for it. Follow its own",
     "install page and sign in when it asks; if you already have Node 20 or newer,",
     "`npm install -g @anthropic-ai/claude-code` does the same job.",
+    // Only a hidden foundation depends on a version-sensitive route — linking its commands to the
+    // repository root, and `--add-dir` before that link exists — and only there does an older CLI
+    // fail *silently* rather than visibly. Every other layout is left byte for byte as it was
+    // (spec 215; the greenfield golden fixture is the guard that says so).
+    ...(hiddenFolder(model) === null
+      ? []
+      : [
+          "",
+          `**It has to be ${MIN_CLAUDE_CODE_VERSION} or newer** — \`claude --version\` tells you which`,
+          "one you have. That is the version this layout was tested against, and on an older one the",
+          "steps below are true instructions that quietly do nothing, which is worse than an error."
+        ]),
     "",
     ...(hasExistingCode(model)
       ? [
@@ -1595,14 +1617,29 @@ function firstStep(model: ProjectModel): string {
         ]),
     "",
     // A hidden foundation does not own the repository root, and Claude Code finds `CLAUDE.md` and
-    // `.claude/commands/` from where the session starts (spec 187). Told once, here, in the first
-    // file anyone opens — a founder who starts at the root gets "unknown command" and no reason why.
+    // `.claude/commands/` from where the session starts (spec 187). This first session is the one
+    // that cannot take the shortcut: `/sync` is what links the commands to the root, so until it has
+    // run there is nothing there to find. Hence both halves — the folder for the commands, the parent
+    // for the project they describe. Told once, here, in the first file anyone opens (spec 215,
+    // absorbing #207: started in the folder alone, `/sync` cannot read the project at all).
     ...(hiddenFolder(model) === null
       ? ["Then open Claude Code in this repository and run:"]
       : [
-          `Then open Claude Code **in \`${hiddenFolder(model)}/\`** — this foundation lives there, and`,
-          "that is where its commands and rules are found. Starting at the repository root instead",
-          "leaves them undiscovered, and the command below will not exist. Then run:"
+          "Then open Claude Code. In a terminal, from the top of the repository, type:",
+          "",
+          "```",
+          `cd ${hiddenFolder(model)} && claude --add-dir ..`,
+          "```",
+          "",
+          "Two things in one line, and you need both:",
+          "",
+          `- \`cd ${hiddenFolder(model)}\` starts the session **inside this folder**, which is the only`,
+          "  place its commands can be found.",
+          `- \`--add-dir ..\` hands it the directory above — ${model.name} itself, the project these`,
+          "  commands exist to read and describe.",
+          "",
+          "Claude Code then takes over your terminal and waits for you, like a chat window. Everything in",
+          "this guide that starts with a `/` is typed there. Type this first:"
         ]),
     "",
     "```",
@@ -1631,10 +1668,25 @@ function firstStep(model: ProjectModel): string {
             "`git diff --staged` and undo with `git restore --staged .`. It touches no remote."
           ]
         : [
-            "It creates no branches and changes",
-            "nothing outside this folder — not a dependency, not a config file, not a document of your",
-            "team's. It deletes nothing, renames no file of yours, and touches no remote. It is safe to run",
-            "again."
+            "It creates no branches, changes no code, deletes nothing and renames no file of yours, and",
+            "touches no remote. The only thing it ever puts outside this folder is a shortcut to these",
+            "commands, described below — and it asks first. It is safe to run again.",
+            "",
+            "**Already have Claude Code open at the top of the repository?** Then typing `/sync` there will",
+            "not work: a session only finds commands where it started and in the folders above it, and this",
+            "folder is below. You do not have to close anything. Ask for it in plain words instead, and say",
+            "which file you mean:",
+            "",
+            "> read `" + hiddenFolder(model) + "/.claude/commands/sync.md` and do what it says",
+            "",
+            "That works because these commands are ordinary Markdown files, not something only Claude Code",
+            "knows how to run — the `/` version just saves you naming the file. What you give up by asking",
+            "this way is the autocomplete, and nothing else: the command does the same work either way.",
+            "",
+            "Either way, the first thing `/sync` offers is to put these commands within reach of the",
+            "repository root, so that after one run a plain `claude` there has them and you never think",
+            "about any of this again. It explains what it would add and waits for your yes; your team's",
+            "copy of the repository is unchanged whichever way you answer."
           ]),
       "",
       "When it finishes, the commands these documents name are the ones that actually work here:"
@@ -2016,6 +2068,13 @@ function syncScope(model: ProjectModel): string {
       `- **Everything outside \`${folder}/\`.** The whole project. Read as much of it as you need —`,
       "  that is how you learn what to write — and change none of it. There are no `.airrow` files to",
       "  reconcile here: nothing this foundation shipped shares a path with anything the project has.",
+      "",
+      `  **If you cannot reach it, stop.** A session started inside \`${folder}/\` with no parent`,
+      "  directory added can see this foundation and not the project it describes. Say that plainly and",
+      `  ask to be restarted — \`cd ${folder} && claude --add-dir ..\` from the repository root, or a`,
+      "  plain `claude` there once section 5 has linked these commands. **Do not describe this folder",
+      "  as if it were the project.** Documents written from a foundation describing itself read as",
+      "  plausible and are about nothing real, and nobody reviewing them later can tell.",
       `- \`${folder}/.claude/spec-kit/constitution.md\` and \`${folder}/.claude/spec-kit/spec-template.md\`.`,
       "  The constitution governs every other file, including this command; a command that edits it can",
       "  widen its own limits.",
@@ -2612,22 +2671,81 @@ function syncRepoWork(model: ProjectModel, ciFile: string): string {
     "team owns and it *does* get pushed. Explain both, in one short paragraph, and write it only if the",
     "founder says yes.",
     "",
-    "## 5. Check the foundation can actually be used from here",
+    "## 5. Make these commands reachable from the repository root",
     "",
-    "A foundation in a subfolder is one an assistant may not find. `CLAUDE.md`, `.claude/` and the",
-    "commands are discovered from wherever a session starts, and that is now the folder, not the",
-    "repository root. Verify it rather than assuming:",
+    "A foundation in a subfolder is one an assistant may not find: commands and rules are discovered",
+    "from where a session starts and from its parents, never from a folder below it. So a founder at",
+    "the repository root — where they actually work — has none of this. The fix is to link it there.",
+    "",
+    "**Offer this, explain it in one short paragraph, and write nothing until the founder says yes.**",
+    "It is the only thing in this command that touches a directory their team may own, and while the",
+    "repository's diff stays empty either way, that is the founder's call and not yours. If they",
+    "decline, say the bootstrap route still works and move on — a declined offer is a finished step,",
+    "not a failure. Do not ask twice in one run.",
+    "",
+    "On a yes, make **two** entries, and check each before making it:",
+    "",
+    `1. **The commands, namespaced — always.** Link the directory \`${folder}/.claude/commands/\` to`,
+    `   \`.claude/commands/${folder}\` at the repository root. Claude Code namespaces a linked`,
+    `   directory, so the commands arrive as \`/${folder}:sync\` — named after this folder, not after`,
+    "   anything of ours. Nothing a team could name can collide with that, and a command added by a",
+    "   later run of this one appears without relinking.",
+    `2. **The bare name — only if it is free.** If \`.claude/commands/sync.md\` does **not** already`,
+    `   exist at the root, link \`${folder}/.claude/commands/sync.md\` to it, so \`/sync\` works as every`,
+    "   document here writes it. **If it does exist, it is the team's — leave it exactly as it is**,",
+    "   say so in your report, and rely on the namespaced form.",
+    "",
+    "**The link commands differ by platform, and on Windows the obvious one is wrong:**",
+    "",
+    "| | Directory (entry 1) | File (entry 2) |",
+    "| --- | --- | --- |",
+    "| macOS, Linux | `ln -s` | `ln -s` |",
+    `| Windows | \`mklink /J\` (junction) | \`mklink /H\` (hardlink) |`,
+    "",
+    "Use those on Windows rather than a symlink: `mklink` without a flag needs Developer Mode or an",
+    "administrator, and a junction and a hardlink need neither. Check what you made resolves before",
+    "reporting it done.",
+    "",
+    "**Then, in this order:**",
+    "",
+    "1. **Keep them out of the diff.** Add all of it to `.git/info/exclude`, beside the line from",
+    "   section 4:",
+    "",
+    "   ```",
+    `   /.claude/commands/${folder}/`,
+    "   /.claude/commands/sync.md",
+    "   /CLAUDE.local.md",
+    "   ```",
+    "",
+    `   Then confirm with \`git status\` that it is **empty**. If anything from this step shows up there,`,
+    "   say so first — that is the one state where this foundation is about to become visible.",
+    `2. **The rules, too.** Link this foundation's \`CLAUDE.md\` into the root session by writing`,
+    `   \`@${folder}/CLAUDE.md\` into a root \`CLAUDE.local.md\`. If that file already exists it is the`,
+    "   founder's — append the line, never rewrite the file. It loads *alongside* the team's own",
+    "   `CLAUDE.md` and must never be described as replacing it.",
+    "3. **Then, and only then, rewrite `START_HERE.md`'s step 1** to the root route: a plain `claude`",
+    `   from the repository root, and \`/${folder}:sync\` — or \`/sync\` if you made that link. In that`,
+    "   order, never before the links exist, so the first file anyone opens never names a route that",
+    "   does not work yet. If the founder declined, leave step 1 saying what still works.",
+    "",
+    "**If the founder works with a different assistant**, say so plainly and skip the linking: these",
+    "two entries are how Claude Code finds things, and they mean nothing to anything else. What is",
+    `true for every tool is the path — this foundation is \`${folder}/\`, its rules are`,
+    `\`${folder}/CLAUDE.md\`, and its commands are \`${folder}/.claude/commands/\` as plain markdown`,
+    "anyone can read. Point their assistant at the folder and the foundation works; nothing here is",
+    "locked to one tool.",
+    "",
+    "**Then verify the rest of the layout**, whichever way they answered:",
     "",
     `1. **Confirm the layout.** \`${folder}/CLAUDE.md\`, \`${folder}/START_HERE.md\`,`,
     `   \`${folder}/.claude/commands/\` and \`${folder}/docs/\` all exist and sit together.`,
     "2. **Confirm the documents point inside the folder.** Every relative link between them still",
     "   resolves — they all moved together, so they should. Fix any that does not.",
-    "3. **Confirm `START_HERE.md` says where to start a session**, and that what it says is true for",
-    `   this folder's actual name. If it names a different folder, the founder renamed it — rewrite the`,
-    "   document to match the repository, never the other way round.",
-    "4. **Report what a session against the repository root would miss**, in one line, so the founder",
-    "   knows why the instruction exists rather than just being told to follow it.",
-    "5. **Check the branch model these documents describe is the one this repository uses** (spec 212).",
+    "3. **Confirm `START_HERE.md` names a route that works right now**, and that it is true for this",
+    "   folder's actual name. If it names a different folder, the founder renamed it — rewrite the",
+    "   document to match the repository, never the other way round, and repair any link that now",
+    "   dangles. A broken command entry at the root is worse than none: remove it rather than leave it.",
+    "4. **Check the branch model these documents describe is the one this repository uses** (spec 212).",
     "   The founder was asked how the team branches, and `BRANCHING.md` was written from the answer —",
     "   an answer, not an observation. Look: `git branch -a`, and what",
     "   `git symbolic-ref refs/remotes/origin/HEAD` reports. Where the document and the repository",
@@ -2665,9 +2783,12 @@ function syncReportItems(model: ProjectModel): string {
     `3. Whether \`${folder}/\` is ignored, which file the rule is in, and whether you added it or found`,
     "   it already there. If anything under it is tracked, say so first — that is the one state where",
     "   this foundation is about to become visible.",
-    "4. That nothing outside the folder was changed, and that you checked rather than assumed.",
-    "5. Where the founder should start an assistant session for the commands to be found, and what a",
-    "   session at the repository root would miss."
+    "4. That nothing outside the folder was changed beyond what the founder said yes to, and that you",
+    "   checked rather than assumed.",
+    "5. Whether the commands are linked to the repository root, and which of the two entries exist: the",
+    `   namespaced \`/${folder}:\` directory, and whether the bare \`/sync\` name was free or already the`,
+    "   team's. Then the exact command the founder types from here — and, if they declined, that the",
+    `   bootstrap route \`cd ${folder} && claude --add-dir ..\` is still what works.`
   ].join("\n");
 }
 

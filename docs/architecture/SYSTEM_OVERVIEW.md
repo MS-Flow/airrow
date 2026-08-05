@@ -90,6 +90,18 @@ that reorganises a repository has no business in the layout whose promise is tha
 not change. The folder is offered only when the analysis found a code signal, and only `/sync` — on
 the founder's machine — writes the ignore rule.
 
+**And links the commands out of the folder (spec 215).** Nesting solves delivery and creates a
+discovery problem: Claude Code finds commands and rules from where a session starts and from its
+*parents*, never from a folder below, so at the repository root a hidden foundation has no commands
+at all. Nothing in the engine changes for this — the fix lives entirely in `/sync`'s instruction
+text, on the founder's machine — but it is the reason spec 187's "nothing outside the folder" rule
+now has exactly three exceptions: a `.claude/commands/<folder>` directory link (namespaced by Claude
+Code to `/<folder>:sync`, so it can shadow no command a team owns), a bare `.claude/commands/sync.md`
+only where that name is free, and a root `CLAUDE.local.md` importing the foundation's. All three are
+excluded from git and none is written without a yes. The first session predates them and bootstraps
+with `cd <folder> && claude --add-dir ..`, which is also the answer to the older bug where a session
+started inside the folder could not read the project it was describing.
+
 5. **Show** — `mergePreviewFiles` + `buildPreviewTree` put those paths in the *preview* tree next to
    Airrow's own files, each row tagged with where it comes from. Shape only: the founder's files are
    listed by name, never opened, because their content was never stored.
