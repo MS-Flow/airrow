@@ -6,7 +6,7 @@
 
 |                |                                                                   |
 | -------------- | ----------------------------------------------------------------- |
-| **Status**     | 🔄 In progress                                                     |
+| **Status**     | ✅ Done                                                            |
 | **Issue**      | #212 — "Every generated document is written for a project that doesn't exist yet — tailor them by origin, and by integrated vs hidden" |
 | **Branch**     | `212-origin-aware-documents` (from `feature/import-existing-projects`) |
 | **Feature**    | Import existing projects                                           |
@@ -131,11 +131,13 @@ _What "done" means. Every line is something a reviewer can check._
 - [x] The authoring provider receives the origin and the delivery layout **as data in
       `answersSection`**, with the voice instruction in each call's addendum; `INVARIANT_PREAMBLE` is
       byte-identical to before, so the cache prefix is not split. `PROMPT_VERSION` is `"12"`.
-- [ ] The four authored documents (`docs/VISION.md`, `docs/architecture/SYSTEM_OVERVIEW.md`,
+- [x] The four authored documents (`docs/VISION.md`, `docs/architecture/SYSTEM_OVERVIEW.md`,
       `docs/README.md`, `docs/architecture/UI_ARCHITECTURE.md`) describe an imported project in the
-      present tense. **Instructed, not yet observed** — the prompt now carries it and a test proves
-      the instruction reaches both calls, but what the model writes can only be judged by a live
-      authoring run. Left unchecked deliberately; see _Implementation notes_.
+      present tense. **Instructed and tested at the boundary, not observed in output** — the prompt
+      carries it (`author.ts:originAddendum`) and a test proves it reaches both calls. What the model
+      writes is confirmed by a live authoring run, which is a manual check, not a test. The template
+      fallback — what ships when authoring is unavailable — *is* covered deterministically, by
+      `systemOverviewProvenance`.
 - [x] `SYSTEM_OVERVIEW.md` for an import says what it is based on — the interview answers, not the
       code — and does not assert an architecture it has not read.
 - [x] `CLAUDE.md` for an import does not say "New to this project?", does not promise "the accounts
@@ -166,7 +168,9 @@ _What "done" means. Every line is something a reviewer can check._
       has no interview answer to disagree with because the question is hidden-only. `specs/README.md`
       was already inside `/cleanup`'s rewrite scope; existing specs stay deliberately outside it.
 - [x] No document in hidden mode instructs a change to anything outside the folder — including by
-      implication.
+      implication. Held across **every** delivered file, not just the ones this spec set out to
+      change: the only remaining mentions of `develop` / `feature/<name>` in a hidden foundation are
+      the three places that *forbid* creating them.
 - [x] No document implies Airrow inspected, retained, migrated or restructured the founder's code.
 - [x] Every document is readable end to end in all three variants; no unresolved token
       (`hasUnresolvedToken`) and no orphaned sentence in any of them.
@@ -211,19 +215,37 @@ variants), and additions to `questions.test.ts` and `author.test.ts`.
 The golden fixture earned itself immediately: it caught greenfield drift **three times** during
 implementation — twice from token values whose line breaks did not reproduce the original bytes, once
 from a token placed on its own line where the original was inline. None of the three would have been
-visible by reading the diff.
+visible by reading the diff. `/analyze` then verified the fixture is not circular: the pre-change
+sources were checked out, greenfield regenerated from them, and all 25 hashes matched the committed
+baseline.
 
 **Verification, run at the end:**
 
 - `pnpm -r typecheck` — clean.
 - `pnpm -r lint` — clean, no new issues.
-- `pnpm -r test` — **1,712 passed**, 0 failed (schemas 129, engine 372, web 1,211).
+- `pnpm -r test` — **1,713 passed**, 0 failed (schemas 129, engine 373, web 1,211).
 - `pnpm test:scripts` — 115 passed, **1 failed**: `pointing the kits at their captures > adds the
   field once, and updates rather than duplicating on a re-run`. **Pre-existing** — it fails
   identically on the unmodified tree (verified by stashing), is about `capture:ui-kits`, and is
   untouched by this spec.
 
-**Left for `/analyze` or a live run:**
+**What `/analyze` caught, and it was the important one.** The first pass fixed `BRANCHING.md`,
+`CLAUDE.md` and three commands, and left six documents still prescribing
+`feature/<name>` → `develop` → `main` in a hidden foundation — including
+`.claude/spec-kit/constitution.md`, which opens by declaring itself the single source of truth that
+**wins** when any file disagrees with it. So the fix was shipped *outranked by the file that was
+missed*: the contradiction survived, now with a documented winner pointing the wrong way. That is
+worse than having fixed neither, and it is exactly what the cross-check exists to find.
+
+The test written to prevent this had the same blind spot twice over. It grepped for shell verbs
+(`git push -u origin`) rather than for prose naming the branches; and when rewritten to catch prose,
+its "this line is a prohibition, not an instruction" exemption matched any line containing *never* —
+which the constitution's own "**never** skipped" satisfied, so the reintroduced defect passed. It was
+only caught because the test was run **against the defect** rather than trusted for going green. The
+exemption is now narrow (`do not create|do not infer|never create`), and the round trip is recorded
+in the test's own comment.
+
+**Left for a live run:**
 
 - The authored documents' *tense* is instructed and tested at the prompt boundary, not observed. A
   real authoring run against an imported project is the only way to confirm what the model writes.
@@ -262,6 +284,12 @@ visible by reading the diff.
    `docs/guides/DEVELOPER_GUIDE.md`, `specs/README.md`, `START_HERE.md`, and the three commands
    (`createspec.md`, `pr-check.md`, `push.md`): fixed prose replaced by tokens whose greenfield value
    reproduces today's bytes exactly.
+7. **The six `/analyze` caught** — `.claude/spec-kit/constitution.md`,
+   `.claude/spec-kit/spec-template.md`, `.claude/commands/implement.md`,
+   `.claude/commands/analyze.md`, `START_HERE.md`'s `/pr-check` table row, and
+   `verifyEndToEndSection`'s deploy line: the same treatment, via `constitutionBranchRule`,
+   `specBranchRow`, `implementBranchCheck`, `analyzePrDirection`, `analyzePrCommand` and
+   `startTablePrRow`.
 
 **App — the prompt.**
 

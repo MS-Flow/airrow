@@ -110,7 +110,7 @@ Anything you have not decided is left as a `[NEEDS CLARIFICATION]` marker rather
 | 3    | `/implement`                            | Plan the exact changes, write them, add tests, run the verification bar |
 | 4    | `/analyze`                              | Cross-check spec ↔ code ↔ constitution, then close the spec             |
 | 5    | `/push`                                 | Commit and push the issue branch                                        |
-| 6    | `/pr-check`                             | Merge-safety check, then open the PR into your `feature/<name>`         |
+{{START_TABLE_PR_ROW}}
 
 That is the whole workflow, and it is the same six steps whether you are adding a button or a billing
 system. Repeat it per change and the documentation stays true as the codebase grows — which is the

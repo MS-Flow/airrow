@@ -11,8 +11,7 @@ Implement: **$ARGUMENTS**.
 
 Read @.claude/spec-kit/constitution.md and the spec first.
 
-1. **Verify the branch** matches the spec's issue and was cut from the stated `feature/<name>`. If it
-   doesn't match, stop and ask — never branch off `main`.
+1. **Verify the branch** {{IMPLEMENT_BRANCH_CHECK}}
 2. **Plan the changes** (if "Exact changes (file:line)" isn't filled): ground the Background in real
    code with `file:line`, fill "Exact changes" with the minimal edits, fill the Data model (enforce
    the constitution's data invariants), and list tests to add. Run a quick **Constitution Check** —

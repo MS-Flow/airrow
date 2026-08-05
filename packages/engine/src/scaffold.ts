@@ -1439,7 +1439,11 @@ function verifyEndToEndSection(model: ProjectModel): string {
   const deployLine =
     model.hosting === "self_host"
       ? "3. Deploy to your server and confirm the app reaches it."
-      : "3. Merge, or push to `develop` per your deploy workflow — a preview or DEV deployment should appear within a few minutes.";
+      : // `develop` is this foundation's branch, and a hidden delivery does not have one — the deploy
+        // that matters there is whatever this project already does with a merged branch (spec 212).
+        branchVocabulary(model) === null
+        ? "3. Merge, or push to `develop` per your deploy workflow — a preview or DEV deployment should appear within a few minutes."
+        : "3. Merge it the way this project merges — whatever deploy that triggers here is this project's own, and this foundation neither set it up nor changes it.";
   // A hidden foundation ships no pipeline, so "CI should go green" would be a step the founder
   // cannot take. Their team's own build is what runs on that pull request (spec 187).
   const ciLine =
@@ -2080,6 +2084,74 @@ function branchVocabulary(model: ProjectModel): BranchVocabulary | null {
 }
 
 /**
+ * The generated constitution's branch rule (spec 212).
+ *
+ * This is the one that mattered most and was missed on the first pass. The constitution opens by
+ * saying it is the single source of truth and that **it wins** when any other file disagrees — so a
+ * hidden foundation whose `BRANCHING.md` says "this project's branches are the ones that apply",
+ * shipped beside a constitution ruling that PRs go `feature/<name>` → `develop` → `main`, does not
+ * merely contradict itself: it contradicts itself with a documented winner, and the winner is the
+ * wrong one. Fixing `BRANCHING.md` alone made the contradiction worse than leaving both.
+ *
+ * What survives in every variant is the part that is actually load-bearing for the spec loop: one
+ * branch per spec, and a pull request rather than a push to a shared branch. That fits inside any
+ * branch model, which is why it can be stated as a rule without prescribing a hierarchy.
+ */
+function constitutionBranchRule(model: ProjectModel): string {
+  if (branchVocabulary(model) === null) {
+    return [
+      "- Branch `NNN-kort` (issue number + short name, **no** `issue/` prefix) is cut from its",
+      "  `feature/<name>`. **PR direction is strict and never skipped:** issue branch → its `feature/<name>`",
+      "  → `develop` → `main`. An issue branch is **never** PR'd to `main` or `develop`."
+    ].join("\n");
+  }
+  return [
+    "- **One branch per spec, and it reaches the trunk the way this project's branches always do.**",
+    "  This foundation prescribes no branch model and could not enforce one — it lives in an ignored",
+    "  folder and is never pushed. Which branch a spec is cut from, what it is called, and what it",
+    "  merges into are this repository's rules, and they are unchanged by anything here.",
+    "  See [`../../docs/architecture/BRANCHING.md`](../../docs/architecture/BRANCHING.md).",
+    "- **Never commit straight to a branch this team shares.** Whatever this project treats as shared —",
+    "  the trunk, a long-lived integration branch — takes changes through its own review, never through",
+    "  a command in this foundation."
+  ].join("\n");
+}
+
+/** The `Branch` row every spec file carries in its header. */
+function specBranchRow(model: ProjectModel): string {
+  return branchVocabulary(model) === null
+    ? "| **Branch**     | `NNN-kort` (from `feature/<name>`)   |"
+    : "| **Branch**     | `NNN-kort` (from this project's own) |";
+}
+
+/** `/implement`'s first step, which checks the branch a spec is being built on. */
+function implementBranchCheck(model: ProjectModel): string {
+  return branchVocabulary(model) === null
+    ? "matches the spec's issue and was cut from the stated `feature/<name>`. If it\n   doesn't match, stop and ask — never branch off `main`."
+    : "matches the spec's issue and was cut from the branch the spec names. If it\n   doesn't match, stop and ask. Never build a spec directly on a branch this team shares.";
+}
+
+/** `/analyze`'s PR-direction check, and the command it hands over at the end. */
+function analyzePrDirection(model: ProjectModel): string {
+  return branchVocabulary(model) === null
+    ? "intended target is the spec's `feature/<name>`, **never** `main`/`develop`."
+    : "the target is the branch this spec was cut from, and never a branch this team\n   shares without their own review. If the spec does not name one, say so rather than guessing.";
+}
+
+function analyzePrCommand(model: ProjectModel, vocab: ProviderVocabulary): string {
+  return branchVocabulary(model) === null
+    ? `issue branch → its \`feature/<name>\`, e.g.\n   \`${vocab.cliPrCreate}\`. Never propose a PR to \`main\`/\`develop\`.`
+    : `the spec's branch → the branch it was cut from, e.g.\n   \`${vocab.cliPrCreate}\`. Follow this project's own rules about what may target what.`;
+}
+
+/** `START_HERE.md`'s first-session table row for `/pr-check`. */
+function startTablePrRow(model: ProjectModel): string {
+  return branchVocabulary(model) === null
+    ? "| 6    | `/pr-check`                             | Merge-safety check, then open the PR into your `feature/<name>`         |"
+    : "| 6    | `/pr-check`                             | Merge-safety check, then open the PR the way this project opens them    |";
+}
+
+/**
  * How `/pr-check` decides what a branch is heading for (spec 212).
  *
  * Greenfield it is derived from the hierarchy, which this foundation created and therefore knows.
@@ -2670,6 +2742,12 @@ export function deriveScaffoldValues(
     PR_CHECK_TARGET: prCheckTarget(model),
     PUSH_BRANCH_GUARD: pushBranchGuard(model),
     PUSH_REPORT_LINE: pushReportLine(model),
+    CONSTITUTION_BRANCH_RULE: constitutionBranchRule(model),
+    SPEC_BRANCH_ROW: specBranchRow(model),
+    IMPLEMENT_BRANCH_CHECK: implementBranchCheck(model),
+    ANALYZE_PR_DIRECTION: analyzePrDirection(model),
+    ANALYZE_PR_COMMAND: analyzePrCommand(model, vocab),
+    START_TABLE_PR_ROW: startTablePrRow(model),
     // A hidden foundation ships no pipeline, so listing CI among the parts it brought would be the
     // README's very first sentence claiming something the repository does not have (spec 187).
     FOUNDATION_PARTS:

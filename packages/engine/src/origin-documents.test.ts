@@ -348,4 +348,29 @@ describe("what no imported document may say, in either layout", () => {
       }
     }
   });
+
+  it("names none of this foundation's own branches in a hidden delivery", () => {
+    // The assertion that was missing, and the reason the first pass shipped a hidden foundation whose
+    // constitution still ruled that PRs go `feature/<name>` → `develop` → `main`. Grepping for shell
+    // verbs was not enough: the damage was done by *prose* naming branches that belong to a model
+    // this layout does not ship — and the constitution outranks every document that disagrees with
+    // it, so the one file left unfixed silently won.
+    const prescribes = /`develop`|`feature\/<name>`|→ `main`|`main`\/`develop`|`main` or `develop`/;
+    // A prohibition is the point, not a violation: `/createspec` and `/cleanup` have to name the
+    // branches they must *not* create, or the instruction cannot be followed.
+    //
+    // The exemption is deliberately narrow — "creating or inferring one of these branches is
+    // forbidden" — and not a general test for a negation. A loose version of this check (any line
+    // containing "never") passed while the constitution still ruled "PR direction is strict and
+    // **never** skipped: … → `develop` → `main`", which is the exact defect it exists to catch.
+    const forbids = /do not (?:create|infer)|never create/i;
+    const offenders: string[] = [];
+    for (const [p, content] of HIDDEN_FILES) {
+      for (const [i, line] of content.split("\n").entries()) {
+        if (!prescribes.test(line) || forbids.test(line)) continue;
+        offenders.push(`${p}:${i + 1}: ${line.trim()}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
 });

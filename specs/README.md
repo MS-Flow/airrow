@@ -85,4 +85,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | Knowing where people fall out | [182-posthog-funnel.md](182-posthog-funnel.md) | 🔄 In progress |
 | The interview asks an imported project about the code it already has | [199-import-interview-questions.md](199-import-interview-questions.md) | 🔄 In progress |
 | The two moments worth interrupting someone for | [203-slack-notifications.md](203-slack-notifications.md) | ⏳ Not started |
-| Every document knows where the project came from | [212-origin-aware-documents.md](212-origin-aware-documents.md) | 🔄 In progress |
+| Every document knows where the project came from | [212-origin-aware-documents.md](212-origin-aware-documents.md) | ✅ Done |

@@ -6,7 +6,7 @@
 | -------------- | ------------------------------------ |
 | **Status**     | ⏳ Not started                       |
 | **Issue**      | #NNN — "<issue title>"               |
-| **Branch**     | `NNN-kort` (from `feature/<name>`)   |
+{{SPEC_BRANCH_ROW}}
 | **Feature**    | <area>                               |
 | **Depends on** | <links to other specs, or "nothing"> |
 
