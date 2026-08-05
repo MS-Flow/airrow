@@ -86,3 +86,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | The interview asks an imported project about the code it already has | [199-import-interview-questions.md](199-import-interview-questions.md) | 🔄 In progress |
 | The two moments worth interrupting someone for | [203-slack-notifications.md](203-slack-notifications.md) | ⏳ Not started |
 | Every document knows where the project came from | [212-origin-aware-documents.md](212-origin-aware-documents.md) | ✅ Done |
+| `/sync` maps the project, `/cleanup` makes it readable | [214-sync-cleanup-split.md](214-sync-cleanup-split.md) | 🔄 In progress |

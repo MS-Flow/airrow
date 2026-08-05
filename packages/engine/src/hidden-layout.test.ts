@@ -152,16 +152,17 @@ describe("a hidden foundation", () => {
     expect(escaped.map((f) => f.path)).toEqual([]);
   });
 
-  it("is the same foundation as the integrated one, moved", () => {
-    const hidden = generated(HIDDEN)
-      .map((f) => f.path.slice(FOLDER.length + 1))
-      .filter((p) => !p.startsWith(".github/"))
-      .sort();
-    const integrated = generated(INTEGRATED)
-      .map((f) => f.path)
-      .filter((p) => !p.startsWith(".github/"))
-      .sort();
+  // Two files differ by design, and only two: the pipeline (spec 187) and `/cleanup` (spec 214).
+  // Both are excluded because they would act on the repository around the folder, which is the one
+  // thing this layout exists to never do. Everything else is the integrated foundation, moved.
+  it("is the same foundation as the integrated one, moved — minus what would reach outside", () => {
+    const withoutExcluded = (paths: string[]): string[] =>
+      paths.filter((p) => !p.startsWith(".github/") && p !== ".claude/commands/cleanup.md").sort();
+    const hidden = withoutExcluded(generated(HIDDEN).map((f) => f.path.slice(FOLDER.length + 1)));
+    const integrated = withoutExcluded(generated(INTEGRATED).map((f) => f.path));
     expect(hidden).toEqual(integrated);
+    // The exclusion is real, not an artefact of the filter above.
+    expect(generated(INTEGRATED).map((f) => f.path)).toContain(".claude/commands/cleanup.md");
   });
 
   it("still passes validation, so the mode changes where it lands and not whether it is complete", () => {
@@ -170,7 +171,7 @@ describe("a hidden foundation", () => {
     expect(() => generated(HIDDEN)).not.toThrow();
     expect(generated(HIDDEN).some((f) => f.path === `${FOLDER}/CLAUDE.md`)).toBe(true);
     expect(
-      generated(HIDDEN).some((f) => f.path === `${FOLDER}/.claude/commands/cleanup.md`)
+      generated(HIDDEN).some((f) => f.path === `${FOLDER}/.claude/commands/sync.md`)
     ).toBe(true);
   });
 
@@ -219,13 +220,11 @@ describe("a hidden foundation", () => {
   });
 
   it("leaves no unrendered token in the command it ships", () => {
-    const cleanup = generated(HIDDEN).find(
-      (f) => f.path === `${FOLDER}/.claude/commands/cleanup.md`
-    );
-    expect(cleanup?.content).not.toMatch(/\{\{[A-Z_]+\}\}/);
+    const sync = generated(HIDDEN).find((f) => f.path === `${FOLDER}/.claude/commands/sync.md`);
+    expect(sync?.content).not.toMatch(/\{\{[A-Z_]+\}\}/);
     // The marker for a token with no value. Not a bare "[NEEDS CLARIFICATION:" — the command's own
     // text tells the assistant to write one of those for a question the repository cannot answer.
-    expect(cleanup?.content).not.toMatch(/\[NEEDS CLARIFICATION: [A-Z_]+\]/);
+    expect(sync?.content).not.toMatch(/\[NEEDS CLARIFICATION: [A-Z_]+\]/);
   });
 });
 
@@ -243,33 +242,52 @@ describe("what the hidden documents tell the founder", () => {
     expect(doc(INTEGRATED, "START_HERE.md")).toContain("in this repository");
   });
 
-  it("tells /cleanup to leave everything outside the folder alone", () => {
-    const cleanup = doc(HIDDEN, ".claude/commands/cleanup.md");
-    expect(cleanup).toContain(`Nothing outside \`${FOLDER}/\` may change`);
-    expect(cleanup).toContain(".git/info/exclude");
-    expect(cleanup).toContain("git check-ignore");
+  it("tells /sync to leave everything outside the folder alone", () => {
+    const sync = doc(HIDDEN, ".claude/commands/sync.md");
+    expect(sync).toContain(`Nothing outside \`${FOLDER}/\` may change`);
+    expect(sync).toContain(".git/info/exclude");
+    expect(sync).toContain("git check-ignore");
   });
 
-  it("tells /cleanup not to build the branch model a team already has", () => {
-    const cleanup = doc(HIDDEN, ".claude/commands/cleanup.md");
-    expect(cleanup).toContain("The branch model is already theirs");
-    expect(cleanup).not.toContain("git init -b main");
+  // The ignore rule is the one thing `/sync` writes outside its own documents, and it is what keeps
+  // the layout's promise rather than breaking it. Naming it as the single exception is what stops
+  // the command's "changes nothing" framing from being quietly untrue (spec 214).
+  it("names the ignore rule as the one exception to changing nothing", () => {
+    expect(prose(doc(HIDDEN, ".claude/commands/sync.md"))).toContain(
+      "One exception, and only this one:"
+    );
   });
 
-  it("still tells an integrated /cleanup to set the branch model up", () => {
-    expect(doc(INTEGRATED, ".claude/commands/cleanup.md")).toContain("git init -b main");
+  it("tells /sync not to build the branch model a team already has", () => {
+    const sync = doc(HIDDEN, ".claude/commands/sync.md");
+    expect(sync).toContain("The branch model is already theirs");
+    expect(sync).not.toContain("git init -b main");
+  });
+
+  // Spec 214: the mutating half does not ship here at all, which is a stronger guarantee than an
+  // instruction telling it to hold back.
+  it("ships no /cleanup to reorganise a repository the team shares", () => {
+    expect(
+      generated(HIDDEN).some((f) => f.path === `${FOLDER}/.claude/commands/cleanup.md`)
+    ).toBe(false);
+    expect(doc(HIDDEN, "CLAUDE.md")).not.toContain("/cleanup");
+    expect(doc(HIDDEN, "START_HERE.md")).not.toContain("/cleanup");
+  });
+
+  it("still ships it to an integrated foundation, so the exclusion is the layout's", () => {
+    expect(doc(INTEGRATED, ".claude/commands/cleanup.md")).toContain("## 5. The branch model");
   });
 
   it("never offers to write the committed ignore rule without asking", () => {
-    const cleanup = doc(HIDDEN, ".claude/commands/cleanup.md");
-    expect(cleanup).toContain("write it only if the founder says yes");
+    const sync = doc(HIDDEN, ".claude/commands/sync.md");
+    expect(sync).toContain("write it only if the founder says yes");
   });
 
-  it("does not send a hidden /cleanup hunting the team's own instruction files", () => {
-    const cleanup = doc(HIDDEN, ".claude/commands/cleanup.md");
-    expect(cleanup).not.toContain("Old assistant instructions");
+  it("does not send a hidden /sync hunting the team's own instruction files", () => {
+    const sync = doc(HIDDEN, ".claude/commands/sync.md");
+    expect(sync).not.toContain("Old assistant instructions");
     // They are named, but as things to leave alone rather than to report for removal.
-    expect(cleanup).toContain("leave every one of them alone");
+    expect(sync).toContain("leave every one of them alone");
   });
 });
 

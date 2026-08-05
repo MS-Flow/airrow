@@ -37,19 +37,37 @@ Every feature, screen, and generated file is judged against these.
   step 1 before it deletes itself, in that order, so the first file anyone opens never points at a
   command that is no longer there
   ([spec 159](../../specs/159-ui-reference-start.md), which records the previous "re-runnable by
-  design" wording). A foundation generated for a project that **already exists** ships `/cleanup`
-  in its place: run the same way, it reads the codebase that is there and rewrites the foundation's
-  documents to describe it. Its ceiling is narrower — it changes no code and deletes nothing. A
-  foundation ships exactly one of the two, decided by where the project came from. Airrow's servers
-  still never write application code, and ZIP delivery is still a complete foundation on its own.
+  design" wording). A foundation generated for a project that **already exists** ships **`/sync`, and
+  where the delivery is integrated `/cleanup` beside it** ([spec 214](../../specs/214-sync-cleanup-split.md),
+  which records the previous wording: a single `/cleanup` that "reads the codebase that is there and
+  rewrites the foundation's documents to describe it", whose ceiling was "it changes no code and
+  deletes nothing", one of exactly two commands). The pair is split along **observing versus
+  mutating**, and that line is the rule:
+  **`/sync` reads and writes documents** — the codebase, the branch model, every `.md` already there —
+  into `.claude/project-map.md` and then into the foundation's own documents. It changes no code,
+  deletes nothing, renames nothing and **creates no branch**; the one thing it writes outside its own
+  documents is the `.git/info/exclude` line a hidden delivery depends on. It never removes itself,
+  because documents drift from code for as long as the project lives.
+  **`/cleanup` is the only command that reorganises the founder's own files**: it moves them with
+  `git mv` until the structure explains itself — toward the project's *own ecosystem's* conventions,
+  never Airrow's — updates every reference in the same pass, proposes what nothing uses and deletes
+  only what the founder approves, and creates the local branches the workflow runs on. Its ceiling is
+  that behaviour never changes: nothing is upgraded, reconfigured or rewritten to work differently,
+  and an oversized file is reported rather than split. **It stages its work and never commits it**, on
+  a clean tree or resuming its own recorded plan, and it removes itself once its verification bar has
+  passed — rewriting `START_HERE.md`'s step 1 first, exactly as `/start` does.
+  A foundation ships exactly one of these sets, decided by where the project came from. Airrow's
+  servers still never write application code, and ZIP delivery is still a complete foundation on its
+  own.
   **An imported foundation lands one of two ways, and the founder picks which**
   ([spec 187](../../specs/187-hidden-import-integration.md)): *integrated*, taking its own paths in
   the founder's tree as it always has, or *hidden* — the whole foundation nested under one folder the
-  founder names, which `/cleanup` tells git to ignore in `.git/info/exclude`, so a developer can bring
-  Airrow into a codebase they share without changing a line their team will see. Hidden narrows
-  `/cleanup` further still: nothing outside that folder may change — not a document, not a branch, not
-  the team's own instruction files — and no CI ships, because a workflow in an ignored folder can
-  never run. The committed `.gitignore` line is offered and never written without a yes. Hiding files
+  founder names, which `/sync` tells git to ignore in `.git/info/exclude`, so a developer can bring
+  Airrow into a codebase they share without changing a line their team will see. Hidden narrows the
+  import further still: nothing outside that folder may change — not a document, not a branch, not
+  the team's own instruction files — no CI ships, because a workflow in an ignored folder can
+  never run, and **`/cleanup` does not ship at all**, because reorganising a repository the team
+  shares is the one change this layout exists to never make (spec 214). The committed `.gitignore` line is offered and never written without a yes. Hiding files
   from a repository is all it does: it is not concealment from an employer, and it grants no access
   anybody did not already have.
   **`/security` ships with every foundation, whatever its origin, and is the third command that may
@@ -66,8 +84,10 @@ Every feature, screen, and generated file is judged against these.
   (Amended by [spec 66](../../specs/66-start-command.md), which records the previous wording, extended
   by [spec 91](../../specs/91-cleanup-command.md), amended again by
   [spec 123](../../specs/123-foundation-starts-strong.md) — which records the "bare minimum that runs"
-  wording spec 66 introduced — and extended by
-  [spec 157](../../specs/157-security-command.md), which added `/security`.)
+  wording spec 66 introduced — extended by
+  [spec 157](../../specs/157-security-command.md), which added `/security`, and amended by
+  [spec 214](../../specs/214-sync-cleanup-split.md), which split the imported project's one command
+  into `/sync` and `/cleanup` and gave the second one the right to move the founder's files.)
 - **The output is the product.** Generated repos must read like a senior CTO wrote them for *this*
   project — never like a filled-in template. Generic output is a top-severity bug.
 - **Adaptive, never bureaucratic.** The interview asks only questions whose answers change the output.

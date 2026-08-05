@@ -1,16 +1,20 @@
-// Tests for which first-run command a foundation ships, and for the `/cleanup` it ships to an
-// imported project (spec 91).
+// Tests for which first-run commands a foundation ships, and for the rebuilt `/cleanup` (spec 214).
+//
+// Spec 91 shipped exactly one first-run command per foundation. Spec 214 split the imported case in
+// two — `/sync` reads and writes documents, `/cleanup` reorganises the code — so the rule is now a
+// set: `/start` alone, `/sync` + `/cleanup` integrated, `/sync` alone hidden. `/sync`'s own content
+// is covered in `sync-command.test.ts`; this file owns the set, the new `/cleanup`, and the documents
+// that have to agree with whichever commands actually shipped.
 //
 // Like `/start`, `/cleanup` is instruction text an assistant executes, so what is testable here is
-// what the renderer puts in the repository: that exactly one of the two commands is present, that it
-// is the one this project's origin calls for, and that no document names the command the founder
-// does not have. Whether the assistant then behaves is the manual check recorded in the spec.
+// what the renderer puts in the repository. Whether the assistant then behaves is the manual check
+// recorded in the spec.
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { GenerationError, generate } from "./index.ts";
-import { commandPath, resolveProjectModel } from "./model.ts";
+import { commandPaths, resolveProjectModel } from "./model.ts";
 import { renderScaffold, type TemplateFile } from "./scaffold.ts";
 import type { InterviewAnswers, ProjectOrigin } from "../../schemas/src/types.ts";
 
@@ -36,7 +40,9 @@ function loadTemplate(): TemplateFile[] {
 
 const TEMPLATE = loadTemplate();
 const START = ".claude/commands/start.md";
+const SYNC = ".claude/commands/sync.md";
 const CLEANUP = ".claude/commands/cleanup.md";
+const FIRST_RUN = [START, SYNC, CLEANUP];
 
 const BASE: InterviewAnswers = {
   productType: "saas",
@@ -60,6 +66,11 @@ const IMPORTED: ProjectOrigin = {
   kind: "imported",
   stackDetected: true,
   delivery: { kind: "integrated" }
+};
+const HIDDEN: ProjectOrigin = {
+  kind: "imported",
+  stackDetected: true,
+  delivery: { kind: "hidden", folder: "airrow" }
 };
 const IMPORTED_EMPTY: ProjectOrigin = {
   kind: "imported",
@@ -85,34 +96,46 @@ function render(origin: ProjectOrigin, answers: InterviewAnswers = BASE) {
   return { files, byPath, paths: files.map((f) => f.path), text: files.map((f) => f.content).join("\n") };
 }
 
-describe("a foundation ships exactly one first-run command", () => {
-  it("gives a project started from nothing /start, and not /cleanup", () => {
+describe("which first-run commands a foundation ships", () => {
+  it("gives a project started from nothing /start, and neither import command", () => {
     const { paths } = render(NEW);
     expect(paths).toContain(START);
+    expect(paths).not.toContain(SYNC);
     expect(paths).not.toContain(CLEANUP);
   });
 
-  it("gives an imported project with code /cleanup, and not /start", () => {
+  it("gives an integrated import both halves of the first session", () => {
     const { paths } = render(IMPORTED);
+    expect(paths).toContain(SYNC);
     expect(paths).toContain(CLEANUP);
+    expect(paths).not.toContain(START);
+  });
+
+  it("gives a hidden import /sync alone — the mutating half is what it exists to avoid", () => {
+    const { paths } = render(HIDDEN);
+    expect(paths).toContain(SYNC);
+    expect(paths).not.toContain(CLEANUP);
     expect(paths).not.toContain(START);
   });
 
   it("gives an import that held no code /start — there is nothing to read", () => {
     const { paths } = render(IMPORTED_EMPTY);
     expect(paths).toContain(START);
+    expect(paths).not.toContain(SYNC);
     expect(paths).not.toContain(CLEANUP);
   });
 
-  it("never ships both and never ships neither, whatever the origin", () => {
-    for (const origin of [NEW, IMPORTED, IMPORTED_EMPTY]) {
+  it("ships exactly the set its origin calls for, and never /start beside an import command", () => {
+    for (const origin of [NEW, IMPORTED, HIDDEN, IMPORTED_EMPTY]) {
       const { paths } = render(origin);
-      const shipped = paths.filter((p) => p === START || p === CLEANUP);
-      expect(shipped).toEqual([commandPath(model(origin))]);
+      const shipped = paths.filter((p) => FIRST_RUN.includes(p));
+      expect(shipped.sort()).toEqual([...commandPaths(model(origin))].sort());
+      expect(shipped.length).toBeGreaterThan(0);
+      if (shipped.includes(START)) expect(shipped).toEqual([START]);
     }
   });
 
-  it("rejects a foundation missing the command its origin calls for", () => {
+  it("rejects a foundation missing any command its origin calls for", () => {
     const issuesFrom = (template: TemplateFile[], origin: ProjectOrigin): string[] => {
       try {
         generate(template, model(origin));
@@ -121,8 +144,13 @@ describe("a foundation ships exactly one first-run command", () => {
       }
       return [];
     };
+    // Both halves are required, so dropping either one fails validation — a foundation that names
+    // `/cleanup` in three documents and does not ship it is the defect this catches.
     expect(issuesFrom(TEMPLATE.filter((f) => f.path !== CLEANUP), IMPORTED)).toContain(
       `missing required file: ${CLEANUP}`
+    );
+    expect(issuesFrom(TEMPLATE.filter((f) => f.path !== SYNC), IMPORTED)).toContain(
+      `missing required file: ${SYNC}`
     );
     expect(issuesFrom(TEMPLATE.filter((f) => f.path !== START), NEW)).toContain(
       `missing required file: ${START}`
@@ -144,110 +172,182 @@ describe("the /cleanup command", () => {
     expect(render(IMPORTED).byPath(CLEANUP)).toContain("Loop CRM");
   });
 
-  it("states the claims it must check against the repository", () => {
+  it("refuses to run before /sync, because it has no map to work from", () => {
     const cleanup = render(IMPORTED).byPath(CLEANUP);
-    // The stack in these documents came from an interview, not from reading the code — saying so is
-    // what makes /cleanup a check rather than a proofread.
-    expect(cleanup).toContain("not from reading it");
-    expect(cleanup).toContain("the repository is right");
-    for (const command of ["pnpm dev", "pnpm build", "pnpm typecheck", "pnpm lint", "pnpm test"]) {
+    expect(cleanup).toContain(".claude/project-map.md");
+    expect(prose(cleanup)).toContain("offer to run `/sync` first, and stop there");
+  });
+
+  it("moves with git mv and updates what pointed at the old path", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(cleanup).toContain("**`git mv`, always.**");
+    expect(prose(cleanup)).toContain("Update every reference in the same pass");
+    expect(prose(cleanup)).toContain("A move that leaves a broken import is worse than no move at all");
+  });
+
+  it("takes the layout from the project's ecosystem, not from this foundation", () => {
+    const next = render(IMPORTED).byPath(CLEANUP);
+    expect(prose(next)).toContain("The conventions below are Next.js's own");
+    const vite = render(IMPORTED, { ...BASE, framework: "vite" }).byPath(CLEANUP);
+    expect(prose(vite)).toContain("The conventions below are Vite + React's own");
+  });
+
+  it("moves nothing at all when there is no convention to apply", () => {
+    const custom = { ...BASE, framework: "custom", frameworkOther: "Rails 8 with Postgres" } satisfies InterviewAnswers;
+    const cleanup = render(IMPORTED, custom).byPath(CLEANUP);
+    expect(prose(cleanup)).toContain("**move nothing**");
+    expect(prose(cleanup)).toContain("worse than the one that is already here");
+  });
+
+  it("keeps its hands off the paths the tooling finds by location", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(cleanup).toContain("**Framework-mandated paths.**");
+    for (const fixed of ["`app/`", "`public/`", "`supabase/`", "`migrations/`", "`.github/`"]) {
+      expect(cleanup).toContain(fixed);
+    }
+    expect(prose(cleanup)).toContain("Moving one of these is not tidying, it is breaking the build");
+  });
+
+  it("applies the root rule per package in a monorepo", () => {
+    expect(prose(render(IMPORTED).byPath(CLEANUP))).toContain(
+      "In a monorepo, every package is its own root"
+    );
+  });
+
+  it("records the verification bar before it moves anything, and reverts what it breaks", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    for (const command of ["pnpm build", "pnpm typecheck", "pnpm lint", "pnpm test"]) {
       expect(cleanup).toContain(command);
     }
+    expect(prose(cleanup)).toContain("Whatever is already failing was failing before you arrived");
+    expect(prose(cleanup)).toContain("**revert that move**");
   });
 
-  it("forbids changing code, and says so about each kind of file", () => {
+  it("proposes what nothing uses per category, and deletes only on a yes", () => {
     const cleanup = render(IMPORTED).byPath(CLEANUP);
-    expect(cleanup).toContain("It changes no code.");
-    for (const kind of ["dependency", "config file", "migration"]) {
-      expect(cleanup).toContain(kind);
+    expect(prose(cleanup)).toContain("**Then wait.**");
+    expect(prose(cleanup)).toContain("a yes to one category is not a yes to the next");
+    for (const category of ["Duplicates and abandoned drafts", "Dead code", "Generator leftovers"]) {
+      expect(cleanup).toContain(category);
     }
   });
 
-  it("tells the assistant which of the two files is Airrow's, and leaves the founder's alone", () => {
-    const cleanup = render(IMPORTED).byPath(CLEANUP);
-    expect(cleanup).toContain("README.airrow.md");
-    expect(prose(cleanup)).toContain("the `.airrow` file is this foundation's version");
-    expect(cleanup).toContain("Leave the founder's file alone");
-    expect(cleanup).toContain("It deletes nothing, and it renames nothing.");
+  it("reports an oversized file rather than splitting it", () => {
+    expect(prose(render(IMPORTED).byPath(CLEANUP))).toContain(
+      "Splitting them changes behaviour, so it goes through `/createspec`"
+    );
   });
 
-  it("goes looking for every .airrow document rather than waiting to be handed one", () => {
+  it("stages the whole change and commits none of it", () => {
     const cleanup = render(IMPORTED).byPath(CLEANUP);
-    expect(cleanup).toContain("git ls-files '*.airrow.md'");
-    expect(prose(cleanup)).toContain("work through every single one");
-  });
-
-  it("explains why a non-document conflict has no .airrow file", () => {
-    const cleanup = render(IMPORTED).byPath(CLEANUP);
-    expect(cleanup).toContain("Only documents arrive this way");
-    expect(cleanup).toContain(".github/workflows/ci.yml");
-  });
-
-  it("leaves the swap to the founder rather than doing it for them", () => {
-    const cleanup = render(IMPORTED).byPath(CLEANUP);
-    expect(cleanup).toContain("git mv README.airrow.md README.md");
-    expect(cleanup).toContain("Nothing here does that for them");
-  });
-
-  it("reports old assistant instructions instead of removing them", () => {
-    const cleanup = render(IMPORTED).byPath(CLEANUP);
-    expect(cleanup).toContain(".cursorrules");
-    expect(cleanup).toContain("report them, delete nothing");
-  });
-
-  it("keeps the founder's own documents and the constitution out of its scope", () => {
-    const cleanup = render(IMPORTED).byPath(CLEANUP);
-    expect(cleanup).toContain("Read, never rewrite");
-    expect(cleanup).toContain(".claude/spec-kit/constitution.md");
-  });
-
-  it("leaves what it cannot establish as a marker rather than a guess", () => {
-    expect(render(IMPORTED).byPath(CLEANUP)).toContain("[NEEDS CLARIFICATION:");
-  });
-
-  it("stops at this machine, like /start does", () => {
-    const cleanup = render(IMPORTED).byPath(CLEANUP);
-    expect(cleanup).toContain("No remote");
-    expect(cleanup).toContain("no secrets written");
-  });
-
-  it("sets up the branch model the workflow runs on", () => {
-    const cleanup = render(IMPORTED).byPath(CLEANUP);
-    expect(cleanup).toContain("## 5. The branch model");
-    expect(cleanup).toContain("git init -b main");
-    expect(prose(cleanup)).toContain("`develop` from the trunk");
-    expect(cleanup).toContain("BRANCHING.md");
-  });
-
-  it("leaves an existing trunk's name alone and adapts the documents to it instead", () => {
-    const cleanup = render(IMPORTED).byPath(CLEANUP);
-    // Renaming `master` breaks branch protection, open pull requests and every CI trigger pointing
-    // at it — none of which this command can put back.
-    expect(cleanup).toContain("**Do not rename it.**");
-    expect(prose(cleanup)).toContain("the trunk's name is a fact about this repository");
+    expect(cleanup).toContain("**It stages, and never commits.**");
+    expect(cleanup).toContain("git diff --staged");
+    expect(cleanup).toContain("git restore --staged .");
   });
 
   it("forbids the git operations that cannot be undone", () => {
-    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    const cleanup = prose(render(IMPORTED).byPath(CLEANUP));
     for (const forbidden of ["rebase", "reset --hard", "--force", "No branch renamed and none deleted"]) {
       expect(cleanup).toContain(forbidden);
     }
   });
+
+  it("stops at this machine, like every other command here", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(cleanup).toContain("No remote");
+    expect(cleanup).toContain("no secrets written");
+  });
 });
 
-describe("the documents match the command the founder actually has", () => {
-  it("never names /start anywhere in an imported foundation", () => {
-    const { text } = render(IMPORTED);
-    expect(text).not.toContain("/start");
+describe("/cleanup on a tree it did not leave clean", () => {
+  it("writes the whole plan before applying any of it", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(cleanup).toContain(".claude/cleanup-plan.json");
+    expect(prose(cleanup)).toContain("**before applying any of it**");
   });
 
-  it("never names /cleanup anywhere in a new project's foundation", () => {
+  it("resumes from a half-finished run instead of refusing the dirty tree it made", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(prose(cleanup)).toContain("**Resume from where it stopped.**");
+    expect(prose(cleanup)).toContain("they are work already done");
+  });
+
+  it("stops when the dirty tree is the founder's, not its own", () => {
+    expect(prose(render(IMPORTED).byPath(CLEANUP))).toContain(
+      "Dirty, with no plan** — the changes are the founder's"
+    );
+  });
+
+  it("leaves anything it cannot attribute to its own plan alone", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(prose(cleanup)).toContain("**Leave it untouched and report it.**");
+    expect(prose(cleanup)).toContain("Never assume an unattributed change is yours");
+  });
+
+  it("offers git init where there is no repository, rather than restructuring what cannot be undone", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(prose(cleanup)).toContain("a restructure with\nno way back".replace(/\s+/g, " "));
+    expect(cleanup).toContain("`git init`");
+  });
+});
+
+describe("/cleanup, unlike /sync, does finish", () => {
+  it("creates the branch model the workflow runs on, and renames no trunk", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(cleanup).toContain("## 5. The branch model");
+    expect(prose(cleanup)).toContain("`develop` from the trunk");
+    expect(cleanup).toContain("**Do not rename it.**");
+    expect(cleanup).toContain("BRANCHING.md");
+  });
+
+  it("re-points the documents from its own move plan rather than analysing again", () => {
+    expect(prose(render(IMPORTED).byPath(CLEANUP))).toContain(
+      "this is a rename map, not a second analysis"
+    );
+  });
+
+  it("rewrites START_HERE.md before it deletes itself, and only after the bar passes", () => {
+    const cleanup = render(IMPORTED).byPath(CLEANUP);
+    expect(cleanup).toContain("Rewrite step 1 of [START_HERE.md](../../START_HERE.md)");
+    expect(cleanup).toContain("Delete this command file.");
+    expect(prose(cleanup)).toContain("In that order");
+    expect(prose(cleanup)).toContain("A failed or partial run leaves all three alone");
+  });
+
+  it("comes back with the moves when the founder discards the changeset", () => {
+    expect(prose(render(IMPORTED).byPath(CLEANUP))).toContain(
+      "a founder who discards the changeset gets this command back"
+    );
+  });
+
+  it("does nothing to a project that is already tidy", () => {
+    expect(prose(render(IMPORTED).byPath(CLEANUP))).toContain(
+      "If the structure is already idiomatic and nothing is unused, say so, move nothing"
+    );
+  });
+});
+
+describe("the documents match the commands the founder actually has", () => {
+  it("never names /start anywhere in an imported foundation", () => {
+    for (const origin of [IMPORTED, HIDDEN]) {
+      expect(render(origin).text).not.toContain("/start");
+    }
+  });
+
+  it("never names an import command anywhere in a new project's foundation", () => {
     const { text } = render(NEW);
     expect(text).not.toContain("/cleanup");
+    expect(text).not.toContain("/sync");
   });
 
-  it("opens START_HERE.md with the command this project ships", () => {
-    expect(render(IMPORTED).byPath("START_HERE.md")).toContain("/cleanup");
+  it("never names /cleanup anywhere in a hidden foundation, which does not ship it", () => {
+    expect(render(HIDDEN).text).not.toContain("/cleanup");
+  });
+
+  it("opens START_HERE.md with the command this project ships, and names the second", () => {
+    const here = render(IMPORTED).byPath("START_HERE.md");
+    expect(here).toContain("/sync");
+    expect(here).toContain("**Then run `/cleanup`.**");
     expect(render(NEW).byPath("START_HERE.md")).toContain("/start");
   });
 
@@ -260,10 +360,14 @@ describe("the documents match the command the founder actually has", () => {
     }
   });
 
-  it("carries the ceiling for its own command into the generated constitution", () => {
-    expect(render(IMPORTED).byPath(".claude/spec-kit/constitution.md")).toContain(
-      "`/cleanup` describes, the spec loop builds"
-    );
+  it("carries a ceiling for each command it ships into the generated constitution", () => {
+    const integrated = render(IMPORTED).byPath(".claude/spec-kit/constitution.md");
+    expect(integrated).toContain("`/sync` describes, the spec loop builds");
+    expect(integrated).toContain("`/cleanup` moves, it does not rewrite");
+    // Hidden ships one command, so it states one ceiling — and not the one for a file it never got.
+    const hidden = render(HIDDEN).byPath(".claude/spec-kit/constitution.md");
+    expect(hidden).toContain("`/sync` describes, the spec loop builds");
+    expect(hidden).not.toContain("`/cleanup` moves");
     expect(render(NEW).byPath(".claude/spec-kit/constitution.md")).toContain(
       "`/start` sets up, the spec loop builds"
     );
@@ -282,46 +386,53 @@ describe("the documents match the command the founder actually has", () => {
   });
 });
 
-/* ── /cleanup does not learn /start's new trick (spec 159) ─────────────────── */
+/* ── what CLAUDE.md tells a founder about a two-command first session ────────── */
 
-describe("/cleanup still deletes nothing", () => {
-  // CLAUDE.md's first-session table is the same six rows for both origins, but row 1 is not the same
-  // promise: `/cleanup` installs nothing, builds nothing and stays put.
-  it("describes its own command in CLAUDE.md, and promises no self-removal", () => {
+describe("CLAUDE.md introduces both commands, and neither one it lacks", () => {
+  it("names /cleanup in the first-session row, which has no room to grow one", () => {
     const claude = render(IMPORTED).byPath("CLAUDE.md");
     expect(claude).toContain("## Starting a chat here");
-    expect(claude).toContain("rewrites these documents to match. Changes no code, deletes nothing");
+    expect(claude).toContain("`/cleanup` is what reorganises the project itself");
     expect(claude).not.toContain("then removes itself");
-    expect(claude).toContain(".claude/commands/cleanup.md` still exists");
   });
 
-  // Both origins need Claude Code before anything in the guide runs; only one of them then has a
-  // command that installs things, and START_HERE must not promise the founder otherwise.
-  // The "what next" table has a row for the command this project has, and only that one — the
-  // imported foundation must not mention a /start it does not ship.
-  it("points an imported project at its own first command and then the spec loop", () => {
+  it("gives a hidden import the row for the one command it has", () => {
+    const claude = render(HIDDEN).byPath("CLAUDE.md");
+    expect(claude).toContain("rewrites these documents to match. Changes no code, deletes nothing");
+    expect(claude).not.toContain("/cleanup");
+  });
+
+  it("hands /sync to /cleanup and /cleanup to the loop, in the what-next table", () => {
     const claude = render(IMPORTED).byPath("CLAUDE.md");
     expect(claude).toContain("## After a command finishes");
-    expect(claude).toContain("| `/cleanup` | These documents now describe the code that is really here.");
+    expect(claude).toContain("| `/sync` | These documents now describe the code that is really here. Next: `/cleanup`");
+    expect(claude).toContain("| `/cleanup` | The structure is readable and the moves are staged for review");
     expect(claude).not.toContain("| `/start` |");
+  });
+
+  it("sends a hidden import straight from /sync to the loop, having no second command", () => {
+    const claude = render(HIDDEN).byPath("CLAUDE.md");
+    expect(claude).toContain("| `/sync` | These documents now describe the code that is really here. Next: `/createspec");
+  });
+
+  it("says which command expires and which does not", () => {
+    // `/sync` is permanent and `/cleanup` is the one that disappears, so the file a session should
+    // look for is `/cleanup`'s — the greenfield sentence would be answering about the wrong command.
+    const integrated = render(IMPORTED).byPath("CLAUDE.md");
+    expect(integrated).toContain("`/sync` does not expire");
+    expect(integrated).toContain(".claude/commands/cleanup.md` is gone");
+    expect(render(HIDDEN).byPath("CLAUDE.md")).toContain("`/sync` does not expire");
+    expect(render(NEW).byPath("CLAUDE.md")).toContain(".claude/commands/start.md` still exists");
   });
 
   it("asks an imported project for Claude Code and nothing else", () => {
     const here = render(IMPORTED).byPath("START_HERE.md");
     expect(here).toMatch(/\*\*First, install \[Claude Code\]/);
-    expect(here).toContain("`/cleanup` installs nothing");
+    expect(prose(here)).toContain("Nothing here installs anything else");
     expect(here).not.toContain("are all step 1 of the command below");
   });
 
-  it("does not remove itself, whatever /start now does", () => {
-    const cleanup = render(IMPORTED).byPath(CLEANUP);
-    expect(cleanup).not.toMatch(/delete .*cleanup\.md/i);
-    expect(cleanup).not.toMatch(/remove this command/i);
-    // Its own ceiling, restated: the command that changes no code cannot start by changing a file.
-    expect(prose(cleanup)).toMatch(/deletes nothing|delete nothing|never deletes/i);
-  });
-
-  // A theme is something a command installs, and this command installs nothing (spec 165).
+  // A theme is something a command installs, and neither import command installs anything (spec 165).
   it("installs no theme and claims no licence, however the founder answered", () => {
     const picked = { ...BASE, uiKit: "stark_terminal" } satisfies InterviewAnswers;
     const { files, byPath } = render(IMPORTED, picked);

@@ -215,15 +215,20 @@ for (const fx of fixtures) {
   if (!vision?.content.includes(fx.answers.vision)) fail("VISION.md missing the long-term vision");
   
 
-  // Spec 91: exactly one first-run command, and it is the one this project's origin calls for. Both
-  // would be worse than neither — one of them would be wrong about the repository it is sitting in.
+  // Specs 91 + 214: the first-run commands this origin calls for, and no others. A project from
+  // nothing gets `/start`; one that arrived with code gets `/sync`, plus `/cleanup` unless the
+  // delivery is hidden — where reorganising a shared repository is the one thing the layout exists to
+  // never do. Shipping a command the documents do not name, or naming one that was not shipped, is
+  // the same defect from either side.
   const imported = fx.origin?.kind === "imported" && fx.origin.stackDetected;
-  const expectedCommand = at(`.claude/commands/${imported ? "cleanup" : "start"}.md`);
-  const wrongCommand = at(`.claude/commands/${imported ? "start" : "cleanup"}.md`);
-  if (!paths.has(expectedCommand)) fail(`missing first-run command: ${expectedCommand}`);
-  if (paths.has(wrongCommand)) fail(`ships the wrong first-run command: ${wrongCommand}`);
-  if (text.includes(imported ? "/start" : "/cleanup")) {
-    fail(`documents name /${imported ? "start" : "cleanup"}, which this foundation does not ship`);
+  const firstRun = imported ? (folder === null ? ["sync", "cleanup"] : ["sync"]) : ["start"];
+  for (const name of ["start", "sync", "cleanup"]) {
+    const p = at(`.claude/commands/${name}.md`);
+    if (firstRun.includes(name) && !paths.has(p)) fail(`missing first-run command: ${p}`);
+    if (!firstRun.includes(name) && paths.has(p)) fail(`ships the wrong first-run command: ${p}`);
+    if (!firstRun.includes(name) && text.includes(`/${name}`)) {
+      fail(`documents name /${name}, which this foundation does not ship`);
+    }
   }
 
   // Spec 157: /security has no alternative to pair it with — a project started from nothing and one

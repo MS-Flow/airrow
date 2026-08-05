@@ -10,9 +10,11 @@ project. Founders then build locally with VS Code + Claude Code. **Airrow prepar
 AI-assisted development — it never writes the application code itself.** The `/start` command it
 ships *inside* a generated repo is the deliberate exception (spec 66): the founder runs it there, and
 it takes that repo to the bare minimum that runs. A foundation generated for an **imported** project
-ships `/cleanup` instead (spec 91) — it reads the code that is already there and rewrites the
-documents to match it, and changes no code at all. Exactly one of the two, decided by the project's
-origin. Airrow's own servers still generate documents only.
+ships a pair instead, split along observing versus mutating (spec 214, amending spec 91): `/sync`
+reads the code that is already there and rewrites the documents to match it, changing no code at all;
+`/cleanup` reorganises the tree toward its own ecosystem's conventions and clears out what nothing
+uses — staged, never committed, and never shipped to a hidden delivery. Exactly one of the sets,
+decided by the project's origin. Airrow's own servers still generate documents only.
 
 ## Shape
 pnpm workspaces monorepo (pnpm 9, Node ≥20):
@@ -83,8 +85,10 @@ prefixes every path with the folder before validation, so what is stored is alre
 delivered. Every stage after that is unchanged and unaware: nothing shares a path with the founder's
 tree any more, so step 4 finds zero conflicts, `applyResolutions` has nothing to resolve, and no
 `.airrow.md` sidecar is ever produced. `shipsPath` drops both CI files, because a workflow inside an
-ignored folder is never pushed and never runs. The folder is offered only when the analysis found a
-code signal, and only `/cleanup` — on the founder's machine — writes the ignore rule.
+ignored folder is never pushed and never runs, and it drops `/cleanup` too (spec 214) — the command
+that reorganises a repository has no business in the layout whose promise is that the repository does
+not change. The folder is offered only when the analysis found a code signal, and only `/sync` — on
+the founder's machine — writes the ignore rule.
 
 5. **Show** — `mergePreviewFiles` + `buildPreviewTree` put those paths in the *preview* tree next to
    Airrow's own files, each row tagged with where it comes from. Shape only: the founder's files are
