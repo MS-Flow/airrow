@@ -107,20 +107,28 @@ passes it in.
   everything past it goes
   through the spec loop (spec 66, amended by spec 123). `/start` rewrites `START_HERE.md`'s step 1 and
   then **removes itself**, once its own verification bar has passed — in that order; a failed or
-  partial run leaves both untouched (spec 159). An **imported**
-  project gets `/cleanup` in its place (spec 91): it reads the existing codebase and rewrites the
-  foundation's documents to match, changes no code and deletes nothing — including itself. Exactly one
-  of the two ships, decided by the project's origin. ZIP delivery must always work with no integration
-  connected.
+  partial run leaves both untouched (spec 159). An **imported** project gets a pair in its place,
+  split along observing versus mutating (spec 214, amending spec 91's single `/cleanup`): **`/sync`**
+  reads the existing codebase into `.claude/project-map.md` and rewrites the foundation's documents
+  from it — no code, no deletions, no branches, and it never removes itself, because documents drift
+  forever. **`/cleanup`** is the only command that reorganises the founder's own files: `git mv` toward
+  *the project's own ecosystem's* conventions, references updated in the same pass, unused files
+  proposed per category and deleted only on a yes, and the workflow's local branches created. It never
+  changes behaviour, **stages everything and commits nothing**, resumes from its own
+  `.claude/cleanup-plan.json`, and removes itself once its verification bar passes. A foundation ships
+  exactly one of these sets, decided by the project's origin. ZIP delivery must always work with no
+  integration connected.
 - **An import lands integrated or hidden, and the founder picks (spec 187).** Integrated is the
   original shape. **Hidden** nests the entire foundation under one folder the founder names —
   validated as a single path segment, **stored** on `import_sources`, never re-derived — and
-  `/cleanup` has git ignore it via `.git/info/exclude`, so the shared repository's diff stays empty;
+  `/sync` has git ignore it via `.git/info/exclude`, so the shared repository's diff stays empty;
   the committed `.gitignore` line is offered, never written without a yes. The nesting happens **once,
   in `generate()`**, so what is stored is what is delivered and nothing downstream knows the mode
   exists: nothing collides, so there are no conflicts and no `.airrow.md` sidecars. Hidden ships **no
-  CI** (a workflow in an ignored folder can never run) and narrows `/cleanup` to the folder — it
-  builds no branch model, rewrites none of the team's documents, and reports nothing for deletion.
+  CI** (a workflow in an ignored folder can never run) and **no `/cleanup` at all** (spec 214) —
+  reorganising a repository the team shares is the change this layout exists to never make. Its
+  `/sync` is narrowed to the folder: it builds no branch model, rewrites none of the team's documents,
+  and reports nothing for deletion.
   Offered only when the analysis found code; a documents-only import gets `/start` and stays
   integrated.
 - **Curated UI directions are a visual language, never a layout (spec 165).** Each of the three

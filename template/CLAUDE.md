@@ -19,9 +19,7 @@ Steps 3–6 are the loop, repeated once per change, forever. Nothing else needs 
 
 **Assistant:** if someone opens a session with no spec and no command — "can you add X?", "why is this
 broken?" — answer the question, and if the answer means changing code, say so and offer
-`/createspec` rather than starting. `{{FIRST_COMMAND}}` only applies while
-`{{FIRST_COMMAND_PATH}}` still exists; when it does not, this project is past that step and step 3 is
-where a founder starts.
+`/createspec` rather than starting. {{FIRST_COMMAND_LIFETIME}}
 
 ## After a command finishes
 

@@ -313,10 +313,10 @@ describe("the commands, which are the documents that act", () => {
     expect(read(INTEGRATED_FILES, "START_HERE.md")).toMatch(/the local branches this workflow runs on/);
   });
 
-  it("has /cleanup check the branch model against the repository rather than trust the answer", () => {
-    const cleanup = read(HIDDEN_FILES, ".claude/commands/cleanup.md");
-    expect(cleanup).toMatch(/the repository is right/i);
-    expect(cleanup).toMatch(/\*\*Create nothing, rename nothing, delete nothing\.\*\*/);
+  it("has /sync check the branch model against the repository rather than trust the answer", () => {
+    const sync = read(HIDDEN_FILES, ".claude/commands/sync.md");
+    expect(sync).toMatch(/the repository is right/i);
+    expect(sync).toMatch(/\*\*Create nothing, rename nothing, delete nothing\.\*\*/);
   });
 });
 

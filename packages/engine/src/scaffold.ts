@@ -22,10 +22,11 @@ import {
   backendSummary,
   commandName,
   coreAction,
-  commandPath,
+  commandPaths,
   databaseLabel,
   featureLabel,
   frameworkLabel,
+  hasExistingCode,
   hiddenFolder,
   hostingName,
   isCustomStack,
@@ -256,12 +257,12 @@ function ciSetupSteps(model: ProjectModel, stackName: string, inferred: Inferred
  * What CI says when it finds no stack to verify.
  *
  * "Run /start" is the right instruction only where that command exists. A foundation generated for a
- * project that already has a stack ships `/cleanup`, which scaffolds nothing — telling that founder
- * to run a command their repository does not contain would make the first CI run they ever see a
- * piece of wrong advice.
+ * project that already has a stack ships `/sync` and `/cleanup` instead, neither of which scaffolds
+ * anything — telling that founder to run a command their repository does not contain would make the
+ * first CI run they ever see a piece of wrong advice.
  */
 function noStackNotice(model: ProjectModel): string {
-  return shipsCleanup(model)
+  return hasExistingCode(model)
     ? "No stack here yet — this foundation was generated for an existing project, so push that project's code alongside these documents."
     : `No stack here yet — run ${commandName(model)} in this repository, then push again.`;
 }
@@ -494,8 +495,12 @@ function provider(model: ProjectModel): ProviderVocabulary {
   };
 }
 
-/** The two first-run commands: a foundation ships exactly one of them (spec 91). */
-const FIRST_RUN_COMMANDS = [".claude/commands/start.md", ".claude/commands/cleanup.md"];
+/** Every first-run command in the template; which of them ship is `commandPaths` (specs 91, 214). */
+const FIRST_RUN_COMMANDS = [
+  ".claude/commands/start.md",
+  ".claude/commands/sync.md",
+  ".claude/commands/cleanup.md"
+];
 
 /**
  * Which template files this project ships.
@@ -504,9 +509,10 @@ const FIRST_RUN_COMMANDS = [".claude/commands/start.md", ".claude/commands/clean
  * permanently red and teach the founder to ignore a failing build — the exact habit the CI gate
  * exists to prevent.
  *
- * `/start` and `/cleanup` are alternatives for the same reason (spec 91): one scaffolds a stack, the
- * other reads the stack that is already there. A repository holding both would be a repository where
- * one of them is wrong, and nothing in it says which.
+ * `/start` and the import pair are alternatives for the same reason (specs 91, 214): one scaffolds a
+ * stack, the others work on the stack that is already there. A repository holding both would be a
+ * repository where one of them is wrong about whether a stack exists, and nothing in it says which.
+ * Which of `/sync` and `/cleanup` an import gets is `firstRunCommands`, not a test repeated here.
  *
  * `THIRD_PARTY_NOTICES.md` ships only where there is something to attribute (spec 165): a foundation
  * whose stack the founder named themselves installs no library of ours, and a notice for code that
@@ -524,8 +530,8 @@ export function shipsPath(model: ProjectModel, path: string): boolean {
   if (ci && hiddenFolder(model) !== null) return false;
   if (path.startsWith(".github/")) return !usesAzureRepos(model);
   if (path.startsWith("azure-pipelines")) return usesAzureRepos(model);
-  if (FIRST_RUN_COMMANDS.includes(path)) return path === commandPath(model);
-  if (path === "THIRD_PARTY_NOTICES.md") return !isCustomStack(model) && !shipsCleanup(model);
+  if (FIRST_RUN_COMMANDS.includes(path)) return commandPaths(model).includes(path);
+  if (path === "THIRD_PARTY_NOTICES.md") return !isCustomStack(model) && !hasExistingCode(model);
   return true;
 }
 
@@ -1230,7 +1236,7 @@ function uiStates(): string {
 function uiDesignSystem(model: ProjectModel): string {
   const kit = model.uiKit;
   if (!kit) {
-    if (shipsCleanup(model)) {
+    if (hasExistingCode(model)) {
       return "This project already had a stack when the foundation was written, so nothing here installed a design system. Whatever it is styled with is what it is styled with — the direction above describes it rather than replacing it.";
     }
     if (isCustomStack(model)) {
@@ -1300,12 +1306,12 @@ function infrastructureSetup(model: ProjectModel): string {
 }
 
 function envFileNoun(model: ProjectModel): string {
-  return shipsCleanup(model) ? "this project's environment file" : "`.env.local` (copied from `.env.example`)";
+  return hasExistingCode(model) ? "this project's environment file" : "`.env.local` (copied from `.env.example`)";
 }
 
 function supabaseSetupSection(model: ProjectModel): string {
   const publicPrefix = { nextjs: "NEXT_PUBLIC_", vite: "VITE_", custom: "" }[model.stack.framework];
-  const imported = shipsCleanup(model);
+  const imported = hasExistingCode(model);
   return [
     "## 1. Supabase project",
     "",
@@ -1323,7 +1329,7 @@ function supabaseSetupSection(model: ProjectModel): string {
 }
 
 function postgresSetupSection(model: ProjectModel): string {
-  const imported = shipsCleanup(model);
+  const imported = hasExistingCode(model);
   // A database the founder named is not assumed to be Postgres, so it is not told it has a
   // `DATABASE_URL` or a `psql` — what it is told is what is true of every database: a credential
   // that stays server-side, migrations that are committed, and the things it does not give you for
@@ -1387,15 +1393,27 @@ function hostingSetupSection(model: ProjectModel): string {
  * The CLI step in every setup list, which is a different instruction depending on the origin.
  *
  * `/start` now installs the CLI itself (spec 159), so telling a founder to install it again is one
- * more step between them and a working repository. `/cleanup` installs nothing, so an imported
- * project still gets the full instruction.
+ * more step between them and a working repository. Neither import command installs anything, so an
+ * imported project still gets the full instruction.
  */
 function cliSetupStep(model: ProjectModel): string {
   const vocab = provider(model);
   const purpose = `so the spec commands can read ${vocab.issueTerm}s and open pull requests`;
-  return shipsCleanup(model)
+  return hasExistingCode(model)
     ? `Install ${vocab.cliName} and run \`${vocab.cliAuth}\`, ${purpose}.`
     : `**Sign in:** \`${vocab.cliAuth}\`, ${purpose}. \`/start\` installed ${vocab.cliName} for you — install it yourself only if it reported that it could not.`;
+}
+
+/**
+ * The command that creates this project's local branches (spec 214).
+ *
+ * Greenfield that is `/start`, as it always was. On an import it is `/cleanup`, not the command the
+ * founder types first: `/sync` only reads the repository, and pointing at it here would credit it
+ * with branches it is forbidden to create. Callers must be inside a path a hidden foundation cannot
+ * reach — hidden creates no branches at all, so there is no answer to give it.
+ */
+function branchCommandName(model: ProjectModel): string {
+  return shipsCleanup(model) ? "/cleanup" : "/start";
 }
 
 function repoAndCiSection(model: ProjectModel): string {
@@ -1419,7 +1437,7 @@ function repoAndCiSection(model: ProjectModel): string {
     return [
       "## 3. Git integration",
       "",
-      `1. Push this foundation to an **Azure Repos** repository — ${commandName(model)} already created the \`develop\` branch locally.`,
+      `1. Push this foundation to an **Azure Repos** repository — ${branchCommandName(model)} already created the \`develop\` branch locally.`,
       `2. **Register the pipelines.** Pipelines → New pipeline → Azure Repos Git → this repo → Existing YAML file: \`${vocab.ciFile}\`, then again for \`${vocab.deployFile}\`. Azure DevOps does not discover YAML from a directory the way Actions does — an unregistered pipeline simply never runs.`,
       "3. **Set the branch policies** under Repos → Branches → `main` / `develop` → Branch policies: require a pull request and a passing build.",
       `4. ${cliSetupStep(model)}`
@@ -1428,7 +1446,7 @@ function repoAndCiSection(model: ProjectModel): string {
   return [
     "## 3. Git integration",
     "",
-    `1. Create an empty repository on GitHub and push this foundation — ${commandName(model)} already created the \`develop\` branch locally.`,
+    `1. Create an empty repository on GitHub and push this foundation — ${branchCommandName(model)} already created the \`develop\` branch locally.`,
     "2. **Protect `main` and `develop`** (Settings → Branches): require a pull request and a passing CI check. The workflows in `.github/workflows/` start running the moment they land on GitHub — nothing else to register.",
     `3. ${cliSetupStep(model)}`
   ].join("\n");
@@ -1467,9 +1485,16 @@ function verifyEndToEndSection(model: ProjectModel): string {
  * the one command this foundation ships. A row in a table, so it is a sentence, not a paragraph.
  */
 function firstCommandEffect(model: ProjectModel): string {
+  if (!hasExistingCode(model)) {
+    return `Installs the tools, scaffolds the stack, builds the first screen and verifies it — then removes itself`;
+  }
+  // An integrated import ships a second first-run command, and the table has fixed step numbers it
+  // cannot grow a row into (spec 214). Naming `/cleanup` here is what stops it being a command the
+  // founder only meets by reading the folder — `AFTER_EACH_COMMAND` and `START_HERE.md` then say
+  // what it does at the point they would type it.
   return shipsCleanup(model)
-    ? `Reads ${model.name} as it actually is and rewrites these documents to match. Changes no code, deletes nothing`
-    : `Installs the tools, scaffolds the stack, builds the first screen and verifies it — then removes itself`;
+    ? `Reads ${model.name} as it actually is and rewrites these documents to match. Changes no code — \`/cleanup\` is what reorganises the project itself`
+    : `Reads ${model.name} as it actually is and rewrites these documents to match. Changes no code, deletes nothing`;
 }
 
 /**
@@ -1483,8 +1508,16 @@ function firstCommandEffect(model: ProjectModel): string {
 function afterEachCommand(model: ProjectModel): string {
   const vocab = provider(model);
   const host = repoLabel(model);
-  const first = shipsCleanup(model)
-    ? `| \`/cleanup\` | These documents now describe the code that is really here. Next: \`/createspec "<the first thing you want to change>"\`. |`
+  // An integrated import runs two commands before the loop, so it gets two rows: `/sync` hands off
+  // to `/cleanup`, and `/cleanup` is the one that hands off to the loop (spec 214). Hidden ships only
+  // the first, so for it `/sync` is what leads to `/createspec`.
+  const first = hasExistingCode(model)
+    ? shipsCleanup(model)
+      ? [
+          `| \`/sync\` | These documents now describe the code that is really here. Next: \`/cleanup\`, which reorganises the project so its structure reads. |`,
+          `| \`/cleanup\` | The structure is readable and the moves are staged for review — nothing was committed. Next: \`git diff --staged\` to look it over, then \`/createspec "<the first thing you want to change>"\`. |`
+        ].join("\n")
+      : `| \`/sync\` | These documents now describe the code that is really here. Next: \`/createspec "<the first thing you want to change>"\`. |`
     : `| \`/start\` | ${model.name} runs. Next: step 2 of [START_HERE.md](START_HERE.md) — the ${databaseLabel(model)} and ${hostingName(model)} accounts only they can create — or \`/createspec "<your first change>"\` if they would rather build something first. |`;
   // A hidden foundation ships no pipeline, so "wait for the CI check" would name a check that is not
   // this project's. The team's own build is what gates their pull request (spec 187).
@@ -1550,10 +1583,10 @@ function firstStep(model: ProjectModel): string {
     "install page and sign in when it asks; if you already have Node 20 or newer,",
     "`npm install -g @anthropic-ai/claude-code` does the same job.",
     "",
-    ...(shipsCleanup(model)
+    ...(hasExistingCode(model)
       ? [
-          "That is the only thing this guide asks you to install. `/cleanup` installs nothing — it reads",
-          "the project you already have, so whatever builds it today is enough."
+          "That is the only thing this guide asks you to install. Nothing here installs anything else —",
+          "these commands read the project you already have, so whatever builds it today is enough."
         ]
       : [
           "That is the only thing you install by hand. Git, this project's runtime, its package manager",
@@ -1577,20 +1610,25 @@ function firstStep(model: ProjectModel): string {
     "```",
     ""
   ];
-  if (shipsCleanup(model)) {
+  if (hasExistingCode(model)) {
     return [
       ...run,
       `It reads ${model.name} as it actually is — the stack, the structure, the commands that really`,
       "work — and rewrites the documents in this foundation to describe *that* project.",
-      // Only the integrated command sets branches up (spec 91). Hidden's `/cleanup` is forbidden from
-      // creating one — nothing outside the folder may change — so promising it here would be the
-      // first file the founder opens describing something that will not happen (spec 212).
-      ...(branchVocabulary(model) === null
+      // Hidden changes nothing outside its folder, so `/sync` is the whole of its first step. An
+      // integrated import gets a second command, and it is the one with consequences — the founder
+      // must meet it here, in the first file they open, rather than discover it mid-session
+      // (specs 187, 214).
+      ...(shipsCleanup(model)
         ? [
-            "It also creates",
-            "the local branches this workflow runs on, and only the ones you do not have yet. It changes no",
-            "code: not a dependency, not a config file, not a migration. It deletes nothing either, renames no",
-            "file of yours, and touches no remote. It is safe to run again."
+            "It creates no branches, changes no code, deletes nothing and renames nothing. It is safe to",
+            "run again — and worth running again whenever the documents and the code drift apart.",
+            "",
+            "**Then run `/cleanup`.** That one works on the code's shape rather than its documents: it moves",
+            `files until ${model.name}'s structure explains itself, proposes whatever nothing uses, and`,
+            "creates the local branches this workflow runs on. It changes behaviour nowhere, deletes nothing",
+            "without your yes, and **commits nothing** — the whole change is staged for you to read with",
+            "`git diff --staged` and undo with `git restore --staged .`. It touches no remote."
           ]
         : [
             "It creates no branches and changes",
@@ -1631,17 +1669,26 @@ function firstStep(model: ProjectModel): string {
  * The rule in the generated constitution that says where this project's command stops and the spec
  * loop starts (spec 91).
  *
- * Both commands have a ceiling, and they are different ceilings: `/start` may build up to the
- * minimum that runs, `/cleanup` may not touch code at all. A generated repository carrying the wrong
- * one states a rule its own command breaks.
+ * Each command has a ceiling and they are different ceilings: `/start` may build up to the minimum
+ * that runs, `/sync` may not touch code at all, `/cleanup` may move and remove but never change
+ * behaviour. A generated repository carrying the wrong one states a rule its own command breaks.
  */
 function commandRule(model: ProjectModel): string {
-  if (shipsCleanup(model)) {
+  if (hasExistingCode(model)) {
+    const sync = [
+      "- **`/sync` describes, the spec loop builds.** `/sync` reads this project and makes the",
+      "  documents match what is actually here. It changes no code, deletes nothing and creates no",
+      "  branch — that is its ceiling, not a starting budget. Everything that changes the project",
+      "  itself goes through a spec: no spec, no feature."
+    ];
+    if (!shipsCleanup(model)) return sync.join("\n");
     return [
-      "- **`/cleanup` describes, the spec loop builds.** `/cleanup` reads this project and makes the",
-      "  documents match what is actually here. It changes no code and deletes nothing — that is its",
-      "  ceiling, not a starting budget. Everything that changes the project itself goes through a spec:",
-      "  no spec, no feature."
+      ...sync,
+      "- **`/cleanup` moves, it does not rewrite.** `/cleanup` reorganises this project's structure,",
+      "  proposes what nothing uses, and creates the local branches this workflow runs on. Files move",
+      "  and their imports follow; nothing is upgraded, reconfigured or made to behave differently, and",
+      "  nothing is deleted without an explicit yes. It stages its work and never commits it. Changing",
+      "  what the code *does* is a spec, exactly as it is everywhere else."
     ].join("\n");
   }
   return [
@@ -1667,14 +1714,14 @@ function commandRule(model: ProjectModel): string {
  */
 function systemOverviewProvenance(model: ProjectModel): string {
   const base = "A living, high-level map of the system. Keep it short and current.";
-  if (!shipsCleanup(model)) return base;
+  if (!hasExistingCode(model)) return base;
   return [
     base,
     "",
     "> **Written from the interview, not from the code.** Nobody read this codebase to produce this",
     "> document: the import analysis reads manifest files — names and versions — and the rest is what",
     "> you confirmed in the interview. Treat everything below as a claim to check rather than a",
-    "> description of what is there. `/cleanup` reads the project and rewrites this document to match it."
+    "> description of what is there. `/sync` reads the project and rewrites this document to match it."
   ].join("\n");
 }
 
@@ -1688,7 +1735,7 @@ function systemOverviewProvenance(model: ProjectModel): string {
  * `DEVELOPER_GUIDE.md` already says "note known pre-existing failures"; this file did not.
  */
 function verificationBarClaim(model: ProjectModel): string {
-  if (!shipsCleanup(model)) {
+  if (!hasExistingCode(model)) {
     return [
       "If all four are clean, the foundation is working. This is the **verification bar** — every change you",
       "make from here has to pass it before it merges."
@@ -1701,7 +1748,7 @@ function verificationBarClaim(model: ProjectModel): string {
     "",
     "That set is the **verification bar** — every change you make from here has to leave it no worse than",
     "you found it. If any of the four does not exist in this project, say so rather than inventing one;",
-    "`/cleanup` rewrites these documents to name the commands that are really here."
+    "`/sync` rewrites these documents to name the commands that are really here."
   ].join("\n");
 }
 
@@ -1715,7 +1762,7 @@ function verificationBarClaim(model: ProjectModel): string {
  * know, beats a one-line instruction that skips the part where it fails.
  */
 function setupSection(model: ProjectModel, summary: string, commands: Commands): string {
-  if (!shipsCleanup(model)) {
+  if (!hasExistingCode(model)) {
     return ["## Setup", "```bash", `${commands.CMD_DEV}        # start the dev server`, "```", summary].join(
       "\n"
     );
@@ -1736,7 +1783,7 @@ function setupSection(model: ProjectModel, summary: string, commands: Commands):
     "",
     `${summary}`,
     "",
-    "`/cleanup` checks that line and the ones below against the repository, and rewrites them where they",
+    "`/sync` checks that line and the ones below against the repository, and rewrites them where they",
     "are wrong. Until it has run, treat every command in these documents as a claim rather than a fact.",
     "",
     "**Getting to a deployed product**, below, is still worth reading end to end: it is written for a",
@@ -1814,11 +1861,11 @@ function docsIndexIntro(model: ProjectModel): string {
  * may well end up renaming over their own — which stays their decision, exactly as spec 91 has it.
  */
 function readmeTitle(model: ProjectModel): string {
-  return shipsCleanup(model) ? `# ${model.name} — the engineering foundation` : `# ${model.name}`;
+  return hasExistingCode(model) ? `# ${model.name} — the engineering foundation` : `# ${model.name}`;
 }
 
 function readmeOrientation(model: ProjectModel): string {
-  if (!shipsCleanup(model)) {
+  if (!hasExistingCode(model)) {
     return [
       "> **New here? Start with [START_HERE.md](START_HERE.md)** — setup, the first spec, and the loop you",
       "> repeat from then on."
@@ -1832,7 +1879,7 @@ function readmeOrientation(model: ProjectModel): string {
     `> **This describes the foundation, not the codebase.** ${where}`,
     "> What landed here is the workflow, the rules and the documents the project is worked on *through*.",
     ">",
-    "> **Start with [START_HERE.md](START_HERE.md)**, then run `/cleanup` — it reads the code that is",
+    "> **Start with [START_HERE.md](START_HERE.md)**, then run `/sync` — it reads the code that is",
     "> actually here and rewrites these documents to describe it."
   ].join("\n");
 }
@@ -1859,13 +1906,13 @@ function readmeWorkflowPointer(model: ProjectModel): string {
  * is already built.
  */
 function firstSessionIntro(model: ProjectModel): string {
-  return shipsCleanup(model)
+  return hasExistingCode(model)
     ? "**First session in this foundation? Type one of these. That is the whole of it.**"
     : "**New to this project? Type one of these. That is the whole first session.**";
 }
 
 function productHeading(model: ProjectModel): string {
-  return shipsCleanup(model) ? "What this is" : "What we're building";
+  return hasExistingCode(model) ? "What this is" : "What we're building";
 }
 
 /**
@@ -1880,7 +1927,7 @@ function productHeading(model: ProjectModel): string {
  * anyone reads and its columns line up in the source.
  */
 function firstSessionStepTwo(model: ProjectModel): string {
-  return shipsCleanup(model)
+  return hasExistingCode(model)
     ? `| 2    | "read START_HERE.md and walk me through it" | What this workflow still needs from your accounts        |`
     : `| 2    | "read START_HERE.md and walk me through it" | The accounts only you can create — one at a time, in order       |`;
 }
@@ -1928,13 +1975,13 @@ function readFirst(model: ProjectModel): string {
 }
 
 /**
- * What `/cleanup` must treat as unverified (spec 91).
+ * What `/sync` must treat as unverified (specs 91, 214).
  *
  * These documents were written from an interview, and the interview was prefilled by a deterministic
  * import analysis that reads manifests — not by reading the code. Every stack claim in them is
- * therefore a hypothesis, and saying so is what turns `/cleanup` from a proofreader into a check.
+ * therefore a hypothesis, and saying so is what turns `/sync` from a proofreader into a check.
  */
-function cleanupClaim(commands: Commands, stackName: string): string {
+function syncClaim(commands: Commands, stackName: string): string {
   const { CMD_DEV, CMD_BUILD, CMD_TYPECHECK, CMD_LINT, CMD_TEST } = commands;
   return [
     "These documents were written from an interview about this project, not from reading it. They",
@@ -1950,13 +1997,13 @@ function cleanupClaim(commands: Commands, stackName: string): string {
 }
 
 /**
- * Which files `/cleanup` may rewrite (spec 91).
+ * Which files `/sync` may rewrite (specs 91, 214).
  *
  * Stated as a rule with examples rather than a fixed list, so it cannot drift from what the template
  * actually ships. The exclusions are the load-bearing half: the founder's own documents are theirs,
  * and a command allowed to rewrite the constitution is a command that can widen its own limits.
  */
-function cleanupScope(model: ProjectModel): string {
+function syncScope(model: ProjectModel): string {
   const folder = hiddenFolder(model);
   if (folder !== null) {
     return [
@@ -1995,23 +2042,22 @@ function cleanupScope(model: ProjectModel): string {
 }
 
 /**
- * What `/cleanup` is allowed to touch, which is the whole difference between the two layouts
- * (spec 187).
+ * What `/sync` is looking at, which is the whole difference between the two layouts (spec 187).
  *
  * Integrated, it works across the founder's tree: documents that arrived beside theirs, the branch
- * model, the instruction files they accumulated. Hidden, the foundation lives in one folder that git
- * ignores, and the point of the mode is that nothing outside it changes — so the command's job stops
- * at the folder's edge and turns into making sure what is inside it actually works.
+ * model they already use, the instruction files they accumulated. Hidden, the foundation lives in one
+ * folder that git ignores, and the point of the mode is that nothing outside it changes — so the
+ * command's job stops at the folder's edge and turns into making sure what is inside it works.
  */
-function cleanupMode(model: ProjectModel): string {
+function syncMode(model: ProjectModel): string {
   const folder = hiddenFolder(model);
   if (folder === null) {
     return [
       "**Where this foundation shipped a document the project already had**, both are on disk — theirs",
       "at its own path, this foundation's beside it as `.airrow` (section 4).",
       "",
-      "It does create the local branches this workflow runs on (section 5) — never renaming or deleting",
-      "one, never rewriting history, never pushing."
+      "**Nothing about the repository changes here.** The branches this workflow runs on are `/cleanup`'s",
+      "to create; this command reads what exists and writes it into the documents (section 5)."
     ].join("\n");
   }
   return [
@@ -2025,7 +2071,12 @@ function cleanupMode(model: ProjectModel): string {
     "",
     "**The branch model is already theirs.** Do not create `develop`, do not create a `feature/`",
     "branch, do not touch the trunk. This project has a workflow and a team using it; the foundation",
-    "adapts to that, not the other way round."
+    "adapts to that, not the other way round.",
+    "",
+    `**One exception, and only this one:** the ignore rule that keeps \`${folder}/\` out of the`,
+    "repository (section 4). It is written to `.git/info/exclude`, which is per-clone — never",
+    "committed, never pushed, invisible to everyone else. That is the single thing this command writes",
+    "outside its own documents, and it exists to make sure nothing else ever does."
   ].join("\n");
 }
 
@@ -2069,12 +2120,12 @@ function branchVocabulary(model: ProjectModel): BranchVocabulary | null {
   // two named — which is worth knowing — and told us nothing more. Quoting an empty answer would
   // print a dangling colon, and filling the gap would invent the very hierarchy this branch exists to
   // avoid asserting. So the document describes what the workflow needs and leaves the model to
-  // `/cleanup`, which can read the branches that actually exist.
+  // `/sync`, which can read the branches that actually exist.
   const described = model.branching.describedByFounder;
   if (described === "") {
     return {
       shape: "Each spec gets its own branch, cut and named the way this project already works — which is not a shape this foundation was told, so it names none.",
-      destination: "It merges back however work here merges. `/cleanup` reads the branches this repository actually has and writes them into this document."
+      destination: "It merges back however work here merges. `/sync` reads the branches this repository actually has and writes them into this document."
     };
   }
   return {
@@ -2355,7 +2406,7 @@ function branchModelSection(model: ProjectModel, vocab: ProviderVocabulary): str
     "`/pr-check` checks it merges cleanly into whatever it targets, and `/push` refuses to push a branch",
     "everyone shares. Those three fit inside any branch model; none of them requires this one.",
     "",
-    "If the branches this document names are not the ones this repository uses, `/cleanup` rewrites it to",
+    "If the branches this document names are not the ones this repository uses, `/sync` rewrites it to",
     "match the repository — the repository is right, always."
   ].join("\n");
 }
@@ -2407,12 +2458,12 @@ function branchingCiSection(model: ProjectModel, vocab: ProviderVocabulary): str
 /**
  * Section 3's command bullets — where the two layouts disagree about whether a pipeline exists.
  *
- * Integrated, `/cleanup` has to reconcile the documents *and* flag a CI file it may not edit
+ * Integrated, `/sync` has to reconcile the documents *and* flag a CI file it may not edit
  * (spec 91's manual-run finding). Hidden ships no CI at all, so the same paragraph would send the
  * assistant looking for a file this foundation deliberately did not deliver — and the honest
  * instruction is the opposite one: the team's pipeline is theirs, so leave it alone.
  */
-function cleanupCommandsRule(model: ProjectModel, ciFile: string, commands: Commands): string {
+function syncCommandsRule(model: ProjectModel, ciFile: string, commands: Commands): string {
   const { CMD_DEV, CMD_BUILD, CMD_TYPECHECK, CMD_LINT, CMD_TEST } = commands;
   const named = `\`${CMD_DEV}\`, \`${CMD_BUILD}\`, \`${CMD_TYPECHECK}\`, \`${CMD_LINT}\` and\n  \`${CMD_TEST}\``;
   if (hiddenFolder(model) !== null) {
@@ -2441,7 +2492,10 @@ function cleanupCommandsRule(model: ProjectModel, ciFile: string, commands: Comm
 }
 
 /**
- * Sections 4–6 as they have always read, for a foundation that takes the tree as its own (spec 91).
+ * Sections 4–6 for a foundation that takes the tree as its own (spec 91).
+ *
+ * Section 5 used to create the branch model; under spec 214 it reads it and writes what it found into
+ * the documents, because creating a branch is a mutation and `/cleanup` owns those now.
  *
  * `ciFile` is interpolated here rather than left as a `{{CI_FILE}}` token: substitution is one pass
  * over the template, so a token inside a substituted value is never reached and would ship to the
@@ -2484,33 +2538,31 @@ pipeline sitting next to theirs is worse than none. If this foundation's \`${ciF
 while the project has its own, that is why. Say so in the report, alongside the command mismatch from
 section 3, and leave the founder to decide.
 
-## 5. The branch model
+## 5. The branch model, as it actually is
 
 The workflow this foundation ships runs on branches — \`/createspec\` cuts one, \`/pr-check\` opens a
-pull request into the one above it, and the CI and deploy rules key off their names. An imported
-project usually arrives without them, so set them up. Locally, and only what is missing.
+pull request into the one above it, and the CI and deploy rules key off their names.
+[BRANCHING.md](../../docs/architecture/BRANCHING.md) and \`CLAUDE.md\` were written around \`main\`,
+which is an assumption, not an observation.
 
-1. **No \`.git\` here at all?** Then \`git init -b main\`, stage everything and make the first commit —
-   this project as it stands today, before anything else happens. Say in your report exactly what
-   went into it.
-2. **Find the trunk**, if there is a repository already: the branch that is checked out, or what
-   \`git symbolic-ref refs/remotes/origin/HEAD\` reports. **Do not rename it.** A trunk called
-   \`master\` stays \`master\`: renaming it breaks branch protection, open pull requests and every CI
-   trigger pointing at the old name, and none of that is yours to break.
-3. **Create what is missing**, and nothing else: \`develop\` from the trunk, then the first
-   \`feature/<name>\` from \`develop\` — see [BRANCHING.md](../../docs/architecture/BRANCHING.md). A
-   branch that already exists is left exactly where it is.
-4. **Make the documents say the real name.** [BRANCHING.md](../../docs/architecture/BRANCHING.md)
-   and \`CLAUDE.md\` are written around \`main\`. If this project's trunk is called something else,
-   rewrite them to name the branch that exists — the *shape* is the rule
-   (trunk ← \`develop\` ← \`feature/<name>\` ← issue branch), the trunk's name is a fact about this
-   repository.
+**Look, then write down what you saw. Create nothing.**
 
-**The limits are the same as everywhere else in this command.** No remote: no \`push\`, no
-\`remote add\`, no branch created anywhere but here. No history rewritten — never \`rebase\`, never
-\`reset --hard\`, never \`--force\`. No branch renamed and none deleted. And do not commit the founder's
-working tree beyond the one first commit in case 1: whatever is uncommitted is theirs to look at
-before it goes in.
+1. **Find the trunk**: the branch that is checked out, or what
+   \`git symbolic-ref refs/remotes/origin/HEAD\` reports. Then \`git branch -a\` for what else exists.
+2. **Make the documents say the real name.** If this project's trunk is called \`master\`, the
+   documents say \`master\`. The *shape* is the rule (trunk ← \`develop\` ← \`feature/<name>\` ← issue
+   branch); the trunk's name is a fact about this repository, and where the two disagree the
+   repository is right.
+3. **Say which of them do not exist yet.** \`develop\` and the first \`feature/<name>\` usually do not.
+   Name them in your report as missing — do not create them, and do not rename anything to make the
+   documents true. **\`/cleanup\` creates the branches**; this command only describes them.
+4. **No \`.git\` here at all?** Then there is no branch model to read. Say so, leave the documents'
+   default shape in place, and note that \`/cleanup\` is where a repository gets initialised — never
+   run \`git init\` from here.
+
+**The limits are the same as everywhere else in this command.** No branch created, renamed or
+deleted. No remote: no \`push\`, no \`remote add\`. No history rewritten, and nothing committed — the
+founder's working tree is theirs.
 
 ## 6. Old assistant instructions
 
@@ -2532,7 +2584,7 @@ and say the original is now redundant. The founder decides what to remove.`;
  * different jobs here, and interleaving them would produce a command whose reader has to work out
  * which half applies to them before they can follow either.
  */
-function cleanupRepoWork(model: ProjectModel, ciFile: string): string {
+function syncRepoWork(model: ProjectModel, ciFile: string): string {
   const folder = hiddenFolder(model);
   if (folder === null) return integratedRepoWork(ciFile);
   return [
@@ -2596,14 +2648,15 @@ function cleanupRepoWork(model: ProjectModel, ciFile: string): string {
   ].join("\n");
 }
 
-/** Report items 3–5, which name the work `cleanupRepoWork` actually did (spec 187). */
-function cleanupReportItems(model: ProjectModel): string {
+/** Report items 3–5, which name the work `syncRepoWork` actually did (spec 187). */
+function syncReportItems(model: ProjectModel): string {
   if (hiddenFolder(model) === null) {
     return [
       "3. Which `.airrow` files you tailored, what you carried across from the founder's version, and that",
       "   renaming one over their own is theirs to do.",
-      "4. Which branches existed already and which you created, and — if the trunk is not `main` — that the",
-      "   documents now name the branch this repository actually has.",
+      "4. Which branches this repository has, which ones the workflow still needs, and — if the trunk is",
+      "   not `main` — that the documents now name the branch it actually has. You created none of them:",
+      "   say that too, and that `/cleanup` is what does.",
       "5. Which old instruction files you found, and what you recommend for each."
     ].join("\n");
   }
@@ -2615,6 +2668,117 @@ function cleanupReportItems(model: ProjectModel): string {
     "4. That nothing outside the folder was changed, and that you checked rather than assumed.",
     "5. Where the founder should start an assistant session for the commands to be found, and what a",
     "   session at the repository root would miss."
+  ].join("\n");
+}
+
+/**
+ * How long `CLAUDE.md`'s first-run row stays relevant (spec 214).
+ *
+ * Greenfield, the answer is a file: `/start` removes itself, so its absence is what tells an
+ * assistant this project is past that step. The greenfield string is reproduced byte for byte,
+ * line breaks included, because it renders into a paragraph whose wrapping is part of the file.
+ *
+ * An import is two commands with different lifetimes — `/sync` is permanent and `/cleanup` is the one
+ * that disappears — so "while the file exists" would be answering about the wrong one. Hidden ships
+ * only the permanent half, and the honest thing to say there is that it never stops applying.
+ */
+function firstCommandLifetime(model: ProjectModel): string {
+  if (!hasExistingCode(model)) {
+    return [
+      `\`${commandName(model)}\` only applies while`,
+      `\`${commandPaths(model)[0]}\` still exists; when it does not, this project is past that step and step 3 is`,
+      "where a founder starts."
+    ].join("\n");
+  }
+  if (!shipsCleanup(model)) {
+    return [
+      "`/sync` does not expire — it is how the documents are brought back in line whenever they and the",
+      "code drift apart, and it is worth offering whenever that shows."
+    ].join("\n");
+  }
+  return [
+    "`/sync` does not expire — it is how the documents are brought back in line whenever they and the",
+    "code drift apart. `/cleanup` does: it removes itself once it has run, so if",
+    "`.claude/commands/cleanup.md` is gone, this project has already been reorganised and step 3 is",
+    "where a founder starts."
+  ].join("\n");
+}
+
+/**
+ * Where `/sync` sends the founder when it finishes (spec 214).
+ *
+ * Integrated, that is `/cleanup` — the second half of the first session, and the founder has no other
+ * way to learn it is their turn. Hidden ships no `/cleanup`, so the next step is the same one it has
+ * always been: the accounts in `START_HERE.md` that only a human can create.
+ */
+function syncNext(model: ProjectModel): string {
+  if (!shipsCleanup(model)) {
+    return [
+      "Then point the founder at step 2 of [START_HERE.md](../../START_HERE.md): the accounts and",
+      "services only they can create."
+    ].join("\n");
+  }
+  return [
+    "**Then tell them what comes next: `/cleanup`.** This command made the documents describe the",
+    "code; that one works on the code's shape — moving files until the structure explains itself,",
+    "proposing whatever nothing uses, and creating the local branches this workflow runs on. It reads",
+    "the map you just wrote, so it has to run after this. Say in one line that it stages everything and",
+    "commits nothing, so they know what they are agreeing to.",
+    "",
+    "After that comes step 2 of [START_HERE.md](../../START_HERE.md): the accounts and services only",
+    "they can create."
+  ].join("\n");
+}
+
+/**
+ * The layout `/cleanup` moves this project toward — its own ecosystem's, never Airrow's (spec 214).
+ *
+ * The rule the founder was promised is a structure someone else could read, and what "readable"
+ * means is not ours to define for a stack we did not choose: a Django project laid out like a Next.js
+ * one is worse than the mess it replaced, because now it is wrong in a way that looks deliberate. So
+ * this names the conventions for the frameworks we actually know, and for anything else says plainly
+ * that there is no convention to apply — which is the honest answer and the safe one.
+ */
+function cleanupLayout(model: ProjectModel): string {
+  if (isCustomStack(model)) {
+    return [
+      "This project's stack was described rather than chosen from a list, so this foundation has no",
+      "layout to hold it to. **Read the ecosystem's own conventions from the project itself** — its",
+      "framework's documented structure, what the existing folders already imply, how comparable",
+      "projects in this language are laid out — and follow that.",
+      "",
+      "If you cannot establish a convention with confidence, **move nothing**. Report what looked",
+      "disorganised, say why you did not act on it, and leave the decision with the founder. A layout",
+      "nobody in this ecosystem uses is worse than the one that is already here."
+    ].join("\n");
+  }
+  const nextjs = model.stack.framework === "nextjs";
+  return [
+    `The conventions below are ${nextjs ? "Next.js" : "Vite + React"}'s own — what someone who knows this`,
+    "stack expects to find, and where:",
+    "",
+    ...(nextjs
+      ? [
+          "- `app/` — routes and layouts, and nothing that is not one. It is the router; a helper living",
+          "  here is a helper nobody will find.",
+          "- `src/components/` — shared presentational components. `src/components/ui/` for the primitives",
+          "  everything else is built from, if the project has them.",
+          "- `src/lib/` — code with no UI: clients, helpers, pure logic.",
+          "- `src/features/<name>/` — where a slice of the product owns its own components, queries and",
+          "  actions together. Worth doing when a feature has more than a couple of files."
+        ]
+      : [
+          "- `src/routes/` or `src/pages/` — whichever this project already uses. Do not introduce the",
+          "  other one.",
+          "- `src/components/` — shared presentational components, with the primitives grouped under it.",
+          "- `src/lib/` — code with no UI: clients, helpers, pure logic.",
+          "- `src/features/<name>/` — a slice of the product owning its own components and state."
+        ]),
+    "- `public/` — static assets served as-is.",
+    "- Tests beside the code they cover, matching the test runner's glob so they actually run.",
+    "",
+    "Where this project already uses a different convention **consistently**, that is the convention —",
+    "follow it. Consistency someone can rely on beats being right in the abstract."
   ].join("\n");
 }
 
@@ -2702,13 +2866,13 @@ export function deriveScaffoldValues(
     UI_DESIGN_LANGUAGE: uiDesignLanguage(model),
     INFRASTRUCTURE_SETUP: infrastructureSetup(model),
     FIRST_COMMAND: commandName(model),
-    FIRST_COMMAND_PATH: commandPath(model),
+    FIRST_COMMAND_LIFETIME: firstCommandLifetime(model),
     FIRST_COMMAND_EFFECT: firstCommandEffect(model),
     AFTER_EACH_COMMAND: afterEachCommand(model),
     FIRST_STEP: firstStep(model),
     COMMAND_RULE: commandRule(model),
-    CLEANUP_CLAIM: cleanupClaim(command, stackName),
-    CLEANUP_SCOPE: cleanupScope(model),
+    SYNC_CLAIM: syncClaim(command, stackName),
+    SYNC_SCOPE: syncScope(model),
     // `/security` reviews the whole repository, so it still has a pipeline to look at in hidden
     // mode — the project's own. What it must not do is name a path this foundation never shipped.
     CI_TARGET:
@@ -2754,10 +2918,12 @@ export function deriveScaffoldValues(
       hiddenFolder(model) === null
         ? "spec workflow, constitution, branch model, CI"
         : "spec workflow, constitution, branch model",
-    CLEANUP_MODE: cleanupMode(model),
-    CLEANUP_COMMANDS_RULE: cleanupCommandsRule(model, vocab.ciFile, command),
-    CLEANUP_REPO_WORK: cleanupRepoWork(model, vocab.ciFile),
-    CLEANUP_REPORT_ITEMS: cleanupReportItems(model),
+    SYNC_MODE: syncMode(model),
+    SYNC_COMMANDS_RULE: syncCommandsRule(model, vocab.ciFile, command),
+    SYNC_REPO_WORK: syncRepoWork(model, vocab.ciFile),
+    SYNC_REPORT_ITEMS: syncReportItems(model),
+    SYNC_NEXT: syncNext(model),
+    CLEANUP_LAYOUT: cleanupLayout(model),
     FIRST_SPEC_HINT: firstSpecHint(model),
     DEPLOY_TARGET: hosting,
     CI_SETUP_STEPS: ciSetupSteps(model, stackName, inferred),
@@ -2902,7 +3068,7 @@ function capabilityScope(model: ProjectModel): string {
  * generic-but-plausible output §0 calls a top-severity bug.
  */
 function capabilitySpecsIntro(model: ProjectModel): string {
-  if (!shipsCleanup(model)) {
+  if (!hasExistingCode(model)) {
     return [
       "## What to spec first",
       "These are the capabilities chosen in the interview. Each one is a spec waiting to be written — run",
@@ -2920,8 +3086,8 @@ function capabilitySpecsIntro(model: ProjectModel): string {
 
 function capabilitySpecs(model: ProjectModel): string {
   if (model.features.length === 0) {
-    return shipsCleanup(model)
-      ? "No capabilities were confirmed in the interview, so there is nothing listed here — which says\nnothing about what the project does. `/cleanup` reads the code and can fill this in."
+    return hasExistingCode(model)
+      ? "No capabilities were confirmed in the interview, so there is nothing listed here — which says\nnothing about what the project does. `/sync` reads the code and can fill this in."
       : "No platform capabilities were selected. Spec the core product flow first — see `docs/VISION.md`.";
   }
   return model.features.map((f) => `### ${featureLabel[f]}\n${capabilitySpecBrief(f, model)}`).join("\n\n");
@@ -3034,7 +3200,7 @@ function setupSteps(model: ProjectModel, stackName: string): string {
   // A project that already runs has an environment file of its own, and `.env.example` is written by
   // `/start` — which an imported project never runs. Naming a file that will not be there is the
   // defect spec 66 was written to fix, so the instruction is about values, not about a file.
-  const imported = shipsCleanup(model);
+  const imported = hasExistingCode(model);
   if (usesSupabase(model)) {
     steps.push(
       imported
@@ -3057,7 +3223,7 @@ function setupSteps(model: ProjectModel, stackName: string): string {
   steps.push(...repoSetupSteps(model, 4));
   // A project that already runs has its runtime installed — that is how it runs. The step only
   // exists because `/start` cannot install a toolchain it was never told the name of.
-  if (isCustomStack(model) && !shipsCleanup(model)) {
+  if (isCustomStack(model) && !hasExistingCode(model)) {
     // The one machine-level step /start could not spell out, because nothing here knows this stack.
     // Numbered off the list length: the provider steps above differ in count between GitHub and
     // Azure DevOps, and a hardcoded number was wrong the moment that stopped being fixed.
@@ -3093,10 +3259,11 @@ function repoSetupSteps(model: ProjectModel, from: number): string[] {
       `${n(2)}. ${cliSetupStep(model)}`
     ];
   }
-  // An imported project already has its code somewhere, and `/cleanup` initialises nothing — so the
-  // instruction is to make the branch model true where the code already lives, not to push a
-  // `develop` branch a command created.
-  const imported = shipsCleanup(model);
+  // An imported project already has its code somewhere, so the instruction is to push this
+  // foundation to the repository that holds it rather than to create an empty one. Only the
+  // integrated layout reaches here, and it is the layout where `/cleanup` created that `develop`
+  // branch (spec 214) — hidden returned above, having no repository work of its own to describe.
+  const imported = hasExistingCode(model);
   const hostStep = usesAzureRepos(model)
     ? imported
       ? "In **Azure DevOps**, create a project for the repository your code already lives in, then push this foundation alongside the code — including the `develop` branch `/cleanup` created."

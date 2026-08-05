@@ -15,7 +15,7 @@ import type {
 } from "../../schemas/src/authoring.ts";
 import {
   ENGINE_VERSION,
-  commandPath,
+  commandPaths,
   deliveredPath,
   resolveProjectModel,
   slugify
@@ -27,14 +27,18 @@ import type { TemplateFile } from "./scaffold.ts";
 
 export { ENGINE_VERSION, resolveProjectModel, slugify };
 export {
-  commandFor,
   commandName,
   commandPath,
+  commandPaths,
   deliveredPath,
+  firstCommand,
+  firstRunCommands,
+  hasExistingCode,
   hiddenFolder,
   hiddenFolderFrom,
   shipsCleanup
 } from "./model.ts";
+export type { FirstRunCommand } from "./model.ts";
 export type { ResolveInput };
 
 export { renderScaffold, deriveScaffoldValues, shipsPath } from "./scaffold.ts";
@@ -104,10 +108,11 @@ function validate(files: GeneratedFile[], model: ProjectModel): void {
     // Unlike the first-run command below there is no alternative to pair it with: a project that
     // began from nothing and one that arrived with years of code both have holes to find.
     ".claude/commands/security.md",
-    // The one first-run command this project's origin calls for — `/start` for a project beginning
-    // from nothing, `/cleanup` for one that already has code (spec 91). Without it the foundation is
-    // documents describing a command that does not exist (spec 66).
-    commandPath(model)
+    // The first-run commands this project's origin calls for — `/start` for a project beginning from
+    // nothing, `/sync` (and `/cleanup`, unless the delivery is hidden) for one that already has code
+    // (specs 91, 214). Without them the foundation is documents describing commands that do not
+    // exist (spec 66).
+    ...commandPaths(model)
   ];
 
   for (const f of files) {

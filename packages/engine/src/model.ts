@@ -113,8 +113,8 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
   const standard = STANDARD_STACK[productType];
   const framework: Framework = a.framework ?? standard.framework;
 
-  // Same test `commandFor` applies to the finished model, asked here because `uiKit` is resolved
-  // before there is a model to ask.
+  // Same test `hasExistingCode` applies to the finished model, asked here because `uiKit` is
+  // resolved before there is a model to ask.
   // An origin with no delivery is normalised here rather than trusted to arrive complete: the field
   // is newer than the callers (spec 187), and every import that predates it was delivered
   // integrated — so the fill-in is what actually happened, not a guess. Doing it once, at the only
@@ -290,21 +290,51 @@ export function isCustomStack(m: ProjectModel): boolean {
   return m.stack.framework === "custom";
 }
 
+/** A command a founder runs once, before the spec loop takes over (specs 91, 214). */
+export type FirstRunCommand = "start" | "sync" | "cleanup";
+
 /**
- * The one command this foundation ships, and the only place that decision is made (spec 91).
+ * The first-run commands this foundation ships, and the only place that decision is made
+ * (specs 91, 214).
  *
- * `/start` scaffolds a stack and takes the project to the bare minimum that runs; `/cleanup` reads
- * the stack that is already there and rewrites the documents to match it. Shipping both would hand a
- * founder two commands with opposite assumptions about their repository, so a foundation gets
- * exactly one — and an import with no code in it gets `/start`, because there is nothing to read.
+ * Three sets, one per kind of project:
+ *
+ * - **From nothing** — `/start` alone. It scaffolds a stack and takes the project to the bare
+ *   minimum that runs. An import with no code in it lands here too: there is nothing to read.
+ * - **Existing code, integrated** — `/sync` then `/cleanup`. One reads the project and writes the
+ *   documents from it; the other reorganises the tree and clears out what nothing uses. They are
+ *   split along observing versus mutating, which is what makes each explainable in a sentence.
+ * - **Existing code, hidden** — `/sync` alone. Restructuring a repository the team shares is the one
+ *   thing this layout exists to never do (spec 187), so the mutating half does not ship.
+ *
+ * `/start` is never paired with either: a repository holding both would be a repository where one of
+ * them is wrong about whether a stack exists, and nothing in it says which.
  */
-export function commandFor(m: ProjectModel): "start" | "cleanup" {
-  return m.origin.kind === "imported" && m.origin.stackDetected ? "cleanup" : "start";
+export function firstRunCommands(m: ProjectModel): FirstRunCommand[] {
+  if (!hasExistingCode(m)) return ["start"];
+  return hiddenFolder(m) === null ? ["sync", "cleanup"] : ["sync"];
 }
 
-/** Where that command lives in the generated repository, before the layout is applied. */
+/**
+ * The command that opens the first session — the one the documents tell the founder to type.
+ *
+ * `firstRunCommands` is ordered, and the order is the sequence: `/cleanup` reads what `/sync` wrote,
+ * so `/sync` is what a founder starts with wherever both ship.
+ */
+export function firstCommand(m: ProjectModel): FirstRunCommand {
+  // `firstRunCommands` never returns an empty set — every branch of it names at least one command —
+  // but the index signature cannot say so, and defaulting is cheaper than a non-null assertion.
+  return firstRunCommands(m)[0] ?? "start";
+}
+
+/** Where those commands live in the generated repository, before the layout is applied. */
+export function commandPaths(m: ProjectModel): string[] {
+  return firstRunCommands(m).map((c) => `.claude/commands/${c}.md`);
+}
+
+/** Where the first of them lives — for the documents that name a file rather than a command. */
 export function commandPath(m: ProjectModel): string {
-  return `.claude/commands/${commandFor(m)}.md`;
+  return `.claude/commands/${firstCommand(m)}.md`;
 }
 
 /**
@@ -341,7 +371,7 @@ export function deliveredPath(m: ProjectModel, path: string): string {
 
 /** The command as the founder types it — for the documents that tell them to run it. */
 export function commandName(m: ProjectModel): string {
-  return `/${commandFor(m)}`;
+  return `/${firstCommand(m)}`;
 }
 
 /**
@@ -359,11 +389,25 @@ export function coreAction(m: ProjectModel): string {
 /**
  * True when this foundation lands in a codebase that already exists.
  *
- * Asked through `commandFor` rather than `origin.kind`: an import with nothing but documents in it
- * has no existing codebase to describe, so every document should read as it does for a new project.
+ * Asked through the origin rather than through what ships: an import with nothing but documents in
+ * it has no existing codebase to describe, so every document should read as it does for a new
+ * project. This is the question almost all document wording keys off.
+ */
+export function hasExistingCode(m: ProjectModel): boolean {
+  return m.origin.kind === "imported" && m.origin.stackDetected;
+}
+
+/**
+ * True when this foundation ships `/cleanup` — which is *not* the same as arriving at existing code
+ * (spec 214).
+ *
+ * A hidden delivery has all the code in the world and still ships no `/cleanup`, because
+ * restructuring a repository the team shares is the change that layout promises never to make. The
+ * distinction matters wherever a document names the command rather than describing the project:
+ * naming it in a hidden foundation would point the founder at a file that was never delivered.
  */
 export function shipsCleanup(m: ProjectModel): boolean {
-  return commandFor(m) === "cleanup";
+  return firstRunCommands(m).includes("cleanup");
 }
 
 /**
