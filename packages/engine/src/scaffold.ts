@@ -29,6 +29,7 @@ import {
   hiddenFolder,
   hostingName,
   isCustomStack,
+  isImport,
   productTypeName,
   repoLabel,
   shipsCleanup,
@@ -1438,7 +1439,11 @@ function verifyEndToEndSection(model: ProjectModel): string {
   const deployLine =
     model.hosting === "self_host"
       ? "3. Deploy to your server and confirm the app reaches it."
-      : "3. Merge, or push to `develop` per your deploy workflow — a preview or DEV deployment should appear within a few minutes.";
+      : // `develop` is this foundation's branch, and a hidden delivery does not have one — the deploy
+        // that matters there is whatever this project already does with a merged branch (spec 212).
+        branchVocabulary(model) === null
+        ? "3. Merge, or push to `develop` per your deploy workflow — a preview or DEV deployment should appear within a few minutes."
+        : "3. Merge it the way this project merges — whatever deploy that triggers here is this project's own, and this foundation neither set it up nor changes it.";
   // A hidden foundation ships no pipeline, so "CI should go green" would be a step the founder
   // cannot take. Their team's own build is what runs on that pull request (spec 187).
   const ciLine =
@@ -1504,9 +1509,20 @@ function afterEachCommand(model: ProjectModel): string {
     `| \`/pr-check\` | ${merge} |`,
     "| `/security` | The findings are in `SECURITY_AUDIT.md`, which is gitignored and stays on this machine. Next: read **Needs you, outside the code** — those are theirs to decide, and anything that changes behaviour goes through `/createspec` like everything else. |",
     "",
-    `After that merge the issue branch is finished. The same route takes the work the rest of the way:`,
-    "`feature/<name>` → `develop` → `main`, one pull request each, never skipped — and the next change",
-    "starts at `/createspec` again.",
+    // The route home is this foundation's only where this foundation's branch model applies. A hidden
+    // one describes the team's, and naming `feature/<name> → develop → main` there would be an
+    // instruction about branches it promised not to touch (spec 212).
+    ...(branchVocabulary(model) === null
+      ? [
+          `After that merge the issue branch is finished. The same route takes the work the rest of the way:`,
+          "`feature/<name>` → `develop` → `main`, one pull request each, never skipped — and the next change",
+          "starts at `/createspec` again."
+        ]
+      : [
+          "After that merge the spec's branch is finished, and the work carries on the way it always does",
+          "here — this project's own route to production, which this foundation neither sets nor changes.",
+          "The next change starts at `/createspec` again."
+        ]),
     "",
     "If a command failed or stopped early, say what would unblock it instead. Never point at the next",
     "step of a step that did not finish."
@@ -1565,10 +1581,23 @@ function firstStep(model: ProjectModel): string {
     return [
       ...run,
       `It reads ${model.name} as it actually is — the stack, the structure, the commands that really`,
-      "work — and rewrites the documents in this foundation to describe *that* project. It also creates",
-      "the local branches this workflow runs on, and only the ones you do not have yet. It changes no",
-      "code: not a dependency, not a config file, not a migration. It deletes nothing either, renames no",
-      "file of yours, and touches no remote. It is safe to run again.",
+      "work — and rewrites the documents in this foundation to describe *that* project.",
+      // Only the integrated command sets branches up (spec 91). Hidden's `/cleanup` is forbidden from
+      // creating one — nothing outside the folder may change — so promising it here would be the
+      // first file the founder opens describing something that will not happen (spec 212).
+      ...(branchVocabulary(model) === null
+        ? [
+            "It also creates",
+            "the local branches this workflow runs on, and only the ones you do not have yet. It changes no",
+            "code: not a dependency, not a config file, not a migration. It deletes nothing either, renames no",
+            "file of yours, and touches no remote. It is safe to run again."
+          ]
+        : [
+            "It creates no branches and changes",
+            "nothing outside this folder — not a dependency, not a config file, not a document of your",
+            "team's. It deletes nothing, renames no file of yours, and touches no remote. It is safe to run",
+            "again."
+          ]),
       "",
       "When it finishes, the commands these documents name are the ones that actually work here:"
     ].join("\n");
@@ -1621,6 +1650,281 @@ function commandRule(model: ProjectModel): string {
     "  not a second feature, not schema, not real auth. Everything past it goes through a spec: no",
     "  spec, no feature."
   ].join("\n");
+}
+
+/**
+ * Where `SYSTEM_OVERVIEW.md` says its contents came from (spec 212).
+ *
+ * This is the document with the most to lose from being confidently wrong: it describes an
+ * architecture, and for an imported project its reader can open the code and check. Nobody read that
+ * code — the analysis reads manifests, names and versions, never source — so every claim below the
+ * heading is derived from an interview. Saying so costs two sentences and turns a document that
+ * might be wrong into one that is honest about what it is.
+ *
+ * Only the fallback rendering passes through here; in production this file is authored whole
+ * (`AUTHORED_DOCUMENTS`), and the prompt carries the same instruction. Both paths need it, because
+ * the fallback is what a founder gets when authoring is unavailable.
+ */
+function systemOverviewProvenance(model: ProjectModel): string {
+  const base = "A living, high-level map of the system. Keep it short and current.";
+  if (!shipsCleanup(model)) return base;
+  return [
+    base,
+    "",
+    "> **Written from the interview, not from the code.** Nobody read this codebase to produce this",
+    "> document: the import analysis reads manifest files — names and versions — and the rest is what",
+    "> you confirmed in the interview. Treat everything below as a claim to check rather than a",
+    "> description of what is there. `/cleanup` reads the project and rewrites this document to match it."
+  ].join("\n");
+}
+
+/**
+ * What `START_HERE.md` may conclude from four green commands (spec 212).
+ *
+ * Greenfield, `/start` just built the project and the four commands are this foundation's own, so
+ * "the foundation is working" is exactly what they prove. For an import they are the *team's*
+ * commands, run against a codebase with its own history: a red test there is news about their
+ * project, not about this foundation, and it may well have been red before the download finished.
+ * `DEVELOPER_GUIDE.md` already says "note known pre-existing failures"; this file did not.
+ */
+function verificationBarClaim(model: ProjectModel): string {
+  if (!shipsCleanup(model)) {
+    return [
+      "If all four are clean, the foundation is working. This is the **verification bar** — every change you",
+      "make from here has to pass it before it merges."
+    ].join("\n");
+  }
+  return [
+    "These are this project's own commands, not this foundation's — so what they tell you is where the",
+    "project stands today. Note anything already failing before you change a thing: a test that was red",
+    "this morning is not something you broke, and knowing which is which is worth the two minutes.",
+    "",
+    "That set is the **verification bar** — every change you make from here has to leave it no worse than",
+    "you found it. If any of the four does not exist in this project, say so rather than inventing one;",
+    "`/cleanup` rewrites these documents to name the commands that are really here."
+  ].join("\n");
+}
+
+/**
+ * `DEVELOPER_GUIDE.md`'s setup section (spec 212).
+ *
+ * Greenfield it is one line, and that is right: `/start` has just built the project, so starting it
+ * is the dev server and nothing else. An imported project is not set up by running its dev server —
+ * it is cloned, its dependencies installed, its environment file filled in from whatever the team
+ * shares — and none of that is knowable from here. Saying so, and pointing at the two places that do
+ * know, beats a one-line instruction that skips the part where it fails.
+ */
+function setupSection(model: ProjectModel, summary: string, commands: Commands): string {
+  if (!shipsCleanup(model)) {
+    return ["## Setup", "```bash", `${commands.CMD_DEV}        # start the dev server`, "```", summary].join(
+      "\n"
+    );
+  }
+  return [
+    "## Setup",
+    "",
+    "This project was running before this foundation arrived, so its setup is whatever it already was:",
+    "the clone, the dependency install, and the environment file your team shares. Where that is",
+    "written down — a README, an onboarding note, a script — that is still the place; nothing here",
+    "replaced it.",
+    "",
+    "Once it is set up, this is the command these documents name for running it:",
+    "",
+    "```bash",
+    `${commands.CMD_DEV}        # start the dev server`,
+    "```",
+    "",
+    `${summary}`,
+    "",
+    "`/cleanup` checks that line and the ones below against the repository, and rewrites them where they",
+    "are wrong. Until it has run, treat every command in these documents as a claim rather than a fact.",
+    "",
+    "**Getting to a deployed product**, below, is still worth reading end to end: it is written for a",
+    "project that has its accounts already, and names what this workflow needs from each one."
+  ].join("\n");
+}
+
+/**
+ * `docs/README.md`'s opening (spec 212).
+ *
+ * "Root keeps only `README.md`, `START_HERE.md`, and `CLAUDE.md`" is a rule about a repository this
+ * foundation created. Said to an imported project it is simply false — the root has whatever years of
+ * work put there — and in hidden mode the word "root" does not even mean the repository.
+ *
+ * The `existingDocs` answer lands here too, because this is the index: someone looking for where a
+ * decision is written down reads this file to find out, and which set of documents answers that is
+ * exactly what the founder was asked.
+ */
+function docsIndexIntro(model: ProjectModel): string {
+  // Same reasoning as `readFirst`: the claim being corrected is about the repository's *layout*, and
+  // a documents-only import has files at its root exactly like any other import.
+  if (!isImport(model)) {
+    return [
+      "Root keeps only `README.md`, `START_HERE.md`, and `CLAUDE.md`; everything else is here. **Rules and",
+      "workflow live in the single source of truth,",
+      "[`../.claude/spec-kit/constitution.md`](../.claude/spec-kit/constitution.md).**"
+    ].join("\n");
+  }
+  const folder = hiddenFolder(model);
+  const scope =
+    folder === null
+      ? [
+          "These are the foundation's documents. Your project's own files stay wherever your project keeps",
+          "them — nothing here claims the repository's layout, and nothing here reorganised it."
+        ]
+      : [
+          `These are the foundation's documents, and they live inside \`${folder}/\` with the rest of it. The`,
+          "repository around them is untouched, and its layout is its own."
+        ];
+  const existing = {
+    describe: [
+      "Where your project already documents something, that document stays the one that covers it; these",
+      "describe how the project is worked on."
+    ],
+    adopt: [
+      "New decisions are recorded here from now on — that is what you chose. Nothing of yours was moved,",
+      "rewritten or deleted to make room for it."
+    ],
+    leave: [
+      "Your project's existing documents are deliberately out of scope here; these stand on their own and",
+      "say nothing about them."
+    ]
+  }[model.existingDocs];
+  return [
+    ...scope,
+    "",
+    ...existing,
+    "",
+    "**Rules and workflow live in the single source of truth,",
+    "[`../.claude/spec-kit/constitution.md`](../.claude/spec-kit/constitution.md).**"
+  ].join("\n");
+}
+
+/**
+ * `README.md`, which is a different document depending on whose repository it lands in (spec 212).
+ *
+ * Greenfield, it *is* the project's README: the repository is the foundation, and this file is its
+ * front door. Neither is true of an import. Integrated, the founder already has a README and this one
+ * arrives beside it as `README.airrow.md` (spec 91) — a file introducing itself as the project's
+ * front door while sitting next to the real one is confusing on sight. Hidden, it is the README of an
+ * ignored folder, and the project's own is a directory up.
+ *
+ * So an imported foundation's README says what it is: the foundation, what came with it, and where
+ * to start. That reads correctly in both import layouts, and it is honest about a file the founder
+ * may well end up renaming over their own — which stays their decision, exactly as spec 91 has it.
+ */
+function readmeTitle(model: ProjectModel): string {
+  return shipsCleanup(model) ? `# ${model.name} — the engineering foundation` : `# ${model.name}`;
+}
+
+function readmeOrientation(model: ProjectModel): string {
+  if (!shipsCleanup(model)) {
+    return [
+      "> **New here? Start with [START_HERE.md](START_HERE.md)** — setup, the first spec, and the loop you",
+      "> repeat from then on."
+    ].join("\n");
+  }
+  const where =
+    hiddenFolder(model) === null
+      ? "This is not the project's README — yours is the one beside it, and it stays yours."
+      : `This is the README of \`${hiddenFolder(model)}/\`, not of the repository. The project's own is a directory up, untouched.`;
+  return [
+    `> **This describes the foundation, not the codebase.** ${where}`,
+    "> What landed here is the workflow, the rules and the documents the project is worked on *through*.",
+    ">",
+    "> **Start with [START_HERE.md](START_HERE.md)**, then run `/cleanup` — it reads the code that is",
+    "> actually here and rewrites these documents to describe it."
+  ].join("\n");
+}
+
+/** Where `README.md` sends a reader for the branch rules — which are not always this foundation's. */
+function readmeWorkflowPointer(model: ProjectModel): string {
+  return branchVocabulary(model) === null
+    ? [
+        "Read [CLAUDE.md](CLAUDE.md) first. Branch direction is strict — see",
+        "[docs/architecture/BRANCHING.md](docs/architecture/BRANCHING.md)."
+      ].join("\n")
+    : [
+        "Read [CLAUDE.md](CLAUDE.md) first. Branches are this project's own, not this foundation's — see",
+        "[docs/architecture/BRANCHING.md](docs/architecture/BRANCHING.md)."
+      ].join("\n");
+}
+
+/**
+ * `CLAUDE.md`'s opening line, and the section heading above the product description (spec 212).
+ *
+ * "New to this project?" is addressed to someone meeting a repository for the first time, and "What
+ * we're building" is written before there is anything to build. Both are true of a founder who
+ * started from nothing and false of one who arrived with a running codebase — they wrote it, and it
+ * is already built.
+ */
+function firstSessionIntro(model: ProjectModel): string {
+  return shipsCleanup(model)
+    ? "**First session in this foundation? Type one of these. That is the whole of it.**"
+    : "**New to this project? Type one of these. That is the whole first session.**";
+}
+
+function productHeading(model: ProjectModel): string {
+  return shipsCleanup(model) ? "What this is" : "What we're building";
+}
+
+/**
+ * Step 2 of that table — the accounts.
+ *
+ * A new project has none of them and creating them is most of its first day. An imported project is
+ * deployed already: the same walkthrough is still worth reading, because the foundation's workflow
+ * expects a CLI signed in and an environment file it can name, but presenting it as "the accounts
+ * only you can create" describes a day the founder had years ago.
+ *
+ * The greenfield row is reproduced byte for byte, padding included: this table is the first thing
+ * anyone reads and its columns line up in the source.
+ */
+function firstSessionStepTwo(model: ProjectModel): string {
+  return shipsCleanup(model)
+    ? `| 2    | "read START_HERE.md and walk me through it" | What this workflow still needs from your accounts        |`
+    : `| 2    | "read START_HERE.md and walk me through it" | The accounts only you can create — one at a time, in order       |`;
+}
+
+/**
+ * `CLAUDE.md`'s reading list, which gains an entry when the project brought documents of its own
+ * (spec 212, consuming the question spec 199 added).
+ *
+ * `existingDocs` had no reader at all until this spec: it was asked, validated and stored, and
+ * changed nothing anywhere — which §0 says makes it a question that should not be asked. What it
+ * decides is what an assistant is told to do when this foundation's documents and the team's own
+ * disagree, and that is a genuinely different instruction for each of the three answers.
+ */
+function readFirst(model: ProjectModel): string {
+  const base = [
+    "1. **`.claude/spec-kit/constitution.md`** — the single source of truth for all rules. When any file",
+    "   disagrees with it, the constitution wins.",
+    "2. The spec for your issue in `/specs` (`specs/NNN-kort.md`).",
+    "3. `docs/VISION.md` — what this becomes if it wins.",
+    "4. `docs/architecture/SYSTEM_OVERVIEW.md` and `docs/guides/DEVELOPER_GUIDE.md`."
+  ];
+  // Asked through the origin rather than `shipsCleanup`, which means "arrived with code". A
+  // documents-only import brought no code and gets `/start` — but documents are precisely what it
+  // *did* bring, so it is the last project whose answer to this question should be dropped.
+  if (!isImport(model)) return base.join("\n");
+  const existing = {
+    describe: [
+      "5. **The documents this project already had** — its README, decision records, contributing notes.",
+      "   They stay where they are and stay authoritative about what they cover; these documents describe",
+      "   the workflow around them. Where the two disagree about the code, the repository settles it."
+    ],
+    adopt: [
+      "5. **The documents this project already had** — read them, then record new decisions *here*. The",
+      "   founder chose these documents as where the project's decisions live from now on. That is a",
+      "   change of habit, not of files: nothing of theirs is rewritten or deleted, by you or by any",
+      "   command in this foundation."
+    ],
+    leave: [
+      "5. **The documents this project already had are out of scope.** The founder asked this foundation",
+      "   to stand on its own. Read them if they answer a question you have, and change nothing about",
+      "   them — do not reconcile them with these, and do not propose that they go."
+    ]
+  }[model.existingDocs];
+  return [...base, ...existing].join("\n");
 }
 
 /**
@@ -1722,6 +2026,359 @@ function cleanupMode(model: ProjectModel): string {
     "**The branch model is already theirs.** Do not create `develop`, do not create a `feature/`",
     "branch, do not touch the trunk. This project has a workflow and a team using it; the foundation",
     "adapts to that, not the other way round."
+  ].join("\n");
+}
+
+/**
+ * The branch model this foundation's workflow runs on — one answer, read by three documents
+ * (spec 212).
+ *
+ * Everywhere but a hidden import that is Airrow's own hierarchy, because a greenfield repository has
+ * no model of its own and an integrated foundation is being adopted into one (`/cleanup` creates the
+ * missing branches locally, spec 91). Hidden is the case this exists for: it promises the team's
+ * repository keeps its branch rules and is never pushed at all, so prescribing a hierarchy over a
+ * team that branches differently would be this foundation contradicting its own first promise. There
+ * the founder is asked, and the documents describe what they answered.
+ *
+ * Nothing here is an instruction to the team. A hidden foundation cannot create a branch, rename one
+ * or open a pull request — what these words decide is which branches the *documents* name when they
+ * describe where a spec's work goes.
+ */
+interface BranchVocabulary {
+  /** One sentence naming where a spec's work lives. */
+  shape: string;
+  /** Where it goes when it is done. */
+  destination: string;
+}
+
+function branchVocabulary(model: ProjectModel): BranchVocabulary | null {
+  if (model.branching === null) return null;
+  if (model.branching.model === "trunk") {
+    return {
+      shape: "Each spec gets its own short-lived branch off this project's trunk, named the way this repository names branches.",
+      destination: "It goes back into the trunk the way work here always does — this project's review and merge rules, unchanged."
+    };
+  }
+  if (model.branching.model === "integration_branch") {
+    return {
+      shape: "Each spec gets its own branch off this project's integration branch, named the way this repository names branches.",
+      destination: "It merges back into that integration branch, and reaches the trunk on this project's own release — not on anything this foundation does."
+    };
+  }
+  // "Something else" with nothing typed into it. The founder told us their model is not one of the
+  // two named — which is worth knowing — and told us nothing more. Quoting an empty answer would
+  // print a dangling colon, and filling the gap would invent the very hierarchy this branch exists to
+  // avoid asserting. So the document describes what the workflow needs and leaves the model to
+  // `/cleanup`, which can read the branches that actually exist.
+  const described = model.branching.describedByFounder;
+  if (described === "") {
+    return {
+      shape: "Each spec gets its own branch, cut and named the way this project already works — which is not a shape this foundation was told, so it names none.",
+      destination: "It merges back however work here merges. `/cleanup` reads the branches this repository actually has and writes them into this document."
+    };
+  }
+  return {
+    shape: `Each spec gets its own branch, cut and named the way this project already works: ${sentence(described)}`,
+    destination: "It merges back the way work here always merges. This foundation does not change any of that, and never could — it is not part of the repository."
+  };
+}
+
+/**
+ * The generated constitution's branch rule (spec 212).
+ *
+ * This is the one that mattered most and was missed on the first pass. The constitution opens by
+ * saying it is the single source of truth and that **it wins** when any other file disagrees — so a
+ * hidden foundation whose `BRANCHING.md` says "this project's branches are the ones that apply",
+ * shipped beside a constitution ruling that PRs go `feature/<name>` → `develop` → `main`, does not
+ * merely contradict itself: it contradicts itself with a documented winner, and the winner is the
+ * wrong one. Fixing `BRANCHING.md` alone made the contradiction worse than leaving both.
+ *
+ * What survives in every variant is the part that is actually load-bearing for the spec loop: one
+ * branch per spec, and a pull request rather than a push to a shared branch. That fits inside any
+ * branch model, which is why it can be stated as a rule without prescribing a hierarchy.
+ */
+function constitutionBranchRule(model: ProjectModel): string {
+  if (branchVocabulary(model) === null) {
+    return [
+      "- Branch `NNN-kort` (issue number + short name, **no** `issue/` prefix) is cut from its",
+      "  `feature/<name>`. **PR direction is strict and never skipped:** issue branch → its `feature/<name>`",
+      "  → `develop` → `main`. An issue branch is **never** PR'd to `main` or `develop`."
+    ].join("\n");
+  }
+  return [
+    "- **One branch per spec, and it reaches the trunk the way this project's branches always do.**",
+    "  This foundation prescribes no branch model and could not enforce one — it lives in an ignored",
+    "  folder and is never pushed. Which branch a spec is cut from, what it is called, and what it",
+    "  merges into are this repository's rules, and they are unchanged by anything here.",
+    "  See [`../../docs/architecture/BRANCHING.md`](../../docs/architecture/BRANCHING.md).",
+    "- **Never commit straight to a branch this team shares.** Whatever this project treats as shared —",
+    "  the trunk, a long-lived integration branch — takes changes through its own review, never through",
+    "  a command in this foundation."
+  ].join("\n");
+}
+
+/** The `Branch` row every spec file carries in its header. */
+function specBranchRow(model: ProjectModel): string {
+  return branchVocabulary(model) === null
+    ? "| **Branch**     | `NNN-kort` (from `feature/<name>`)   |"
+    : "| **Branch**     | `NNN-kort` (from this project's own) |";
+}
+
+/** `/implement`'s first step, which checks the branch a spec is being built on. */
+function implementBranchCheck(model: ProjectModel): string {
+  return branchVocabulary(model) === null
+    ? "matches the spec's issue and was cut from the stated `feature/<name>`. If it\n   doesn't match, stop and ask — never branch off `main`."
+    : "matches the spec's issue and was cut from the branch the spec names. If it\n   doesn't match, stop and ask. Never build a spec directly on a branch this team shares.";
+}
+
+/** `/analyze`'s PR-direction check, and the command it hands over at the end. */
+function analyzePrDirection(model: ProjectModel): string {
+  return branchVocabulary(model) === null
+    ? "intended target is the spec's `feature/<name>`, **never** `main`/`develop`."
+    : "the target is the branch this spec was cut from, and never a branch this team\n   shares without their own review. If the spec does not name one, say so rather than guessing.";
+}
+
+function analyzePrCommand(model: ProjectModel, vocab: ProviderVocabulary): string {
+  return branchVocabulary(model) === null
+    ? `issue branch → its \`feature/<name>\`, e.g.\n   \`${vocab.cliPrCreate}\`. Never propose a PR to \`main\`/\`develop\`.`
+    : `the spec's branch → the branch it was cut from, e.g.\n   \`${vocab.cliPrCreate}\`. Follow this project's own rules about what may target what.`;
+}
+
+/** `START_HERE.md`'s first-session table row for `/pr-check`. */
+function startTablePrRow(model: ProjectModel): string {
+  return branchVocabulary(model) === null
+    ? "| 6    | `/pr-check`                             | Merge-safety check, then open the PR into your `feature/<name>`         |"
+    : "| 6    | `/pr-check`                             | Merge-safety check, then open the PR the way this project opens them    |";
+}
+
+/**
+ * How `/pr-check` decides what a branch is heading for (spec 212).
+ *
+ * Greenfield it is derived from the hierarchy, which this foundation created and therefore knows.
+ * Hidden it cannot be derived at all: the branches belong to a repository this foundation has never
+ * seen, so the honest instruction is to look and to ask rather than to infer a `develop` that may not
+ * exist.
+ */
+function prCheckTarget(model: ProjectModel): string {
+  if (branchVocabulary(model) === null) {
+    return [
+      "**Target branch** = `$ARGUMENTS` if given, else infer from the hierarchy in",
+      "@.claude/spec-kit/constitution.md:",
+      "- On an issue branch `NNN-kort` → target its `feature/<name>` (never `develop`/`main`).",
+      "- On a `feature/<name>` branch → target `develop`.",
+      "- On `develop` → target `main`.",
+      "If the parent feature is ambiguous, ask — never default to `main`."
+    ].join("\n");
+  }
+  return [
+    "**Target branch** = `$ARGUMENTS` if given, else the branch this one was cut from — this project's",
+    "own, not one this foundation invented. `git merge-base` against the likely candidates, or the",
+    "trunk from `git symbolic-ref refs/remotes/origin/HEAD`, will usually show it.",
+    "",
+    "**If it is not obvious, ask.** Do not infer a `develop` or a `feature/*` from these documents:",
+    "this foundation ships no branch model and does not know how this repository is organised. Guessing",
+    "a target here means checking a merge that nobody is going to make."
+  ].join("\n");
+}
+
+/** `/push`'s guard, which names branches only this foundation's own model has (spec 212). */
+function pushBranchGuard(model: ProjectModel): string {
+  return branchVocabulary(model) === null
+    ? "Get the current branch. If it is `main` or `develop`, **stop** and refuse — those\n   only receive changes via PR (see @.claude/spec-kit/constitution.md). Otherwise continue."
+    : "Get the current branch. If it is a branch this team shares — the trunk, or a\n   long-lived integration branch — **stop** and refuse: those receive changes through this project's\n   own review process, whatever it is. If you cannot tell whether a branch is shared, ask before\n   pushing. Otherwise continue.";
+}
+
+function pushReportLine(model: ProjectModel): string {
+  return branchVocabulary(model) === null
+    ? "If it's a `feature/*` branch, note the push\n   auto-deploys to DEV; `<nr>-kort` issue branches do not deploy."
+    : "Whether the push triggers anything is this project's\n   own CI — this foundation ships none and never reaches the remote.";
+}
+
+/**
+ * `/createspec`'s branch step, which is where the branch model stops being a document and starts
+ * running `git` (spec 212).
+ *
+ * The greenfield version is reproduced exactly. The hidden version had to change for a reason
+ * stronger than tone: it ends in `git push` of a `feature/*` branch to the team's remote. A layout
+ * whose entire promise is that the repository's diff stays empty cannot ship a command that creates
+ * remote branches on the founder's first spec, and "no document instructs a change outside the
+ * folder" has to hold for the commands too — they are the documents that act.
+ */
+function createspecBranchStep(model: ProjectModel, vocab: ProviderVocabulary): string {
+  if (branchVocabulary(model) === null) {
+    return [
+      `Determine the parent \`feature/<name>\` — the ${vocab.boardTerm} the`,
+      `   ${vocab.issueTerm} belongs to. **Always ask which \`feature/*\` branch the branch should be based on** —`,
+      "   never assume, never default to `main`/`develop`. List available feature branches",
+      '   (`git branch -a --list "*feature/*"`) and ask via `AskUserQuestion`.',
+      `   - If already on \`NNN-<kort>\` matching this ${vocab.issueTerm}, keep it — no sync.`,
+      "   - Otherwise: `git checkout feature/<name> && git pull`, then **sync the feature branch with",
+      `     \`develop\` (below)**, and only then create and link the branch with \`${vocab.cliBranchLink}\`. Linking`,
+      `     is what lets the tracker close the ${vocab.issueTerm} when the branch merges. If the link step is`,
+      "     unavailable, fall back to `git checkout -b NNN-<kort>` and say it was not linked.",
+      `   - For a description-based spec (no ${vocab.issueTerm} yet): \`git checkout -b NNN-<kort>\`; no sync.`,
+      "   - Respect the constitution's PR-direction rule; issue branches never target `main`/`develop`.",
+      "   - **Sync `feature/<name>` with `develop` before cutting the issue branch**, so the new branch is",
+      "     born with everything already integrated instead of discovering the drift as conflicts in its PR:",
+      "     1. `git status --porcelain --untracked-files=no -- . ':(exclude).claude/settings.local.json'` —",
+      "        if that reports anything, **stop** and list the files. Commit or stash them yourself; never",
+      "        stash, merge over, or commit on the user's behalf. The exclusions are deliberate:",
+      "        `.claude/settings.local.json` is machine-local and `/push` never commits it, so a plain",
+      "        `git status --porcelain` would block every run; untracked files are ignored because a merge",
+      "        does not touch them (git refuses on its own if one is in the way).",
+      "     2. `git fetch origin develop`, then `git log feature/<name>..origin/develop --oneline`. Empty",
+      "        means in sync — skip straight to creating the branch, no empty merge commit.",
+      "     3. Otherwise `git merge origin/develop` into `feature/<name>` and push it. On conflict, **stop**",
+      "        and name the conflicting files; **leave the half-merged tree in place** (never `git merge",
+      "        --abort`) so no resolution work is thrown away, and continue once it is committed. If the push",
+      "        is rejected, `git pull` and retry it once, then stop and report.",
+      "   - `develop` is merged **into the feature branch**, never straight into an issue branch — that would",
+      `     drag unrelated history into the ${vocab.issueTerm}'s PR to \`feature/<name>\`.`,
+      "   - **The sync is blocking, not best-effort:** any failure — conflict, dirty tree, rejected push, no",
+      "     network — stops spec creation with the problem named, rather than cutting a branch from stale code."
+    ].join("\n");
+  }
+  return [
+    "**This project's branch rules apply, not this foundation's** — see",
+    "   [BRANCHING.md](../../docs/architecture/BRANCHING.md). One branch per spec is all the workflow",
+    "   needs; where it is cut from and what it is called are this repository's business.",
+    `   - If already on a branch for this ${vocab.issueTerm}, keep it.`,
+    "   - Otherwise **ask** which branch to cut from — `git branch -a`, and offer the checked-out branch",
+    "     and the trunk (`git symbolic-ref refs/remotes/origin/HEAD`) via `AskUserQuestion`. Never assume,",
+    "     and never create `develop` or a `feature/*` branch because these documents mention one.",
+    "   - Name the branch the way this repository names branches. If that is not obvious from",
+    "     `git branch -a`, ask rather than inventing a convention the team does not use.",
+    "   - **Pull, never push.** Bring the base branch up to date (`git pull`) before cutting, and stop",
+    "     there: this foundation is not part of the repository, so nothing here pushes a branch, creates",
+    "     one on the remote, or opens a pull request without the founder doing it themselves.",
+    "   - **Do not sync anything on the founder's behalf.** If the base branch is behind, say so and let",
+    "     them decide — merging one shared branch into another is their call and their team's convention.",
+    "   - If the working tree is dirty",
+    "     (`git status --porcelain --untracked-files=no`), **stop** and list the files. Never stash, merge",
+    "     over, or commit on the user's behalf."
+  ].join("\n");
+}
+
+/** The one line of `/createspec`'s report that only exists where there is a `develop` to sync from. */
+function createspecReportLine(model: ProjectModel): string {
+  return branchVocabulary(model) === null
+    ? "Say\n   whether `feature/<name>` was synced with `develop` and how many commits it brought in (or that it\n   was already in sync)."
+    : "Say which branch it was cut from, and whether that branch\n   was behind — reporting it, not fixing it.";
+}
+
+/**
+ * `CLAUDE.md`'s branching section (spec 212).
+ *
+ * The greenfield text is reproduced exactly, with the provider words interpolated here rather than
+ * left as tokens: substitution is one pass, so a `{{TOKEN}}` inside a substituted value would ship
+ * to the founder unresolved (the same reason `integratedRepoWork` interpolates its CI file).
+ */
+function branchingSummary(model: ProjectModel, vocab: ProviderVocabulary): string {
+  const branches = branchVocabulary(model);
+  if (branches === null) {
+    return [
+      `We work via ${repoLabel(model)}: a **feature** is a ${vocab.boardTerm}, **${vocab.issueTerm}s** are linked to it. Branch hierarchy:`,
+      "`main` ← `develop` ← `feature/<name>` ← `<nr>-kort` (issue branch, no `issue/` prefix). PR direction",
+      "is strict and never skipped: `<nr>-kort` → its `feature/<name>` → `develop` → `main`. **Never** PR an",
+      "issue branch to `main`/`develop`. Full detail in `docs/architecture/BRANCHING.md`."
+    ].join("\n");
+  }
+  return [
+    `We work via ${repoLabel(model)}: a **feature** is a ${vocab.boardTerm}, and **${vocab.issueTerm}s** are linked to it.`,
+    "",
+    `**This project's branch rules are the ones that apply, not this foundation's.** ${branches.shape}`,
+    `${branches.destination}`,
+    "",
+    "This foundation ships no branch model of its own and could not enforce one: it lives in an ignored",
+    "folder, is never pushed, and nothing in it runs on anybody's pull request. Full detail in",
+    "`docs/architecture/BRANCHING.md`."
+  ].join("\n");
+}
+
+/**
+ * `BRANCHING.md`'s body, above the CI section (spec 212).
+ *
+ * Everywhere but a hidden import this is the document as it has always read, byte for byte. Hidden
+ * is where it had to change: it prescribed `main ← develop ← feature/<name> ← <nr>-<short>` and a
+ * numbered workflow of `git checkout`s against a repository this foundation may not touch, one
+ * section above a CI note explaining that the team's rules are the ones that apply. Two instructions
+ * in one file, disagreeing.
+ */
+function branchModelSection(model: ProjectModel, vocab: ProviderVocabulary): string {
+  const branches = branchVocabulary(model);
+  if (branches === null) {
+    return [
+      `We work via ${repoLabel(model)}. A **feature** is a ${vocab.boardTerm}, and **${vocab.issueTerm}s** are linked`,
+      `to that feature. Each ${vocab.issueTerm} gets a spec in [\`../../specs/\`](../../specs/) and its own branch.`,
+      "",
+      "## Branch hierarchy",
+      "```",
+      "main               -> production",
+      "develop            -> integration; tested against the DEV environment",
+      "feature/<name>     -> a feature (= one project board); branched from develop, deploys continuously to DEV",
+      "<nr>-<short>       -> an issue; branched from ITS feature, PR'd back into the feature",
+      "```",
+      "",
+      "Issue branches are named `<nr>-<short>` (issue number + short name), **without** the `issue/` prefix.",
+      "",
+      "## Workflow",
+      "1. **Start a feature** (once per project board):",
+      "   git checkout develop && git pull",
+      "   git checkout -b feature/<name>",
+      "   git push -u origin feature/<name>",
+      "2. **Take an issue** from the feature:",
+      "   git checkout feature/<name> && git pull",
+      "   git merge origin/develop && git push   # only if the feature is behind — `/createspec` does this for you",
+      "   git checkout -b <nr>-<short>",
+      "3. **PR** `<nr>-<short>` → `feature/<name>`.",
+      "4. When the feature is done: **PR** `feature/<name>` → `develop`.",
+      "5. Release: **PR** `develop` → `main`.",
+      "",
+      "> The direction is strict and never skipped: `<nr>-<short>` → `feature/<name>` → `develop` → `main`.",
+      "> An issue is **never** PR'd directly to `develop` or `main`."
+    ].join("\n");
+  }
+  return [
+    `We work via ${repoLabel(model)}. A **feature** is a ${vocab.boardTerm}, and **${vocab.issueTerm}s** are linked`,
+    `to that feature. Each ${vocab.issueTerm} gets a spec in [\`../../specs/\`](../../specs/) and its own branch.`,
+    "",
+    "## This project's branches are the ones that apply",
+    "",
+    "This foundation lives in a folder git ignores. It is never pushed, no workflow in it ever runs, and",
+    "nothing here can create a branch, rename one, or open a pull request. So it prescribes no branch",
+    "model — **this project already has one, and it stays exactly as it is.**",
+    "",
+    `${branches.shape}`,
+    `${branches.destination}`,
+    "",
+    "**What the spec loop needs is one branch per spec, and nothing else.** `/createspec` cuts it,",
+    "`/pr-check` checks it merges cleanly into whatever it targets, and `/push` refuses to push a branch",
+    "everyone shares. Those three fit inside any branch model; none of them requires this one.",
+    "",
+    "If the branches this document names are not the ones this repository uses, `/cleanup` rewrites it to",
+    "match the repository — the repository is right, always."
+  ].join("\n");
+}
+
+/**
+ * `BRANCHING.md`'s closing section, which is `/createspec`'s `develop` sync — and therefore only
+ * means anything where that hierarchy exists (spec 212).
+ */
+function branchSyncSection(model: ProjectModel): string {
+  if (branchVocabulary(model) !== null) {
+    return [
+      "## Keep your branch in sync",
+      "- Merge whatever this project treats as the branch you cut from, as often as this project does it.",
+      "  A spec branch that sits for a week is a merge conflict either way — that is this repository's",
+      "  habit to follow, not one this foundation sets."
+    ].join("\n");
+  }
+  return [
+    "## Keep branches in sync",
+    "- Update your issue against the feature often: `git merge feature/<name>`.",
+    "- Update the feature against develop: `git merge develop`. **`/createspec` already does this** — it",
+    "  merges `origin/develop` into `feature/<name>` and pushes it before cutting the issue branch, so a new",
+    "  branch is never born behind. Do it by hand for a feature branch you have had open for a while."
   ].join("\n");
 }
 
@@ -1918,6 +2575,14 @@ function cleanupRepoWork(model: ProjectModel, ciFile: string): string {
     "   document to match the repository, never the other way round.",
     "4. **Report what a session against the repository root would miss**, in one line, so the founder",
     "   knows why the instruction exists rather than just being told to follow it.",
+    "5. **Check the branch model these documents describe is the one this repository uses** (spec 212).",
+    "   The founder was asked how the team branches, and `BRANCHING.md` was written from the answer —",
+    "   an answer, not an observation. Look: `git branch -a`, and what",
+    "   `git symbolic-ref refs/remotes/origin/HEAD` reports. Where the document and the repository",
+    "   disagree, **the repository is right** — rewrite the document to name the branches that exist,",
+    "   here and in `CLAUDE.md`, and say in your report what you changed and what it used to say.",
+    "   **Create nothing, rename nothing, delete nothing.** Not a branch, not a remote, not a config.",
+    "   This foundation is not part of the repository and does not get to reorganise it.",
     "",
     "## 6. What this layout does not ship",
     "",
@@ -2051,6 +2716,38 @@ export function deriveScaffoldValues(
         ? `\`${vocab.ciFile}\``
         : "this project's own CI configuration, wherever it is defined",
     BRANCHING_CI_SECTION: branchingCiSection(model, vocab),
+    BRANCH_MODEL: branchModelSection(model, vocab),
+    BRANCH_SYNC: branchSyncSection(model),
+    BRANCHING_SUMMARY: branchingSummary(model, vocab),
+    FIRST_SESSION_INTRO: firstSessionIntro(model),
+    FIRST_SESSION_STEP_2: firstSessionStepTwo(model),
+    PRODUCT_HEADING: productHeading(model),
+    READ_FIRST: readFirst(model),
+    README_TITLE: readmeTitle(model),
+    README_ORIENTATION: readmeOrientation(model),
+    README_WORKFLOW_POINTER: readmeWorkflowPointer(model),
+    DOCS_INDEX_INTRO: docsIndexIntro(model),
+    // The index's one-line description of `BRANCHING.md`, which named a hierarchy that a hidden
+    // foundation deliberately no longer ships (spec 212).
+    BRANCHING_DOC_SUMMARY:
+      branchVocabulary(model) === null
+        ? "Branch + PR workflow (issue → feature → develop → main)"
+        : "How the spec loop runs on this project's own branches",
+    CAPABILITY_SPECS_INTRO: capabilitySpecsIntro(model),
+    SETUP_SECTION: setupSection(model, summary, command),
+    VERIFICATION_BAR_CLAIM: verificationBarClaim(model),
+    SYSTEM_OVERVIEW_PROVENANCE: systemOverviewProvenance(model),
+    CREATESPEC_BRANCH_STEP: createspecBranchStep(model, vocab),
+    CREATESPEC_REPORT_LINE: createspecReportLine(model),
+    PR_CHECK_TARGET: prCheckTarget(model),
+    PUSH_BRANCH_GUARD: pushBranchGuard(model),
+    PUSH_REPORT_LINE: pushReportLine(model),
+    CONSTITUTION_BRANCH_RULE: constitutionBranchRule(model),
+    SPEC_BRANCH_ROW: specBranchRow(model),
+    IMPLEMENT_BRANCH_CHECK: implementBranchCheck(model),
+    ANALYZE_PR_DIRECTION: analyzePrDirection(model),
+    ANALYZE_PR_COMMAND: analyzePrCommand(model, vocab),
+    START_TABLE_PR_ROW: startTablePrRow(model),
     // A hidden foundation ships no pipeline, so listing CI among the parts it brought would be the
     // README's very first sentence claiming something the repository does not have (spec 187).
     FOUNDATION_PARTS:
@@ -2194,9 +2891,38 @@ function capabilityScope(model: ProjectModel): string {
 }
 
 /** What each selected capability's first spec must cover — one section per capability, never for an unselected one. */
+/**
+ * The heading and lead-in above the capability briefs (spec 212).
+ *
+ * The same answer means opposite things depending on where the project came from, and until this
+ * spec the document said the greenfield one either way. Greenfield, `capabilities` is *"Which
+ * capabilities will your product need?"* — a to-do list, and "what to spec first" is exactly right.
+ * Imported, spec 199 changed the question to *"What does it already do? — The capabilities that
+ * exist"*, and presenting a founder's shipped features back to them as work to be done is the kind of
+ * generic-but-plausible output §0 calls a top-severity bug.
+ */
+function capabilitySpecsIntro(model: ProjectModel): string {
+  if (!shipsCleanup(model)) {
+    return [
+      "## What to spec first",
+      "These are the capabilities chosen in the interview. Each one is a spec waiting to be written — run",
+      "`/createspec` for the one you need next and the command scaffolds `specs/NNN-kort.md` for you."
+    ].join("\n");
+  }
+  return [
+    "## What this project already does",
+    "These are the capabilities you confirmed exist. They are **not** a to-do list — they are what your",
+    "first spec will change. Each brief below says what the spec touching that area has to cover, which",
+    "is as useful for a change as it was for the build. Run `/createspec \"<the first thing you want to",
+    "change>\"` and the command scaffolds `specs/NNN-kort.md` for you."
+  ].join("\n");
+}
+
 function capabilitySpecs(model: ProjectModel): string {
   if (model.features.length === 0) {
-    return "No platform capabilities were selected. Spec the core product flow first — see `docs/VISION.md`.";
+    return shipsCleanup(model)
+      ? "No capabilities were confirmed in the interview, so there is nothing listed here — which says\nnothing about what the project does. `/cleanup` reads the code and can fill this in."
+      : "No platform capabilities were selected. Spec the core product flow first — see `docs/VISION.md`.";
   }
   return model.features.map((f) => `### ${featureLabel[f]}\n${capabilitySpecBrief(f, model)}`).join("\n\n");
 }

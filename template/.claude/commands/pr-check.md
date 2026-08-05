@@ -9,12 +9,7 @@ allowed-tools: Bash, Read, Grep, Glob
 
 Run a merge-safety check before opening a PR for the current branch.
 
-**Target branch** = `$ARGUMENTS` if given, else infer from the hierarchy in
-@.claude/spec-kit/constitution.md:
-- On an issue branch `NNN-kort` → target its `feature/<name>` (never `develop`/`main`).
-- On a `feature/<name>` branch → target `develop`.
-- On `develop` → target `main`.
-If the parent feature is ambiguous, ask — never default to `main`.
+{{PR_CHECK_TARGET}}
 
 Steps:
 1. `git fetch -q origin`.

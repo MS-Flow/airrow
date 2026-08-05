@@ -19,8 +19,6 @@ constitution + template in [`.claude/spec-kit/`](../.claude/spec-kit/):
 | `/pr-check` | Pre-PR merge-safety check against the target branch |
 | `/security` | Review the whole repository for vulnerabilities, fix the invisible ones, write `SECURITY_AUDIT.md` |
 
-## What to spec first
-These are the capabilities chosen in the interview. Each one is a spec waiting to be written — run
-`/createspec` for the one you need next and the command scaffolds `specs/NNN-kort.md` for you.
+{{CAPABILITY_SPECS_INTRO}}
 
 {{CAPABILITY_SPECS}}

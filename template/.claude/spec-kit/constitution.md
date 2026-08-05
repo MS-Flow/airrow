@@ -34,9 +34,7 @@ Canonical sources: [`CLAUDE.md`](../../CLAUDE.md) ·
   sends nothing anywhere, attacks nothing, and rewrites no history. Its report,
   `SECURITY_AUDIT.md`, is a list of the holes still open and stays out of version control. What it
   may not fix that way is a spec, like everything else.
-- Branch `NNN-kort` (issue number + short name, **no** `issue/` prefix) is cut from its
-  `feature/<name>`. **PR direction is strict and never skipped:** issue branch → its `feature/<name>`
-  → `develop` → `main`. An issue branch is **never** PR'd to `main` or `develop`.
+{{CONSTITUTION_BRANCH_RULE}}
 - **Conventional Commits**, atomic and buildable. Small PRs — one coherent slice; squash-merge.
 - **Decisions are recorded** in the spec that introduces them, or a short note under `docs/` (with or
   before the implementing PR).

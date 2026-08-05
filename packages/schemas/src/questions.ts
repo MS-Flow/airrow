@@ -136,6 +136,7 @@ export const ANSWER_MAX_CHARS = {
   capabilitiesOther: 300,
   databaseOther: 200,
   hostingOther: 200,
+  branchingModelOther: 300,
   integrations: 300,
   // Matches `hiddenFolderSchema`'s ceiling, so the field cannot accept a name the store would refuse
   // on length alone (spec 199).
@@ -788,6 +789,58 @@ const existingDocsQuestion: Question = {
 };
 
 /**
+ * How the team already branches (spec 212).
+ *
+ * Asked only when the foundation lands **hidden**, and that is the whole justification for the
+ * question existing: hidden's own documents promise the team's repository keeps its branch rules,
+ * while the foundation ships a `BRANCHING.md` prescribing one. Integrated does not ask, because
+ * nothing there would change — `/cleanup` establishes Airrow's model locally, which is what adopting
+ * a foundation into a repository means (spec 91).
+ *
+ * Two named shapes and the founder's own, because only two change what the document can say. Neither
+ * option promises anything: the answer decides what `BRANCHING.md` *describes*, and hidden changes
+ * nothing outside its folder in any case.
+ */
+const branchingQuestions: Question[] = [
+  {
+    id: "branchingModel",
+    title: "How does this team branch today?",
+    help: "So the workflow documents describe the branches you actually use. Nothing here changes your repository — this foundation is never pushed.",
+    type: "single",
+    required: true,
+    showIf: [{ questionId: "deliveryLayout", in: ["hidden"] }],
+    options: [
+      {
+        value: "trunk",
+        label: "Short branches off the trunk",
+        recommended: true,
+        description: "Work branches from `main` (or whatever the trunk is called) and merges straight back into it."
+      },
+      {
+        value: "integration_branch",
+        label: "An integration branch under the trunk",
+        description: "Work lands on a long-lived branch — `develop`, `staging` — and reaches the trunk on a release."
+      },
+      {
+        value: "other",
+        label: "Something else",
+        description: "Describe it and the documents follow yours instead of naming a shape you do not use."
+      }
+    ]
+  },
+  {
+    id: "branchingModelOther",
+    title: "How does it work?",
+    help: "One or two sentences: which branches are long-lived, and what merges into what.",
+    type: "text",
+    required: true,
+    showIf: [{ questionId: "branchingModel", in: ["other"] }],
+    maxChars: ANSWER_MAX_CHARS.branchingModelOther,
+    placeholder: "Everything goes to `main` behind a flag; release branches are cut per customer."
+  }
+];
+
+/**
  * The set for a project that already exists, derived from the greenfield one rather than written
  * twice (spec 199).
  *
@@ -808,7 +861,8 @@ export const importedQuestions: Question[] = [
         }
       : { ...q, ...IMPORT_WORDING[q.id] }
   ),
-  existingDocsQuestion
+  existingDocsQuestion,
+  ...branchingQuestions
 ];
 
 /** The question set for a project of this origin. One place decides, so nothing has to guess. */

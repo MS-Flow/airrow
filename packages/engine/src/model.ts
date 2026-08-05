@@ -123,6 +123,7 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
   const origin: ProjectOrigin =
     given.kind === "imported" ? { ...given, delivery: given.delivery ?? { kind: "integrated" } } : given;
   const imported = origin.kind === "imported" && origin.stackDetected;
+  const hidden = hiddenFolderOf(origin);
 
   const hosting: Hosting = a.hosting ?? "vercel";
   const database: Database = a.database ?? "supabase";
@@ -188,6 +189,23 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
     // says whether there was anything to look at; it never sees the images themselves (spec 159).
     uiReferenceImageCount: input.referenceImageCount ?? 0,
     nonGoals: (a.nonGoals ?? "").trim(),
+    // Only an integrated import is asked, and only it may act on the answer: a hidden foundation
+    // changes nothing outside its folder, so `describe` is the only thing it could ever do, and a
+    // greenfield project has no existing documents for the question to be about (spec 212).
+    // Gated on the origin rather than on `imported`, which means "arrived with code": a
+    // documents-only import has documents precisely because that is all it brought.
+    existingDocs: origin.kind === "imported" && hidden === null ? (a.existingDocs ?? "describe") : "describe",
+    // The mirror image: only a hidden import is asked, because only there does the answer change a
+    // document. Null everywhere else means "this foundation's own branch model", which is what a
+    // greenfield repository and an adopted integrated one both get.
+    branching:
+      hidden !== null && a.branchingModel !== undefined
+        ? {
+            model: a.branchingModel,
+            describedByFounder:
+              a.branchingModel === "other" ? (a.branchingModelOther ?? "").trim() : ""
+          }
+        : null,
     derived: {
       multiTenant,
       hasPayments: features.includes("payments"),
@@ -297,8 +315,16 @@ export function commandPath(m: ProjectModel): string {
  * one answer to "is this hidden" and not four that can drift (spec 187).
  */
 export function hiddenFolder(m: ProjectModel): string | null {
-  if (m.origin.kind !== "imported") return null;
-  return m.origin.delivery.kind === "hidden" ? m.origin.delivery.folder : null;
+  return hiddenFolderOf(m.origin);
+}
+
+/**
+ * The same answer, from the origin alone. `resolveProjectModel` needs it while building the model it
+ * would otherwise have to pass — one implementation rather than two that agree today (spec 212).
+ */
+function hiddenFolderOf(origin: ProjectOrigin): string | null {
+  if (origin.kind !== "imported") return null;
+  return origin.delivery.kind === "hidden" ? origin.delivery.folder : null;
 }
 
 /**
@@ -338,6 +364,21 @@ export function coreAction(m: ProjectModel): string {
  */
 export function shipsCleanup(m: ProjectModel): boolean {
   return commandFor(m) === "cleanup";
+}
+
+/**
+ * True when the founder brought a project of their own, whether or not it held code.
+ *
+ * The distinction from `shipsCleanup` matters in exactly one place and is easy to get backwards
+ * (spec 212). Most document wording keys off *code*: present tense, "what this is", the setup that
+ * already exists — a documents-only import has none of that and reads like a new project, which is
+ * why `shipsCleanup` is the usual question. But the founder's **own documents** are what a
+ * documents-only import consists of, and questions about them (`existingDocs`) are asked of it like
+ * any other import. Answering them by the wrong test would drop the answer for the one project whose
+ * whole import was documents.
+ */
+export function isImport(m: ProjectModel): boolean {
+  return m.origin.kind === "imported";
 }
 
 export function repoLabel(m: ProjectModel): string {

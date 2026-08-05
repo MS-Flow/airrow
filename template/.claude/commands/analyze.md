@@ -16,13 +16,12 @@ Read @.claude/spec-kit/constitution.md and the spec, then inspect the working tr
 2. **Spec ↔ code drift** — code the spec doesn't describe, or spec items with no code.
 3. **Constitution violations** — any architecture/data/design invariant broken.
 4. **Verification gaps** — missing tests for a criterion; typecheck/lint/tests not run or not green.
-5. **PR direction** — intended target is the spec's `feature/<name>`, **never** `main`/`develop`.
+5. **PR direction** — {{ANALYZE_PR_DIRECTION}}
 
 **Part 2 — close out (only if every category passes).** If anything fails, report it and stop.
 If all pass:
 6. In the spec: tick all remaining criteria, set **Status: ✅ Done**, add/finish an **Implementation
    notes** block (verification result + deviations).
 7. Update [`../../specs/README.md`](../../specs/README.md): set this feature's row to ✅ Done.
-8. **Surface the PR command** — issue branch → its `feature/<name>`, e.g.
-   `{{CLI_PR_CREATE}}`. Never propose a PR to `main`/`develop`.
+8. **Surface the PR command** — {{ANALYZE_PR_COMMAND}}
    Do not open the PR or push automatically — hand over the command, suggest `/pr-check` first.

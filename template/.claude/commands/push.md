@@ -6,8 +6,7 @@ allowed-tools: Bash, Read, Grep, Glob
 
 Commit and push the current branch. Commit message (if needed): **$ARGUMENTS**.
 
-1. **Branch guard.** Get the current branch. If it is `main` or `develop`, **stop** and refuse — those
-   only receive changes via PR (see @.claude/spec-kit/constitution.md). Otherwise continue.
+1. **Branch guard.** {{PUSH_BRANCH_GUARD}}
 2. **Pending changes?** Run `git status --short`.
    - If there are uncommitted changes and `$ARGUMENTS` is empty, reply with only this line and stop:
      > Vad ska commit-meddelandet vara? (skriv "y" så genererar jag ett kortfattat meddelande)
@@ -19,7 +18,6 @@ Commit and push the current branch. Commit message (if needed): **$ARGUMENTS**.
    - If nothing to commit: skip to push.
 3. **Push.** `git push` — add `-u origin <branch>` if no upstream yet. **Never** force-push, never
    skip hooks.
-4. **Report** branch, commit (if any), and push result. If it's a `feature/*` branch, note the push
-   auto-deploys to DEV; `<nr>-kort` issue branches do not deploy.
+4. **Report** branch, commit (if any), and push result. {{PUSH_REPORT_LINE}}
 
 Do not open a PR — use `/pr-check` then the PR command.
