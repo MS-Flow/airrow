@@ -66,12 +66,15 @@ const HIDDEN: ProjectOrigin = {
   delivery: { kind: "hidden", folder: "airrow" }
 };
 
-function render(origin: ProjectOrigin, answers: InterviewAnswers = BASE) {
+function render(origin: ProjectOrigin, answers: InterviewAnswers = BASE, folder?: string) {
   const model = resolveProjectModel({
     name: "Loop CRM",
     description: "A lightweight CRM for small agencies.",
     answers,
-    origin
+    // The folder name is concatenated into paths and command names, so a test that always used the
+    // same one could not tell an interpolated value from a hardcoded `airrow` (spec 215).
+    origin:
+      folder === undefined ? origin : { ...origin, delivery: { kind: "hidden", folder } }
   });
   const { files } = renderScaffold(TEMPLATE, model);
   const byPath = (p: string) => files.find((f) => f.path === p)?.content ?? "";
@@ -248,5 +251,77 @@ describe("where /sync sends the founder next", () => {
     const sync = render(HIDDEN).byPath(SYNC);
     expect(sync).toContain("step 2 of [START_HERE.md](../../START_HERE.md)");
     expect(sync).not.toContain("/cleanup");
+  });
+});
+
+// Spec 215. A hidden foundation's commands are discovered from where a session starts and from its
+// parents, never from a folder below it — so at the repository root, where the founder actually
+// works, they do not exist. `/sync` links them there. What a test can hold is that the command says
+// to do it, says it the right way round, and never claims a name that is the team's.
+describe("linking a hidden foundation's commands to the repository root", () => {
+  it("offers the link and writes nothing without a yes", () => {
+    const sync = prose(render(HIDDEN).byPath(SYNC));
+    expect(sync).toContain("write nothing until the founder says yes");
+    expect(sync).toContain("a declined offer is a finished step");
+  });
+
+  it("names the folder rather than Airrow in the namespace it creates", () => {
+    const sync = render(HIDDEN, BASE, "notes").byPath(SYNC);
+    expect(sync).toContain("`.claude/commands/notes`");
+    expect(sync).toContain("`/notes:sync`");
+    expect(sync).not.toContain("/airrow:sync");
+  });
+
+  it("makes the bare /sync link conditional on the team not owning that name", () => {
+    const sync = prose(render(HIDDEN).byPath(SYNC));
+    expect(sync).toContain("**The bare name — only if it is free.**");
+    expect(sync).toContain("it is the team's — leave it exactly as it is");
+  });
+
+  it("uses a junction and a hardlink on Windows, never a symlink that needs elevation", () => {
+    const sync = render(HIDDEN).byPath(SYNC);
+    expect(sync).toContain("`mklink /J` (junction)");
+    expect(sync).toContain("`mklink /H` (hardlink)");
+    expect(prose(sync)).toContain("needs Developer Mode or an administrator");
+  });
+
+  it("keeps every entry it creates out of the repository's diff", () => {
+    const sync = render(HIDDEN, BASE, "notes").byPath(SYNC);
+    expect(sync).toContain("/.claude/commands/notes/");
+    expect(sync).toContain("/.claude/commands/sync.md");
+    expect(sync).toContain("/CLAUDE.local.md");
+  });
+
+  it("appends to a CLAUDE.local.md the founder already has rather than rewriting it", () => {
+    const sync = prose(render(HIDDEN, BASE, "notes").byPath(SYNC));
+    expect(sync).toContain("`@notes/CLAUDE.md`");
+    expect(sync).toContain("append the line, never rewrite the file");
+  });
+
+  it("rewrites START_HERE.md only after the links exist", () => {
+    const sync = prose(render(HIDDEN).byPath(SYNC));
+    expect(sync).toContain("**Then, and only then, rewrite `START_HERE.md`'s step 1**");
+    expect(sync).toContain("never before the links exist");
+  });
+
+  it("stops rather than describing the folder as the project when it cannot reach one", () => {
+    const sync = prose(render(HIDDEN, BASE, "notes").byPath(SYNC));
+    expect(sync).toContain("**If you cannot reach it, stop.**");
+    expect(sync).toContain("cd notes && claude --add-dir ..");
+    expect(sync).toContain("**Do not describe this folder as if it were the project.**");
+  });
+
+  it("tells a founder on another assistant the path instead, because none of this is Claude-only", () => {
+    const sync = prose(render(HIDDEN, BASE, "notes").byPath(SYNC));
+    expect(sync).toContain("If the founder works with a different assistant");
+    expect(sync).toContain("`notes/.claude/commands/` as plain markdown");
+    expect(sync).toContain("nothing here is locked to one tool");
+  });
+
+  it("says none of this to an integrated import, which has no folder to link out of", () => {
+    const sync = render(IMPORTED).byPath(SYNC);
+    expect(sync).not.toContain("mklink");
+    expect(sync).not.toContain("CLAUDE.local.md");
+    expect(sync).not.toContain("--add-dir");
   });
 });

@@ -87,3 +87,4 @@ governed by the constitution + template in [`.claude/spec-kit/`](../.claude/spec
 | The two moments worth interrupting someone for | [203-slack-notifications.md](203-slack-notifications.md) | ⏳ Not started |
 | Every document knows where the project came from | [212-origin-aware-documents.md](212-origin-aware-documents.md) | ✅ Done |
 | `/sync` maps the project, `/cleanup` makes it readable | [214-sync-cleanup-split.md](214-sync-cleanup-split.md) | 🔄 In progress |
+| A hidden foundation's commands, found from the repository root | [215-hidden-command-discovery.md](215-hidden-command-discovery.md) | ✅ Done |

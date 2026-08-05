@@ -67,9 +67,24 @@ Every feature, screen, and generated file is judged against these.
   import further still: nothing outside that folder may change — not a document, not a branch, not
   the team's own instruction files — no CI ships, because a workflow in an ignored folder can
   never run, and **`/cleanup` does not ship at all**, because reorganising a repository the team
-  shares is the one change this layout exists to never make (spec 214). The committed `.gitignore` line is offered and never written without a yes. Hiding files
+  shares is the one change this layout exists to never make (spec 214). The committed `.gitignore`
+  line is offered and never written without a yes. Hiding files
   from a repository is all it does: it is not concealment from an employer, and it grants no access
   anybody did not already have.
+  **Three entries outside the folder are the exception, and only because a foundation nobody can
+  reach is not a foundation** ([spec 215](../../specs/215-hidden-command-discovery.md), which records
+  the previous absolute wording): commands and rules are discovered from where a session starts and
+  from its parents, never from a folder below it, so at the repository root — where the founder
+  actually works — a hidden foundation does not exist. `/sync` may link it there: a directory entry
+  `.claude/commands/<folder>` pointing at the foundation's commands, which Claude Code namespaces to
+  `/<folder>:sync` so it can shadow nothing a team could name; a bare `.claude/commands/sync.md`
+  **only where the team does not already own that name**; and a root `CLAUDE.local.md` importing the
+  foundation's own. All three go in `.git/info/exclude`, so the repository's diff stays empty, and
+  none is written without a yes, on the rule above. Everything else outside the folder stays
+  untouchable. The first session cannot use any of it, because `/sync` is what creates it: the founder
+  bootstraps once with `cd <folder> && claude --add-dir ..`, and `/sync` rewrites `START_HERE.md`'s
+  step 1 to the root route **after** the links exist, never before — the ordering `/start` already
+  uses.
   **`/security` ships with every foundation, whatever its origin, and is the third command that may
   touch code** — narrowly: it reviews the whole repository for vulnerabilities and fixes only what
   changes nothing a user can see, proposing everything else and waiting for the founder's yes. It

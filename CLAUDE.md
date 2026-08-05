@@ -129,6 +129,17 @@ passes it in.
   reorganising a repository the team shares is the change this layout exists to never make. Its
   `/sync` is narrowed to the folder: it builds no branch model, rewrites none of the team's documents,
   and reports nothing for deletion.
+  **A hidden foundation is invisible to the assistant too, until `/sync` links it out (spec 215).**
+  Commands are discovered from where a session starts and from its parents, never from a folder
+  below, so at the repository root the foundation does not exist. `/sync` may create three entries
+  outside the folder and no more: a namespaced `.claude/commands/<folder>` directory link — Claude
+  Code renders it `/<folder>:sync`, so it can shadow nothing a team could name — a bare
+  `.claude/commands/sync.md` **only where the team does not already own that name**, and a root
+  `CLAUDE.local.md` importing the foundation's own. All three go in `.git/info/exclude`, none is
+  written without an explicit yes, and on Windows they are a junction and a hardlink rather than a
+  symlink, which needs elevation. The first session cannot use them, because `/sync` is what makes
+  them: it bootstraps with `cd <folder> && claude --add-dir ..`, and `START_HERE.md`'s step 1 is
+  rewritten to the root route only after the links exist.
   Offered only when the analysis found code; a documents-only import gets `/start` and stays
   integrated.
 - **Curated UI directions are a visual language, never a layout (spec 165).** Each of the three
