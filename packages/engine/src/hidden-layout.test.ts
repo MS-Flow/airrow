@@ -239,7 +239,7 @@ describe("what the hidden documents tell the founder", () => {
   // alone, `/sync` would have this foundation and not the project it exists to describe.
   it("bootstraps the first session with the folder and the project both, naming the folder it got", () => {
     const startHere = doc(HIDDEN, "START_HERE.md");
-    expect(startHere).toContain(`cd ${FOLDER} && claude --add-dir ..`);
+    expect(startHere).toContain(`cd ${FOLDER}; claude --add-dir ..`);
     expect(startHere).toContain(`\`cd ${FOLDER}\` starts the session **inside this folder**`);
     expect(startHere).toContain("`--add-dir ..` hands it the directory above");
     // And that it is a bootstrap, not the permanent arrangement.
@@ -320,7 +320,7 @@ describe("what the hidden documents tell the founder", () => {
   });
 
   it("still ships it to an integrated foundation, so the exclusion is the layout's", () => {
-    expect(doc(INTEGRATED, ".claude/commands/cleanup.md")).toContain("## 5. The branch model");
+    expect(doc(INTEGRATED, ".claude/commands/cleanup.md")).toContain("## 6. The branch model");
   });
 
   it("never offers to write the committed ignore rule without asking", () => {

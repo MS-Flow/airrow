@@ -56,6 +56,21 @@ Every feature, screen, and generated file is judged against these.
   and an oversized file is reported rather than split. **It stages its work and never commits it**, on
   a clean tree or resuming its own recorded plan, and it removes itself once its verification bar has
   passed — rewriting `START_HERE.md`'s step 1 first, exactly as `/start` does.
+  **And it reports what it may not touch** ([spec 217](../../specs/217-cleanup-inheritable.md)):
+  an app-builder export arrives structurally correct, so moving files finds nothing while the project
+  still cannot build without the vendor's package. So `/cleanup` also *audits* — what the build is tied
+  to and what leaving would cost, what phones home and whether it is live in production, which of the
+  project's three names disagree, and **what arrived through the vendor that is good on its own merit
+  and stays**, security middleware first. Judged on what a file does, never on what its name says.
+  Removing any of it changes behaviour, so none of it is removed: the report ends with the
+  `/createspec` line that starts the work and the capability it would cost, and anything that cannot be
+  attributed with confidence is reported rather than acted on.
+  **Whether it ships at all is the founder's answer.** An integrated import is asked, outright, whether
+  Airrow may reorganise its files — restructuring recommended, because the export with forty files at
+  the root is the one that needs it. Declining ships `/sync` alone: every document still written, the
+  map still built, and not one file of theirs moved. Stored, never inferred, and asked only where it
+  changes something — hidden ships no `/cleanup` whatever the answer, and a documents-only import has
+  nothing to reorganise (spec 217).
   A foundation ships exactly one of these sets, decided by where the project came from. Airrow's
   servers still never write application code, and ZIP delivery is still a complete foundation on its
   own.
@@ -82,7 +97,7 @@ Every feature, screen, and generated file is judged against these.
   foundation's own. All three go in `.git/info/exclude`, so the repository's diff stays empty, and
   none is written without a yes, on the rule above. Everything else outside the folder stays
   untouchable. The first session cannot use any of it, because `/sync` is what creates it: the founder
-  bootstraps once with `cd <folder> && claude --add-dir ..`, and `/sync` rewrites `START_HERE.md`'s
+  bootstraps once with `cd <folder>; claude --add-dir ..`, and `/sync` rewrites `START_HERE.md`'s
   step 1 to the root route **after** the links exist, never before — the ordering `/start` already
   uses.
   **`/security` ships with every foundation, whatever its origin, and is the third command that may
@@ -100,9 +115,12 @@ Every feature, screen, and generated file is judged against these.
   by [spec 91](../../specs/91-cleanup-command.md), amended again by
   [spec 123](../../specs/123-foundation-starts-strong.md) — which records the "bare minimum that runs"
   wording spec 66 introduced — extended by
-  [spec 157](../../specs/157-security-command.md), which added `/security`, and amended by
+  [spec 157](../../specs/157-security-command.md), which added `/security`, amended by
   [spec 214](../../specs/214-sync-cleanup-split.md), which split the imported project's one command
-  into `/sync` and `/cleanup` and gave the second one the right to move the founder's files.)
+  into `/sync` and `/cleanup` and gave the second one the right to move the founder's files, and
+  amended again by [spec 217](../../specs/217-cleanup-inheritable.md), which gave `/cleanup` the duty
+  to report what it may not touch and made shipping it the founder's own answer — the previous wording
+  being that an integrated import ships `/cleanup` beside `/sync`, full stop.)
 - **The output is the product.** Generated repos must read like a senior CTO wrote them for *this*
   project — never like a filled-in template. Generic output is a top-severity bug.
 - **Adaptive, never bureaucratic.** The interview asks only questions whose answers change the output.

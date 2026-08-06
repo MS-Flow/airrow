@@ -408,7 +408,7 @@ an analysis that read manifest files — names and versions, never source. So de
 support and stop there: no invented modules, no file layout, no data flow nobody stated. Where a
 document would normally assert an architecture, say what it is based on instead. A generated document
 that is confidently wrong about a codebase its reader can open is worse than a short one that is
-honest about where it came from. The founder runs /cleanup next, which reads the actual code and
+honest about where it came from. The founder runs /sync next, which reads the actual code and
 rewrites these documents — writing as if you had already done that is the one failure to avoid.
 
 WHAT AIRROW DID NOT DO. It wrote documents. It did not inspect, convert, migrate, restructure or

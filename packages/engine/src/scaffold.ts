@@ -1405,15 +1405,38 @@ function cliSetupStep(model: ProjectModel): string {
 }
 
 /**
- * The command that creates this project's local branches (spec 214).
+ * How this project's local `develop` branch came to exist, as a clause a sentence can end on
+ * (spec 214, narrowed by spec 217).
  *
  * Greenfield that is `/start`, as it always was. On an import it is `/cleanup`, not the command the
  * founder types first: `/sync` only reads the repository, and pointing at it here would credit it
  * with branches it is forbidden to create. Callers must be inside a path a hidden foundation cannot
  * reach — hidden creates no branches at all, so there is no answer to give it.
+ *
+ * An import whose founder declined the restructure has no branch-making command at all: `/cleanup` is
+ * what created them, and it did not ship. So the clause becomes an instruction rather than a
+ * reassurance — the one branch the workflow needs, and the command that makes it.
  */
-function branchCommandName(model: ProjectModel): string {
-  return shipsCleanup(model) ? "/cleanup" : "/start";
+/**
+ * Whose job it is to create the branches this workflow runs on (spec 217).
+ *
+ * `/cleanup`'s wherever it ships, and the founder's wherever it does not — an integrated import that
+ * declined the restructure keeps the whole branch model in its documents and simply has nobody to
+ * make the branches for it. Saying "`/cleanup`'s" there would name a file that was never delivered,
+ * which is the one thing the documents may never do.
+ */
+function branchOwner(model: ProjectModel): string {
+  return shipsCleanup(model) ? "`/cleanup`'s" : "yours";
+}
+
+function developBranchClause(model: ProjectModel): string {
+  if (hasExistingCode(model) && !shipsCleanup(model)) {
+    return "create the `develop` branch locally first with `git branch develop`, since nothing in this foundation creates it for you";
+  }
+  // Unbackticked, as `branchCommandName` emitted it before this replaced it. Adding backticks here
+  // would be right — every other command name in these documents has them — and it would also change
+  // a greenfield foundation's bytes, which this spec has no business doing. Its own change.
+  return `${shipsCleanup(model) ? "/cleanup" : "/start"} already created the \`develop\` branch locally`;
 }
 
 function repoAndCiSection(model: ProjectModel): string {
@@ -1437,7 +1460,7 @@ function repoAndCiSection(model: ProjectModel): string {
     return [
       "## 3. Git integration",
       "",
-      `1. Push this foundation to an **Azure Repos** repository — ${branchCommandName(model)} already created the \`develop\` branch locally.`,
+      `1. Push this foundation to an **Azure Repos** repository — ${developBranchClause(model)}.`,
       `2. **Register the pipelines.** Pipelines → New pipeline → Azure Repos Git → this repo → Existing YAML file: \`${vocab.ciFile}\`, then again for \`${vocab.deployFile}\`. Azure DevOps does not discover YAML from a directory the way Actions does — an unregistered pipeline simply never runs.`,
       "3. **Set the branch policies** under Repos → Branches → `main` / `develop` → Branch policies: require a pull request and a passing build.",
       `4. ${cliSetupStep(model)}`
@@ -1446,7 +1469,7 @@ function repoAndCiSection(model: ProjectModel): string {
   return [
     "## 3. Git integration",
     "",
-    `1. Create an empty repository on GitHub and push this foundation — ${branchCommandName(model)} already created the \`develop\` branch locally.`,
+    `1. Create an empty repository on GitHub and push this foundation — ${developBranchClause(model)}.`,
     "2. **Protect `main` and `develop`** (Settings → Branches): require a pull request and a passing CI check. The workflows in `.github/workflows/` start running the moment they land on GitHub — nothing else to register.",
     `3. ${cliSetupStep(model)}`
   ].join("\n");
@@ -1622,21 +1645,28 @@ function firstStep(model: ProjectModel): string {
     // run there is nothing there to find. Hence both halves — the folder for the commands, the parent
     // for the project they describe. Told once, here, in the first file anyone opens (spec 215,
     // absorbing #207: started in the folder alone, `/sync` cannot read the project at all).
+    //
+    // Separated by `;` rather than `&&` (spec 217): the two halves are one `cd` and one launch, not a
+    // conditional chain, and `&&` is a parse error in Windows PowerShell 5.1 — which is the shell a
+    // founder on Windows most likely has open. `;` reads as "then" in every shell that matters.
     ...(hiddenFolder(model) === null
       ? ["Then open Claude Code in this repository and run:"]
       : [
           "Then open Claude Code. In a terminal, from the top of the repository, type:",
           "",
           "```",
-          `cd ${hiddenFolder(model)} && claude --add-dir ..`,
+          `cd ${hiddenFolder(model)}; claude --add-dir ..`,
           "```",
           "",
-          "Two things in one line, and you need both:",
+          "Two commands, one after the other, and you need both:",
           "",
           `- \`cd ${hiddenFolder(model)}\` starts the session **inside this folder**, which is the only`,
           "  place its commands can be found.",
           `- \`--add-dir ..\` hands it the directory above — ${model.name} itself, the project these`,
           "  commands exist to read and describe.",
+          "",
+          "Run them separately if you prefer — the `;` only saves you a line, and it is what works in",
+          "PowerShell as well as in bash and zsh.",
           "",
           "Claude Code then takes over your terminal and waits for you, like a chat window. Everything in",
           "this guide that starts with a `/` is typed there. Type this first:"
@@ -1652,21 +1682,35 @@ function firstStep(model: ProjectModel): string {
       ...run,
       `It reads ${model.name} as it actually is — the stack, the structure, the commands that really`,
       "work — and rewrites the documents in this foundation to describe *that* project.",
-      // Hidden changes nothing outside its folder, so `/sync` is the whole of its first step. An
-      // integrated import gets a second command, and it is the one with consequences — the founder
-      // must meet it here, in the first file they open, rather than discover it mid-session
-      // (specs 187, 214).
-      ...(shipsCleanup(model)
-        ? [
-            "It creates no branches, changes no code, deletes nothing and renames nothing. It is safe to",
-            "run again — and worth running again whenever the documents and the code drift apart.",
-            "",
-            "**Then run `/cleanup`.** That one works on the code's shape rather than its documents: it moves",
-            `files until ${model.name}'s structure explains itself, proposes whatever nothing uses, and`,
-            "creates the local branches this workflow runs on. It changes behaviour nowhere, deletes nothing",
-            "without your yes, and **commits nothing** — the whole change is staged for you to read with",
-            "`git diff --staged` and undo with `git restore --staged .`. It touches no remote."
-          ]
+      // Three cases, and they must be asked in this order (specs 187, 214, 217). Hidden changes
+      // nothing outside its folder, so `/sync` is the whole of its first step — and the passage below
+      // is *about that folder*, which only hidden has. An integrated import that asked to be
+      // reorganised gets a second command, and it is the one with consequences: the founder must meet
+      // it here, in the first file they open, rather than discover it mid-session. One that declined
+      // gets neither — `/sync` alone, and no folder, so it takes a paragraph of its own rather than
+      // borrowing hidden's and naming a directory that does not exist.
+      ...(hiddenFolder(model) === null
+        ? shipsCleanup(model)
+          ? [
+              "It creates no branches, changes no code, deletes nothing and renames nothing. It is safe to",
+              "run again — and worth running again whenever the documents and the code drift apart.",
+              "",
+              "**Then run `/cleanup`.** That one works on the code's shape rather than its documents: it moves",
+              `files until ${model.name}'s structure explains itself, proposes whatever nothing uses, and`,
+              "creates the local branches this workflow runs on. It changes behaviour nowhere, deletes nothing",
+              "without your yes, and **commits nothing** — the whole change is staged for you to read with",
+              "`git diff --staged` and undo with `git restore --staged .`. It touches no remote."
+            ]
+          : [
+              "It creates no branches, changes no code, deletes nothing and renames no file of yours, and",
+              "touches no remote. It is safe to run again — and worth running again whenever the documents",
+              "and the code drift apart.",
+              "",
+              "**That is the whole first session.** You asked for your files to be left where they are, so",
+              "nothing here moves them: this foundation describes " + model.name + " and never rearranges it.",
+              "The branches this workflow runs on are yours to create when you want them —",
+              "`git branch develop` is the only one needed to start."
+            ]
         : [
             "It creates no branches, changes no code, deletes nothing and renames no file of yours, and",
             "touches no remote. The only thing it ever puts outside this folder is a shortcut to these",
@@ -2071,7 +2115,7 @@ function syncScope(model: ProjectModel): string {
       "",
       `  **If you cannot reach it, stop.** A session started inside \`${folder}/\` with no parent`,
       "  directory added can see this foundation and not the project it describes. Say that plainly and",
-      `  ask to be restarted — \`cd ${folder} && claude --add-dir ..\` from the repository root, or a`,
+      `  ask to be restarted — \`cd ${folder}; claude --add-dir ..\` from the repository root, or a`,
       "  plain `claude` there once section 5 has linked these commands. **Do not describe this folder",
       "  as if it were the project.** Documents written from a foundation describing itself read as",
       "  plausible and are about nothing real, and nobody reviewing them later can tell.",
@@ -2115,8 +2159,8 @@ function syncMode(model: ProjectModel): string {
       "**Where this foundation shipped a document the project already had**, both are on disk — theirs",
       "at its own path, this foundation's beside it as `.airrow` (section 4).",
       "",
-      "**Nothing about the repository changes here.** The branches this workflow runs on are `/cleanup`'s",
-      "to create; this command reads what exists and writes it into the documents (section 5)."
+      "**Nothing about the repository changes here.** This command reads what exists and writes it into",
+      `the documents (section 5); the branches this workflow runs on are ${branchOwner(model)} to create.`
     ].join("\n");
   }
   return [
@@ -2560,7 +2604,13 @@ function syncCommandsRule(model: ProjectModel, ciFile: string, commands: Command
  * over the template, so a token inside a substituted value is never reached and would ship to the
  * founder as an unresolved marker.
  */
-function integratedRepoWork(ciFile: string): string {
+function integratedRepoWork(model: ProjectModel, ciFile: string): string {
+  // Where `/cleanup` ships it is the command that makes the branches, and section 5 says so. Where
+  // the founder declined it, nothing does — so the sentence names them instead of a file that was
+  // never delivered (spec 217).
+  const branchMakerSentence = shipsCleanup(model)
+    ? "**`/cleanup` creates the branches**; this command only describes them."
+    : "**Creating them is the founder's** — `git branch develop` and the first `feature/<name>` — and this command only describes them.";
   return `## 4. The \`.airrow\` files: where this project already had one
 
 Where this foundation ships a document the project already had, the founder's file keeps its path and
@@ -2614,10 +2664,10 @@ which is an assumption, not an observation.
    repository is right.
 3. **Say which of them do not exist yet.** \`develop\` and the first \`feature/<name>\` usually do not.
    Name them in your report as missing — do not create them, and do not rename anything to make the
-   documents true. **\`/cleanup\` creates the branches**; this command only describes them.
+   documents true. ${branchMakerSentence}
 4. **No \`.git\` here at all?** Then there is no branch model to read. Say so, leave the documents'
-   default shape in place, and note that \`/cleanup\` is where a repository gets initialised — never
-   run \`git init\` from here.
+   default shape in place, and say who would initialise the repository — never run \`git init\` from
+   here.
 
 **The limits are the same as everywhere else in this command.** No branch created, renamed or
 deleted. No remote: no \`push\`, no \`remote add\`. No history rewritten, and nothing committed — the
@@ -2645,7 +2695,7 @@ and say the original is now redundant. The founder decides what to remove.`;
  */
 function syncRepoWork(model: ProjectModel, ciFile: string): string {
   const folder = hiddenFolder(model);
-  if (folder === null) return integratedRepoWork(ciFile);
+  if (folder === null) return integratedRepoWork(model, ciFile);
   return [
     `## 4. Make git ignore \`${folder}/\``,
     "",
@@ -2774,7 +2824,7 @@ function syncReportItems(model: ProjectModel): string {
       "   renaming one over their own is theirs to do.",
       "4. Which branches this repository has, which ones the workflow still needs, and — if the trunk is",
       "   not `main` — that the documents now name the branch it actually has. You created none of them:",
-      "   say that too, and that `/cleanup` is what does.",
+      `   say that too, and that they are ${branchOwner(model)} to create.`,
       "5. Which old instruction files you found, and what you recommend for each."
     ].join("\n");
   }
@@ -2788,7 +2838,7 @@ function syncReportItems(model: ProjectModel): string {
     "5. Whether the commands are linked to the repository root, and which of the two entries exist: the",
     `   namespaced \`/${folder}:\` directory, and whether the bare \`/sync\` name was free or already the`,
     "   team's. Then the exact command the founder types from here — and, if they declined, that the",
-    `   bootstrap route \`cd ${folder} && claude --add-dir ..\` is still what works.`
+    `   bootstrap route \`cd ${folder}; claude --add-dir ..\` is still what works.`
   ].join("\n");
 }
 
@@ -2852,54 +2902,57 @@ function syncNext(model: ProjectModel): string {
 }
 
 /**
- * The layout `/cleanup` moves this project toward — its own ecosystem's, never Airrow's (spec 214).
+ * The layout `/cleanup` moves this project toward — its own ecosystem's, never Airrow's (spec 214,
+ * rewritten by spec 217).
  *
- * The rule the founder was promised is a structure someone else could read, and what "readable"
- * means is not ours to define for a stack we did not choose: a Django project laid out like a Next.js
- * one is worse than the mess it replaced, because now it is wrong in a way that looks deliberate. So
- * this names the conventions for the frameworks we actually know, and for anything else says plainly
- * that there is no convention to apply — which is the honest answer and the safe one.
+ * The rule the founder was promised is a structure someone else could read, and what "readable" means
+ * is not ours to define for a stack we did not choose: a Django project laid out like a Next.js one is
+ * worse than the mess it replaced, because now it is wrong in a way that looks deliberate.
+ *
+ * This used to name directories — `app/`, `src/lib/`, `src/features/<name>/` — chosen from the
+ * *interview's* framework answer. On an import that answer is a confirmation of what the analysis
+ * found, and it is coarse: "Vite + React" covers TanStack Start, Remix and a dozen others whose
+ * conventions differ, and the founder who most needs `/cleanup` is the one whose export was scaffolded
+ * by a tool none of those names describe. A directory list keyed off it misfiles things with
+ * confidence. So the layout now comes from the **project map** — the stack `/sync` proved from the
+ * manifests and configs — and what this text carries is the three rules that hold in every ecosystem
+ * plus the instruction to read the rest from the project itself.
  */
 function cleanupLayout(model: ProjectModel): string {
-  if (isCustomStack(model)) {
-    return [
-      "This project's stack was described rather than chosen from a list, so this foundation has no",
-      "layout to hold it to. **Read the ecosystem's own conventions from the project itself** — its",
-      "framework's documented structure, what the existing folders already imply, how comparable",
-      "projects in this language are laid out — and follow that.",
-      "",
-      "If you cannot establish a convention with confidence, **move nothing**. Report what looked",
-      "disorganised, say why you did not act on it, and leave the decision with the founder. A layout",
-      "nobody in this ecosystem uses is worse than the one that is already here."
-    ].join("\n");
-  }
-  const nextjs = model.stack.framework === "nextjs";
+  const source = isCustomStack(model)
+    ? [
+        "This project's stack was described rather than chosen from a list, so this foundation has no",
+        "layout to hold it to. **Read the ecosystem's own conventions from the project itself** — its",
+        "framework's documented structure, what the existing folders already imply, how comparable",
+        "projects in this language are laid out — and follow that."
+      ]
+    : [
+        "**The layout is this project's ecosystem's, and the project map is where you read it from.**",
+        "`.claude/project-map.md` names the stack `/sync` proved from the manifests, the lockfile and the",
+        "configs — not a stack anybody typed into an interview. Take that framework's *documented*",
+        "structure, and what this project's own folders already imply, and follow it."
+      ];
   return [
-    `The conventions below are ${nextjs ? "Next.js" : "Vite + React"}'s own — what someone who knows this`,
-    "stack expects to find, and where:",
+    ...source,
     "",
-    ...(nextjs
-      ? [
-          "- `app/` — routes and layouts, and nothing that is not one. It is the router; a helper living",
-          "  here is a helper nobody will find.",
-          "- `src/components/` — shared presentational components. `src/components/ui/` for the primitives",
-          "  everything else is built from, if the project has them.",
-          "- `src/lib/` — code with no UI: clients, helpers, pure logic.",
-          "- `src/features/<name>/` — where a slice of the product owns its own components, queries and",
-          "  actions together. Worth doing when a feature has more than a couple of files."
-        ]
-      : [
-          "- `src/routes/` or `src/pages/` — whichever this project already uses. Do not introduce the",
-          "  other one.",
-          "- `src/components/` — shared presentational components, with the primitives grouped under it.",
-          "- `src/lib/` — code with no UI: clients, helpers, pure logic.",
-          "- `src/features/<name>/` — a slice of the product owning its own components and state."
-        ]),
-    "- `public/` — static assets served as-is.",
-    "- Tests beside the code they cover, matching the test runner's glob so they actually run.",
+    "**Three rules hold whatever the stack is**, and they are the only ones this foundation states:",
+    "",
+    "1. **The router's directory holds routes, and nothing that is not one.** Whatever this framework",
+    "   discovers by location — routes, pages, handlers — that directory is its own. A helper living",
+    "   there is a helper nobody will find.",
+    "2. **Code with no UI lives apart from code with one.** Clients, pure logic and helpers do not sit",
+    "   among components, whatever the two directories are called here.",
+    "3. **Tests sit beside what they cover**, matching the test runner's glob — a test the runner does",
+    "   not collect is not a test.",
+    "",
+    "Everything past those three comes from the ecosystem, not from this file.",
     "",
     "Where this project already uses a different convention **consistently**, that is the convention —",
-    "follow it. Consistency someone can rely on beats being right in the abstract."
+    "follow it. Consistency someone can rely on beats being right in the abstract.",
+    "",
+    "If you cannot establish a convention with confidence, **move nothing**. Report what looked",
+    "disorganised, say why you did not act on it, and leave the decision with the founder. A layout",
+    "nobody in this ecosystem uses is worse than the one that is already here."
   ].join("\n");
 }
 
@@ -3382,15 +3435,21 @@ function repoSetupSteps(model: ProjectModel, from: number): string[] {
   }
   // An imported project already has its code somewhere, so the instruction is to push this
   // foundation to the repository that holds it rather than to create an empty one. Only the
-  // integrated layout reaches here, and it is the layout where `/cleanup` created that `develop`
-  // branch (spec 214) — hidden returned above, having no repository work of its own to describe.
+  // integrated layout reaches here — hidden returned above, having no repository work of its own to
+  // describe — and `developBranchClause` says whether a command made that branch or the founder has
+  // to (specs 214, 217).
   const imported = hasExistingCode(model);
+  // Phrased as a clause of its own rather than through `developBranchClause`, which ends on "the
+  // `develop` branch locally" and would say that branch's name twice in one sentence here.
+  const develop = shipsCleanup(model)
+    ? "including the `develop` branch `/cleanup` created"
+    : "and create the `develop` branch locally first with `git branch develop` — nothing in this foundation creates it for you";
   const hostStep = usesAzureRepos(model)
     ? imported
-      ? "In **Azure DevOps**, create a project for the repository your code already lives in, then push this foundation alongside the code — including the `develop` branch `/cleanup` created."
+      ? `In **Azure DevOps**, create a project for the repository your code already lives in, then push this foundation alongside the code — ${develop}.`
       : "In **Azure DevOps**, create a project and an empty **Azure Repos** repository, then push this foundation — including the `develop` branch `/start` created."
     : imported
-      ? `Push this foundation to your existing ${repoLabel(model)} repository, alongside the code, including the \`develop\` branch \`/cleanup\` created.`
+      ? `Push this foundation to your existing ${repoLabel(model)} repository, alongside the code, ${develop}.`
       : `Create an empty repository on ${repoLabel(model)} and push this foundation, including the \`develop\` branch \`/start\` created.`;
   if (usesAzureRepos(model)) {
     return [

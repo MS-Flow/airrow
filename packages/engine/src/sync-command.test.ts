@@ -114,6 +114,27 @@ describe("what /sync writes down before it writes anything else", () => {
     expect(prose(sync)).toContain("A claim with no file behind it is a guess");
   });
 
+  // Spec 217. The orientation belongs to the map's author, not only to `/cleanup`: the map is
+  // regenerated wholesale on every sync, so a section only `/cleanup` knew about would disappear the
+  // next time the founder ran this — and a hidden foundation, which ships no `/cleanup` at all, would
+  // never get one.
+  it("ends the map with an orientation for someone who has never seen the project", () => {
+    for (const origin of [IMPORTED, HIDDEN]) {
+      const sync = prose(render(origin).byPath(SYNC));
+      expect(sync).toContain("`## Orientation` section");
+      for (const heading of [
+        "**Entry points**",
+        "**The critical path**",
+        "**Load-bearing and easy to break**",
+        "**Safe to change first**",
+        "**Read in this order**"
+      ]) {
+        expect(sync, origin.kind).toContain(heading);
+      }
+      expect(sync).toContain("Derive all five from the code");
+    }
+  });
+
   it("keeps the map out of the documents rather than duplicating the architecture", () => {
     const sync = render(IMPORTED).byPath(SYNC);
     expect(prose(sync)).toContain("points at the map for the inventory");
@@ -307,7 +328,7 @@ describe("linking a hidden foundation's commands to the repository root", () => 
   it("stops rather than describing the folder as the project when it cannot reach one", () => {
     const sync = prose(render(HIDDEN, BASE, "notes").byPath(SYNC));
     expect(sync).toContain("**If you cannot reach it, stop.**");
-    expect(sync).toContain("cd notes && claude --add-dir ..");
+    expect(sync).toContain("cd notes; claude --add-dir ..");
     expect(sync).toContain("**Do not describe this folder as if it were the project.**");
   });
 

@@ -195,6 +195,12 @@ export function resolveProjectModel(input: ResolveInput): ProjectModel {
     // Gated on the origin rather than on `imported`, which means "arrived with code": a
     // documents-only import has documents precisely because that is all it brought.
     existingDocs: origin.kind === "imported" && hidden === null ? (a.existingDocs ?? "describe") : "describe",
+    // Asked of exactly one kind of project — an import with code, landing integrated — because it is
+    // the only one that could ship `/cleanup` (spec 217). Everywhere else the answer resolves to
+    // `restructure`, which is not a permission granted on the founder's behalf: those foundations
+    // have no `/cleanup` to withhold, so the value decides nothing. The same default covers an
+    // interview answered before this question existed, whose foundation did ship the command.
+    restructure: imported && hidden === null ? (a.restructure ?? "restructure") : "restructure",
     // The mirror image: only a hidden import is asked, because only there does the answer change a
     // document. Null everywhere else means "this foundation's own branch model", which is what a
     // greenfield repository and an adopted integrated one both get.
@@ -301,18 +307,24 @@ export type FirstRunCommand = "start" | "sync" | "cleanup";
  *
  * - **From nothing** — `/start` alone. It scaffolds a stack and takes the project to the bare
  *   minimum that runs. An import with no code in it lands here too: there is nothing to read.
- * - **Existing code, integrated** — `/sync` then `/cleanup`. One reads the project and writes the
- *   documents from it; the other reorganises the tree and clears out what nothing uses. They are
- *   split along observing versus mutating, which is what makes each explainable in a sentence.
+ * - **Existing code, integrated, and the founder said yes** — `/sync` then `/cleanup`. One reads the
+ *   project and writes the documents from it; the other reorganises the tree and clears out what
+ *   nothing uses. They are split along observing versus mutating, which is what makes each
+ *   explainable in a sentence.
+ * - **Existing code, integrated, and the founder said no** — `/sync` alone (spec 217). The mutating
+ *   half is the one thing a foundation does to files that are not its own, so it is asked for rather
+ *   than assumed. Nothing else narrows: the documents are still written from the real project.
  * - **Existing code, hidden** — `/sync` alone. Restructuring a repository the team shares is the one
- *   thing this layout exists to never do (spec 187), so the mutating half does not ship.
+ *   thing this layout exists to never do (spec 187), so the mutating half does not ship — and the
+ *   question above is never asked there, because the answer could not change this.
  *
  * `/start` is never paired with either: a repository holding both would be a repository where one of
  * them is wrong about whether a stack exists, and nothing in it says which.
  */
 export function firstRunCommands(m: ProjectModel): FirstRunCommand[] {
   if (!hasExistingCode(m)) return ["start"];
-  return hiddenFolder(m) === null ? ["sync", "cleanup"] : ["sync"];
+  const mayRestructure = hiddenFolder(m) === null && m.restructure === "restructure";
+  return mayRestructure ? ["sync", "cleanup"] : ["sync"];
 }
 
 /**

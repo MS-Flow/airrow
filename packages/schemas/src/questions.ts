@@ -789,6 +789,46 @@ const existingDocsQuestion: Question = {
 };
 
 /**
+ * Whether Airrow may reorganise the founder's own files (spec 217).
+ *
+ * Asked outright, because shipping `/cleanup` is the most invasive thing a foundation does and it
+ * arrived unasked until now: an integrated import got the command that moves files because it had
+ * code, and `START_HERE.md` told the founder to run it. Restructuring is still the recommendation —
+ * the founder whose export has forty files at the root is the one least expecting to be offered
+ * help with it — but it is a recommendation now, not a consequence.
+ *
+ * Asked only where the answer changes something. Hidden ships no `/cleanup` whatever anyone answers
+ * (spec 214), which is why this hangs off `deliveryLayout` exactly as `existingDocs` does; a
+ * documents-only import has nothing to reorganise, and `questionsFor` drops the question there.
+ *
+ * Neither option is smaller than the other in what it *describes*: declining still writes every
+ * document and still builds the map. The difference is only whether anything of the founder's moves.
+ */
+const restructureQuestion: Question = {
+  id: "restructure",
+  title: "May Airrow reorganise this project's files?",
+  help: "Nothing is ever committed for you, and nothing is deleted without your say-so — but this is the one part of the foundation that touches your own files.",
+  type: "single",
+  required: true,
+  showIf: [{ questionId: "deliveryLayout", in: ["integrated"] }],
+  options: [
+    {
+      value: "restructure",
+      label: "Yes — tidy it up",
+      recommended: true,
+      description:
+        "You get `/cleanup`: files moved until the structure explains itself, duplicates and dead code proposed for removal, and everything left staged for you to review. It reports what it found before it moves anything."
+    },
+    {
+      value: "documents_only",
+      label: "No — leave my files where they are",
+      description:
+        "You get `/sync` alone. The foundation reads your project and writes its documents from it, and not one file of yours is moved, renamed or deleted."
+    }
+  ]
+};
+
+/**
  * How the team already branches (spec 212).
  *
  * Asked only when the foundation lands **hidden**, and that is the whole justification for the
@@ -862,12 +902,21 @@ export const importedQuestions: Question[] = [
       : { ...q, ...IMPORT_WORDING[q.id] }
   ),
   existingDocsQuestion,
+  restructureQuestion,
   ...branchingQuestions
 ];
 
-/** The question set for a project of this origin. One place decides, so nothing has to guess. */
+/**
+ * The question set for a project of this origin. One place decides, so nothing has to guess.
+ *
+ * An import whose analysis found no code is the one set that is not simply "imported": it ships
+ * `/start`, so being asked whether its files may be reorganised would be a question about a command
+ * it never receives (spec 217). Every other import-only question still applies to it — it is a
+ * project the founder brought, and its documents describe what they brought.
+ */
 export function questionsFor(origin: ProjectOrigin): Question[] {
-  return origin.kind === "imported" ? importedQuestions : interviewQuestions;
+  if (origin.kind !== "imported") return interviewQuestions;
+  return origin.stackDetected ? importedQuestions : importedQuestions.filter((q) => q.id !== "restructure");
 }
 
 /** Pure evaluator: is a question visible given current answers? */

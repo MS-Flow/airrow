@@ -319,6 +319,14 @@ const IMPORTED: ProjectOrigin = {
   delivery: { kind: "integrated" }
 };
 
+/** Answered through, so the interview opens on review and a question can be reached by editing it. */
+const IMPORT_ANSWERED: InterviewAnswers = {
+  ...ANSWERED,
+  deliveryLayout: "integrated",
+  existingDocs: "describe",
+  restructure: "restructure"
+};
+
 function renderImported({
   persist = () => {},
   initialAnswers = {}
@@ -358,9 +366,7 @@ describe("the interview an imported project is given", () => {
   });
 
   it("opens the design question on keeping the look that is already there", async () => {
-    // Answered through, so the interview opens on review and the design question can be reached the
-    // way a founder reaches it.
-    renderImported({ initialAnswers: { ...ANSWERED, deliveryLayout: "integrated", existingDocs: "describe" } });
+    renderImported({ initialAnswers: IMPORT_ANSWERED });
     await userEvent.click(screen.getByLabelText("Edit How should it look and feel?"));
 
     expect(screen.getByText("Keep the look we already have")).toBeInTheDocument();
@@ -371,7 +377,7 @@ describe("the interview an imported project is given", () => {
 
   it("shows the directions once the founder says no, and records the pick", async () => {
     const persist = vi.fn();
-    renderImported({ persist, initialAnswers: { ...ANSWERED, deliveryLayout: "integrated", existingDocs: "describe" } });
+    renderImported({ persist, initialAnswers: IMPORT_ANSWERED });
     await userEvent.click(screen.getByLabelText("Edit How should it look and feel?"));
     await userEvent.click(screen.getByRole("button", { name: /No, show me other directions/ }));
 
@@ -384,7 +390,7 @@ describe("the interview an imported project is given", () => {
 
   it("records keeping the existing look as an answer, not as an absence", async () => {
     const persist = vi.fn();
-    renderImported({ persist, initialAnswers: { ...ANSWERED, deliveryLayout: "integrated", existingDocs: "describe" } });
+    renderImported({ persist, initialAnswers: IMPORT_ANSWERED });
     await userEvent.click(screen.getByLabelText("Edit How should it look and feel?"));
     await userEvent.click(screen.getByRole("button", { name: /Keep the look we already have/ }));
 

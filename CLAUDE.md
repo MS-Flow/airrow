@@ -115,8 +115,15 @@ passes it in.
   *the project's own ecosystem's* conventions, references updated in the same pass, unused files
   proposed per category and deleted only on a yes, and the workflow's local branches created. It never
   changes behaviour, **stages everything and commits nothing**, resumes from its own
-  `.claude/cleanup-plan.json`, and removes itself once its verification bar passes. A foundation ships
-  exactly one of these sets, decided by the project's origin. ZIP delivery must always work with no
+  `.claude/cleanup-plan.json`, and removes itself once its verification bar passes. It also **reports
+  what it may not touch** (spec 217): what the build is tied to and what leaving would cost, what
+  phones home and whether it is live, which of the project's names disagree, and what arrived through
+  the vendor that is good on merit and **stays** — security middleware first, judged on what a file
+  does and never on what its name says. Removing any of that changes behaviour, so it hands off a
+  paste-ready `/createspec` line and the capability it would cost instead. **Whether `/cleanup` ships
+  is the founder's own answer**, asked outright of an integrated import with restructuring
+  recommended; declining ships `/sync` alone, with every document still written. A foundation ships
+  exactly one of these sets, decided by the project's origin and that answer. ZIP delivery must always work with no
   integration connected.
 - **An import lands integrated or hidden, and the founder picks (spec 187).** Integrated is the
   original shape. **Hidden** nests the entire foundation under one folder the founder names —
@@ -138,7 +145,7 @@ passes it in.
   `CLAUDE.local.md` importing the foundation's own. All three go in `.git/info/exclude`, none is
   written without an explicit yes, and on Windows they are a junction and a hardlink rather than a
   symlink, which needs elevation. The first session cannot use them, because `/sync` is what makes
-  them: it bootstraps with `cd <folder> && claude --add-dir ..`, and `START_HERE.md`'s step 1 is
+  them: it bootstraps with `cd <folder>; claude --add-dir ..`, and `START_HERE.md`'s step 1 is
   rewritten to the root route only after the links exist.
   Offered only when the analysis found code; a documents-only import gets `/start` and stays
   integrated.

@@ -70,6 +70,14 @@ export type Database = "supabase" | "postgres" | "other";
  * documents then describe *their* model rather than asserting one.
  */
 export type BranchingModel = "trunk" | "integration_branch" | "other";
+/**
+ * Whether Airrow may reorganise the founder's own files (spec 217).
+ *
+ * Named rather than a boolean because the two answers are two different foundations — one ships the
+ * command that moves files, the other ships `/sync` alone — and `documents_only` says what the
+ * founder still gets, where `false` would only say what they refused.
+ */
+export type RestructureChoice = "restructure" | "documents_only";
 
 /** Raw interview answers, keyed by question id. Order mirrors the interview flow. */
 export interface InterviewAnswers {
@@ -152,6 +160,19 @@ export interface InterviewAnswers {
    * `describe` would be the only answer available and a question with one answer is not a question.
    */
   existingDocs?: "describe" | "adopt" | "leave";
+  /**
+   * Whether Airrow may reorganise the founder's own files — the answer that decides whether
+   * `/cleanup` ships at all (spec 217).
+   *
+   * Asked only of an imported project that has code and lands integrated: hidden ships no `/cleanup`
+   * whatever the answer, and a documents-only import has nothing to reorganise. Declining is not a
+   * smaller foundation — the documents are still written and the map is still built — it is `/sync`
+   * alone, which is the set hidden has shipped since spec 214.
+   *
+   * **Persisted**, like `branchingModel` and unlike `deliveryLayout`: nothing else stores it, so a
+   * regeneration that dropped it would hand the founder back the command they declined.
+   */
+  restructure?: RestructureChoice;
   /**
    * How the team branches today (spec 212). Asked only of an imported project landing **hidden**.
    *
@@ -305,6 +326,16 @@ export interface ProjectModel {
    * layout forbids (spec 187).
    */
   existingDocs: "describe" | "adopt" | "leave";
+  /**
+   * Whether the founder asked for their files to be reorganised (spec 217).
+   *
+   * `"restructure"` wherever the question was not asked, because that is what those projects already
+   * get: a greenfield foundation has no `/cleanup` to withhold, and a hidden import ships none
+   * whatever anyone answers. Only an integrated import with code can answer it, and only there does
+   * the value decide anything — which is why the default preserves what every foundation generated
+   * before this spec was delivered.
+   */
+  restructure: RestructureChoice;
   /**
    * How the team already branches, when we asked — which is a hidden import and nowhere else
    * (spec 212).

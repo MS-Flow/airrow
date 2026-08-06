@@ -567,6 +567,45 @@ describe("the imported phrasing of the interview", () => {
     }
   });
 
+  // Spec 217. Shipping the command that moves the founder's files used to follow from having code;
+  // it is now their own answer, and the question exists only where that answer changes something.
+  it("asks whether Airrow may reorganise the project, and recommends that it does", () => {
+    const q = imported.find((i) => i.id === "restructure");
+    expect(q).toBeDefined();
+    expect(q?.required).toBe(true);
+    expect(q?.options?.map((o) => o.value)).toEqual(["restructure", "documents_only"]);
+    expect(q?.options?.[0]?.recommended).toBe(true);
+    // Never in the greenfield set: a project that does not exist yet has no files to reorganise.
+    expect(interviewQuestions.map((i) => i.id)).not.toContain("restructure");
+  });
+
+  it("does not ask it where the answer could not change anything", () => {
+    const q = imported.find((i) => i.id === "restructure")!;
+    // Hidden ships no `/cleanup` whatever anyone answers (spec 214) …
+    expect(isQuestionVisible(q, { deliveryLayout: "integrated" })).toBe(true);
+    expect(isQuestionVisible(q, { deliveryLayout: "hidden" })).toBe(false);
+    // … and an import that arrived without code ships `/start`, so the question is not in its set.
+    const noCode = questionsFor({
+      kind: "imported",
+      stackDetected: false,
+      delivery: { kind: "integrated" }
+    });
+    expect(noCode.map((i) => i.id)).not.toContain("restructure");
+    // Everything else an import is asked still is: it is the same project either way.
+    expect(noCode.map((i) => i.id)).toContain("deliveryLayout");
+    expect(noCode.map((i) => i.id)).toContain("existingDocs");
+  });
+
+  it("keeps the restructure answer, because nothing else stores it", () => {
+    // Same reason as `branchingModel` below: no second copy to disagree with, and dropping it would
+    // hand back the command the founder declined on the next regeneration.
+    expect([...TRANSIENT_ANSWERS]).not.toContain("restructure");
+    expect(interviewAnswersSchema.parse({ restructure: "documents_only" }).restructure).toBe(
+      "documents_only"
+    );
+    expect(() => interviewAnswersSchema.parse({ restructure: "sometimes" })).toThrow();
+  });
+
   it("keeps the branching answer, because nothing else stores it", () => {
     // The reason the other two are transient does not apply here: there is no second copy to
     // disagree with. Dropped, a regeneration would rewrite `BRANCHING.md` into a model the founder

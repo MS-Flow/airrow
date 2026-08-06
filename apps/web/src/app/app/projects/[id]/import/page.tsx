@@ -193,7 +193,7 @@ async function ImportDiffSection({
           <>
             Every file above sits inside your folder, so none of them touches anything you already
             have — there is nothing to decide and nothing of yours to overwrite.{" "}
-            <span className="font-mono text-xs">/cleanup</span> tells git to ignore that folder, so
+            <span className="font-mono text-xs">/sync</span> tells git to ignore that folder, so
             none of it is ever pushed.
           </>
         ) : (
@@ -201,7 +201,7 @@ async function ImportDiffSection({
             The download contains the new files plus any conflict you chose to take from Airrow. Where
             you have not decided, your version keeps its path and Airrow&rsquo;s arrives beside it as{" "}
             <span className="font-mono text-xs">.airrow.md</span> — nothing of yours is overwritten,
-            and <span className="font-mono text-xs">/cleanup</span> works through both. Choose{" "}
+            and <span className="font-mono text-xs">/sync</span> works through both. Choose{" "}
             <em>Keep mine</em> and Airrow&rsquo;s version is not delivered at all.
           </>
         )}{" "}

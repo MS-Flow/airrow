@@ -99,7 +99,7 @@ now has exactly three exceptions: a `.claude/commands/<folder>` directory link (
 Code to `/<folder>:sync`, so it can shadow no command a team owns), a bare `.claude/commands/sync.md`
 only where that name is free, and a root `CLAUDE.local.md` importing the foundation's. All three are
 excluded from git and none is written without a yes. The first session predates them and bootstraps
-with `cd <folder> && claude --add-dir ..`, which is also the answer to the older bug where a session
+with `cd <folder>; claude --add-dir ..`, which is also the answer to the older bug where a session
 started inside the folder could not read the project it was describing.
 
 5. **Show** — `mergePreviewFiles` + `buildPreviewTree` put those paths in the *preview* tree next to

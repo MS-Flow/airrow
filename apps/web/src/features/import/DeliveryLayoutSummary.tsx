@@ -34,7 +34,7 @@ export function DeliveryLayoutSummary({
               <>
                 Everything Airrow generates goes into{" "}
                 <code className="font-mono text-2xs">{delivery.folder}/</code>, which{" "}
-                <code className="font-mono text-2xs">/cleanup</code> tells git to ignore. Nothing
+                <code className="font-mono text-2xs">/sync</code> tells git to ignore. Nothing
                 collides, and your repository&rsquo;s diff stays empty. No CI files are delivered: a
                 workflow in an ignored folder could never run.
               </>

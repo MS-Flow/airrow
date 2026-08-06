@@ -142,6 +142,9 @@ export const interviewAnswersSchema = z
     deliveryLayout: z.enum(["integrated", "hidden"]),
     hiddenFolder: z.string().trim().max(HIDDEN_FOLDER_MAX_CHARS),
     existingDocs: z.enum(["describe", "adopt", "leave"]),
+    // Kept for the same reason as `branchingModel` below: nothing else stores it, so stripping it
+    // would hand back the command the founder declined on the next regeneration (spec 217).
+    restructure: z.enum(["restructure", "documents_only"]),
     // Kept, unlike the two above: nothing else stores it, so stripping it would change
     // `BRANCHING.md` on the next regeneration (spec 212).
     branchingModel: z.enum(["trunk", "integration_branch", "other"]),

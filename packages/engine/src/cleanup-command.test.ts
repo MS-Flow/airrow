@@ -125,13 +125,55 @@ describe("which first-run commands a foundation ships", () => {
     expect(paths).not.toContain(CLEANUP);
   });
 
+  // Spec 217: the most invasive thing a foundation does arrived unasked until now — an integrated
+  // import got the command that moves files because it had code. Declining is not a smaller
+  // foundation: every document is still written, the map is still built, nothing of theirs moves.
+  it("gives an integrated import that declined the restructure /sync alone", () => {
+    const { paths } = render(IMPORTED, { ...BASE, restructure: "documents_only" });
+    expect(paths).toContain(SYNC);
+    expect(paths).not.toContain(CLEANUP);
+    expect(paths).not.toContain(START);
+  });
+
+  it("names no command it did not ship, anywhere in a foundation that declined", () => {
+    const { files } = render(IMPORTED, { ...BASE, restructure: "documents_only" });
+    for (const file of files.filter((f) => f.path.endsWith(".md"))) {
+      expect(file.content, file.path).not.toContain("/cleanup");
+    }
+  });
+
+  // Caught by generating a declined foundation and reading it: `START_HERE.md` chose its first-session
+  // prose on `shipsCleanup`, whose false arm was written for hidden and talks about "this folder".
+  // A declined *integrated* import has no folder, so it rendered `read \`null/.claude/commands/…\``.
+  // The two questions came apart in spec 217 and every branch that means "hidden" has to ask for it.
+  it("never describes a folder to a foundation that does not live in one", () => {
+    for (const answers of [BASE, { ...BASE, restructure: "documents_only" } satisfies InterviewAnswers]) {
+      for (const file of render(IMPORTED, answers).files) {
+        expect(file.content, file.path).not.toContain("null/");
+        expect(file.content, file.path).not.toContain("undefined/");
+      }
+      const startHere = render(IMPORTED, answers).byPath("START_HERE.md");
+      expect(prose(startHere)).not.toContain("a session only finds commands where it started");
+    }
+  });
+
+  it("ignores the answer where it could not change anything", () => {
+    // Hidden ships no `/cleanup` whatever anyone answers, and a documents-only import ships
+    // `/start` — neither is asked the question, and a stray answer must not reach either one.
+    const declined = { ...BASE, restructure: "documents_only" } satisfies InterviewAnswers;
+    expect(render(HIDDEN, declined).paths).toEqual(render(HIDDEN).paths);
+    expect(render(IMPORTED_EMPTY, declined).paths).toEqual(render(IMPORTED_EMPTY).paths);
+  });
+
   it("ships exactly the set its origin calls for, and never /start beside an import command", () => {
     for (const origin of [NEW, IMPORTED, HIDDEN, IMPORTED_EMPTY]) {
-      const { paths } = render(origin);
-      const shipped = paths.filter((p) => FIRST_RUN.includes(p));
-      expect(shipped.sort()).toEqual([...commandPaths(model(origin))].sort());
-      expect(shipped.length).toBeGreaterThan(0);
-      if (shipped.includes(START)) expect(shipped).toEqual([START]);
+      for (const answers of [BASE, { ...BASE, restructure: "documents_only" } satisfies InterviewAnswers]) {
+        const { paths } = render(origin, answers);
+        const shipped = paths.filter((p) => FIRST_RUN.includes(p));
+        expect(shipped.sort()).toEqual([...commandPaths(model(origin, answers))].sort());
+        expect(shipped.length).toBeGreaterThan(0);
+        if (shipped.includes(START)) expect(shipped).toEqual([START]);
+      }
     }
   });
 
@@ -185,11 +227,27 @@ describe("the /cleanup command", () => {
     expect(prose(cleanup)).toContain("A move that leaves a broken import is worse than no move at all");
   });
 
-  it("takes the layout from the project's ecosystem, not from this foundation", () => {
-    const next = render(IMPORTED).byPath(CLEANUP);
-    expect(prose(next)).toContain("The conventions below are Next.js's own");
-    const vite = render(IMPORTED, { ...BASE, framework: "vite" }).byPath(CLEANUP);
-    expect(prose(vite)).toContain("The conventions below are Vite + React's own");
+  // Spec 217: the layout used to be a directory list chosen from the interview's framework answer,
+  // which on an import is a coarse confirmation of what the analysis found — "Vite + React" covers
+  // TanStack Start, Remix and a dozen others whose conventions differ. Naming directories from it
+  // misfiles things with confidence, so the map's proven stack is the source and only the three
+  // stack-independent rules are stated here.
+  it("takes the layout from the project map's stack, naming no framework's directories", () => {
+    for (const answers of [BASE, { ...BASE, framework: "vite" } satisfies InterviewAnswers]) {
+      const cleanup = prose(render(IMPORTED, answers).byPath(CLEANUP));
+      expect(cleanup).toContain("the project map is where you read it from");
+      expect(cleanup).not.toContain("The conventions below are");
+      expect(cleanup).not.toContain("`src/features/<name>/`");
+      expect(cleanup).not.toContain("`src/lib/`");
+    }
+  });
+
+  it("states the three rules that hold whatever the stack is", () => {
+    const cleanup = prose(render(IMPORTED).byPath(CLEANUP));
+    expect(cleanup).toContain("The router's directory holds routes, and nothing that is not one");
+    expect(cleanup).toContain("Code with no UI lives apart from code with one");
+    expect(cleanup).toContain("Tests sit beside what they cover");
+    expect(cleanup).toContain("Everything past those three comes from the ecosystem, not from this file");
   });
 
   it("moves nothing at all when there is no convention to apply", () => {
@@ -259,6 +317,116 @@ describe("the /cleanup command", () => {
   });
 });
 
+// Spec 217. An app-builder export arrives structurally correct, so every section above finds nothing
+// and the report reads as an all-clear on a project that cannot build without the vendor's package.
+// This section is the answer, and it is reporting only — removing any of it changes behaviour, which
+// is the one thing this command may never do.
+describe("what /cleanup reports but may not touch", () => {
+  const cleanup = () => prose(render(IMPORTED).byPath(CLEANUP));
+
+  it("asks all four provenance questions, and removes nothing", () => {
+    const text = cleanup();
+    expect(text).toContain("**This section removes nothing.**");
+    expect(text).toContain("Does the build depend on a vendor?");
+    expect(text).toContain("Does anything phone home?");
+    expect(text).toContain("Is this project named after itself?");
+    expect(text).toContain("What arrived through the vendor but is good on its own merit?");
+  });
+
+  it("unpacks a wrapper before costing it, and says what it did silently", () => {
+    const text = cleanup();
+    expect(text).toContain("**unpack that package**");
+    expect(text).toContain("The difference between those two lists is the real cost of leaving");
+    expect(text).toContain("including whatever it was doing silently");
+  });
+
+  it("separates telemetry that is inert in production from telemetry that is watched", () => {
+    const text = cleanup();
+    expect(text).toContain("whether its key or endpoint is even set in production");
+    expect(text).toContain("two different findings and must never be reported as one");
+  });
+
+  it("keeps what arrived through the vendor and is good on merit, security middleware first", () => {
+    const text = cleanup();
+    expect(text).toContain("**These are keeps.**");
+    expect(text).toContain("Judge them on what they do, never on where they came from");
+    expect(text).toContain("**Security middleware stays**");
+    expect(text).toContain("Say them out loud in the report as kept");
+  });
+
+  it("never judges a file by its name or its comments", () => {
+    expect(cleanup()).toContain("**Never judge a file by its name or its comments.**");
+  });
+
+  it("hands the de-vendoring off with a line the founder can paste, and the cost of running it", () => {
+    const text = cleanup();
+    expect(text).toContain("/createspec \"Remove the <vendor> build coupling");
+    expect(text).toContain("The founder cannot decide to keep something they were never told they had");
+  });
+
+  it("reports what it cannot attribute rather than acting on it", () => {
+    expect(cleanup()).toContain(
+      "**Anything you could not attribute with confidence is reported, never acted on.**"
+    );
+  });
+
+  it("carries the findings in the plan, so an interrupted run still reports them", () => {
+    const text = cleanup();
+    expect(text).toContain("Write the findings into `.claude/cleanup-plan.json` as you go");
+    expect(text).toContain("the findings from section 2");
+  });
+
+  it("proves a dependency is unused outside the source before proposing its removal", () => {
+    const text = cleanup();
+    expect(text).toContain("A package is not unused because the source does not import it");
+    expect(text).toContain(
+      "**Never propose removing a package without showing where you established it is unused, including outside the source directory.**"
+    );
+    expect(text).toContain("it is conditional on that removal, not independently dead");
+  });
+
+  it("stops for a missing package manager instead of substituting one", () => {
+    const text = cleanup();
+    expect(text).toContain("If it is not, **stop and ask**");
+    expect(text).toContain("two lockfiles that resolve differently is a defect");
+    expect(text).toContain("record the bar as unrunnable");
+    expect(text).toContain("but **move nothing**");
+  });
+
+  it("stages per planned path and restores a generated file the baseline run refreshed", () => {
+    const text = cleanup();
+    expect(text).toContain("**Stage per planned path, never `git add -A`.**");
+    expect(text).toContain("Anything staged that the plan does not account for comes back out");
+    expect(text).toContain("report that the committed copy is stale");
+  });
+
+  it("reports the state of the verification bar as a finding, not only as a measurement", () => {
+    const text = cleanup();
+    expect(text).toContain("**The bar itself is a finding.**");
+    expect(text).toContain("how many failures were already there");
+  });
+
+  it("leaves an orientation in the map for whoever has never seen the project", () => {
+    const text = cleanup();
+    for (const heading of [
+      "**Entry points**",
+      "**The critical path**",
+      "**Load-bearing and easy to break**",
+      "**Safe to change first**",
+      "**Read in this order**"
+    ]) {
+      expect(text).toContain(heading);
+    }
+    expect(text).toContain("Derive all five from the code");
+  });
+
+  it("says what it checked when there was nothing to move", () => {
+    const text = cleanup();
+    expect(text).toContain("Then say what you checked, one line each");
+    expect(text).toContain("That is a verdict. Silence is not.");
+  });
+});
+
 describe("/cleanup on a tree it did not leave clean", () => {
   it("writes the whole plan before applying any of it", () => {
     const cleanup = render(IMPORTED).byPath(CLEANUP);
@@ -294,7 +462,7 @@ describe("/cleanup on a tree it did not leave clean", () => {
 describe("/cleanup, unlike /sync, does finish", () => {
   it("creates the branch model the workflow runs on, and renames no trunk", () => {
     const cleanup = render(IMPORTED).byPath(CLEANUP);
-    expect(cleanup).toContain("## 5. The branch model");
+    expect(cleanup).toContain("## 6. The branch model");
     expect(prose(cleanup)).toContain("`develop` from the trunk");
     expect(cleanup).toContain("**Do not rename it.**");
     expect(cleanup).toContain("BRANCHING.md");
@@ -320,10 +488,12 @@ describe("/cleanup, unlike /sync, does finish", () => {
     );
   });
 
-  it("does nothing to a project that is already tidy", () => {
-    expect(prose(render(IMPORTED).byPath(CLEANUP))).toContain(
-      "If the structure is already idiomatic and nothing is unused, say so, move nothing"
-    );
+  // Spec 217 replaced "say so and hand back" with an enumeration: on a generated project the
+  // structure was always going to be fine, so a bare "nothing to move" reads as an oversight.
+  it("enumerates what it checked on a project that is already tidy", () => {
+    const cleanup = prose(render(IMPORTED).byPath(CLEANUP));
+    expect(cleanup).toContain("Then say what you checked, one line each");
+    expect(cleanup).toContain("Move nothing and hand back anyway");
   });
 });
 
